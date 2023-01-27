@@ -1,0 +1,6 @@
+EXPRESSION_IPV4_EQUAL_VALUE = "[ipv4-addr:value = '1.1.1.1/32']"
+EXPRESSION_IPV4_EQUAL_VALUE_WITHOUT_SUBNET = "[ipv4-addr:value = '1.1.1.1']"
+EXPRESSION_IPV4_EQUAL_INCORRECT_VALUE = "[ipv4-addr:value = '300.1.1.1']"
+EXPRESSION_IPV6_EQUAL_VALUE = "[ipv6-addr:value = '2001:0db8:85a3:0000:0000:8a2e:0370:7334']"
+EXPRESSION_IPV6_EQUAL_INCORRECT_VALUE = "[ipv6-addr:value = 'gggg:0db8:85a3:0000:0000:8a2e:0370:7334']"
+FILENAME_OBSERVABLE = "[file:name = 'example.txt']"
