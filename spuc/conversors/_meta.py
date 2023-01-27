@@ -6,10 +6,12 @@ import validators
 
 from antlr4 import *
 
+from spuc.core import ComparisonExpression
+from spuc.core import ComparisonOperator
+from spuc.exceptions import *
 from spuc.grammars.stix.STIXPatternLexer import STIXPatternLexer
 from spuc.grammars.stix.STIXPatternParser import STIXPatternParser
 from spuc.grammars.stix.STIXPatternVisitor import STIXPatternVisitor
-
 
 class MetaConversor(ParseTreeVisitor):
     """A MetaConversor
@@ -35,6 +37,20 @@ class MetaConversor(ParseTreeVisitor):
         super().__init__()
         self.strict = strict
         self.rules = []
+
+
+    def _build_comparisons(self, comparisons):
+        """Build the comparisons
+        
+        This method implements the API to build the comparison strings for 
+        each wrapper. The comparisons refer to a single observation expression.
+        This method WILL be reimplemented in every conversor creating specific
+        logics for each transformation.
+
+        Args:
+            comparisons (list): A list of comparisons to be creted
+        """
+        logging.debug(f"Processing {len(comparisons)} comparisons…")
 
     def _is_hash(value:str):
         """Check if the value is a cryptographic hash
@@ -213,7 +229,8 @@ class MetaConversor(ParseTreeVisitor):
     # Visit a parse tree produced by STIXPatternParser#observationExpressionSimple.
     def visitObservationExpressionSimple(self, ctx:STIXPatternParser.ObservationExpressionSimpleContext):
         logging.debug(f"{inspect.currentframe().f_code.co_name} @ '{inspect.currentframe().f_code.co_filename}'. Expression: \"{ctx.getText()}\"")
-        self.visitChildren(ctx)
+        comparisons = self.visit(ctx.comparisonExpression())
+        self._build_comparisons(comparisons)
 
     # Visit a parse tree produced by STIXPatternParser#observationExpressionCompound.
     def visitObservationExpressionCompound(self, ctx:STIXPatternParser.ObservationExpressionCompoundContext):
@@ -233,17 +250,43 @@ class MetaConversor(ParseTreeVisitor):
     # Visit a parse tree produced by STIXPatternParser#comparisonExpression.
     def visitComparisonExpression(self, ctx:STIXPatternParser.ComparisonExpressionContext):
         logging.debug(f"{inspect.currentframe().f_code.co_name} @ '{inspect.currentframe().f_code.co_filename}'. Expression: \"{ctx.getText()}\"")
-        self.visitChildren(ctx)
+        comparisons = []
+        if ctx.getChildCount() == 1:
+            comparisons += self.visit(ctx.getChild(0))
+        else:
+            for child in ctx.comparisonExpression():
+                comparisons += self.visit(child)
+        return comparisons
 
     # Visit a parse tree produced by STIXPatternParser#comparisonExpressionAnd.
     def visitComparisonExpressionAnd(self, ctx:STIXPatternParser.ComparisonExpressionAndContext):
         logging.debug(f"{inspect.currentframe().f_code.co_name} @ '{inspect.currentframe().f_code.co_filename}'. Expression: \"{ctx.getText()}\"")
-        self.visitChildren(ctx)
+        comparisons = []
+        if ctx.getChildCount() == 1:
+            comparisons += self.visit(ctx.getChild(0))
+        else:
+            for child in ctx.comparisonExpressionAnd():
+                comparisons += self.visit(child)
+        return comparisons
 
     # Visit a parse tree produced by STIXPatternParser#propTestEqual.
     def visitPropTestEqual(self, ctx:STIXPatternParser.PropTestEqualContext):
         logging.debug(f"{inspect.currentframe().f_code.co_name} @ '{inspect.currentframe().f_code.co_filename}'. Expression: \"{ctx.getText()}\"")
-        self.visitChildren(ctx)
+        comp_expr = ComparisonExpression(
+            ctx.objectPath().getText(),
+            ctx.children[1].getText(),
+            self.visit(ctx.primitiveLiteral())
+        )
+
+        logging.debug(f"Equal comparison check: {ctx.getText()}")
+        logging.debug(f"\t- Object Path: {comp_expr.object_path}")
+        logging.debug(f"\t- Operation: {comp_expr.operator}")
+        logging.debug(f"\t- Primitive Literal: {comp_expr.literal}")
+
+        if comp_expr.object_path not in self.ALLOWED_OBJECT_PATHS:
+            raise ObjectPathNotValidException(self, comp_expr.object_path)
+        else:
+            return [comp_expr]
 
     # Visit a parse tree produced by STIXPatternParser#propTestOrder.
     def visitPropTestOrder(self, ctx:STIXPatternParser.PropTestOrderContext):

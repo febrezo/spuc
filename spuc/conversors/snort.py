@@ -1,13 +1,14 @@
 import inspect
+import json
 import logging
 import random
 
 from spuc.exceptions import ObservationExpressionNotValidException, LiteralNotValidException, ObjectPathNotValidException, QualifierNotValidException
 from spuc.exceptions import ObservationExpressionNotYetImplementedException, QualifierNotYetImplementedException
 from spuc.conversors._meta import MetaConversor
-# from spuc.grammars.stix.STIXPatternLexer import STIXPatternLexer
 from spuc.grammars.stix.STIXPatternParser import STIXPatternParser
-# from spuc.grammars.stix.STIXPatternVisitor import STIXPatternVisitor
+from spuc.core import ComparisonExpression
+from spuc.core import ComparisonOperator
 
 class SnortConversor(MetaConversor):
     """STIX Pattern to Snort Conversor Class
@@ -47,9 +48,31 @@ class SnortConversor(MetaConversor):
             r = r.replace("<DST_IP_RANGE>", "any")
             r = r.replace("<DST_PORT>", "any")
             r = r.replace("<MESSAGE>", "Generic Snort rule created by SPUC")
-            r = r.replace("<SID>", str( random.randint(2000000, 9999999)))
+            r = r.replace("<SID>", str(3000000+ i))
             self.rules[i] = r
         return self.rules
+
+    def _build_comparisons(self, comparisons):
+        """Build the comparisons
+
+        This method implements the API to build the comparison strings for
+        each wrapper. The comparisons refer to a single observation expression.
+        This method WILL be reimplemented in every conversor creating specific
+        logics for each transformation.
+
+        Args:
+            comparisons (list): A list of comparisons to be creted
+        """
+        logging.debug(f"Processing {len(comparisons)} comparisons…")
+        for i, comp in enumerate(comparisons):
+            if comp.object_path in ["ipv4-addr:value", "ipv6-addr:value"]:
+                self.rules.append(
+                    self.TEMPLATE.replace("<SRC_IP_RANGE>", comp.literal.replace("'", ""))
+                )
+            if comp.object_path in ["ipv4-addr:value", "ipv6-addr:value"]:
+                self.rules.append(
+                    self.TEMPLATE.replace("<DST_IP_RANGE>", comp.literal.replace("'", ""))
+                )
 
     # Visit a parse tree produced by STIXPatternParser#observationExpressions.
     def visitObservationExpressions(self, ctx:STIXPatternParser.ObservationExpressionsContext):
@@ -78,25 +101,6 @@ class SnortConversor(MetaConversor):
             raise ObservationExpressionNotValidException(self, "AND")
         else:
             self.visitChildren(ctx)
-
-    # Visit a parse tree produced by STIXPatternParser#propTestEqual.
-    def visitPropTestEqual(self, ctx:STIXPatternParser.PropTestEqualContext):
-        logging.debug(f"{inspect.currentframe().f_code.co_name} @ '{inspect.currentframe().f_code.co_filename}'. Expression: \"{ctx.getText()}\"")
-        obj = ctx.objectPath().getText()
-        ope = ctx.children[1].getText()
-        lit = self.visit(ctx.primitiveLiteral())
-        logging.debug(f"Equal comparison check: {ctx.getText()}")
-        logging.debug(f"\t- Object Path: {obj}")
-        logging.debug(f"\t- Operation: {ope}")
-        logging.debug(f"\t- Primitive Literal: {lit}")
-
-        if obj not in self.ALLOWED_OBJECT_PATHS:
-            raise ObjectPathNotValidException(self, obj)
-        else:
-            if obj in ["ipv4-addr:value", "ipv6-addr:value"]:
-                self.rules.append(self.TEMPLATE.replace("<SRC_IP_RANGE>", lit.replace("'", "")))
-            if obj in ["ipv4-addr:value", "ipv6-addr:value"]:
-                self.rules.append(self.TEMPLATE.replace("<DST_IP_RANGE>", lit.replace("'", "")))
 
     # Visit a parse tree produced by STIXPatternParser#startStopQualifier.
     def visitStartStopQualifier(self, ctx:STIXPatternParser.StartStopQualifierContext):
