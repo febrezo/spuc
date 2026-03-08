@@ -1,0 +1,10 @@
+[process:name = 'cmd.exe'] FOLLOWEDBY [process:name = 'powershell.exe']
+([process:name = 'cmd.exe'] FOLLOWEDBY [process:name = 'powershell.exe']) WITHIN 300 SECONDS
+[network-traffic:dst_port = 53] FOLLOWEDBY [network-traffic:dst_port = 443]
+[file:name = 'a.exe'] FOLLOWEDBY [file:name = 'b.exe']
+[url:value = 'http://example.com/a'] FOLLOWEDBY [url:value = 'http://example.com/b']
+([network-traffic:src_ref.value = '10.0.0.2'] FOLLOWEDBY [network-traffic:src_ref.value = '10.0.0.3']) WITHIN 300 SECONDS
+[network-traffic:src_ref.value = '10.0.0.2'] START t'2016-06-01T00:00:00Z' STOP t'2016-07-01T00:00:00Z'
+[file:name = 'foo.dll'] START t'2016-06-01T00:00:00Z' STOP t'2016-07-01T00:00:00Z'
+[process:name = 'powershell.exe'] REPEATS 5 TIMES WITHIN 300 SECONDS
+ ([process:name = 'cmd.exe'] FOLLOWEDBY [process:name = 'powershell.exe'] FOLLOWEDBY [file:name = 'cmd.exe'] FOLLOWEDBY [ipv4-addr:value = '192.168.1.1']) WITHIN 300 SECONDS

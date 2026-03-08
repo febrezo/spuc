@@ -1,0 +1,5 @@
+[ipv4-addr:value = '8.8.8.8'] REPEATS 3 TIMES
+[process:command_line LIKE '%powershell%'] REPEATS 5 TIMES
+[network-traffic:dst_port = 53 AND network-traffic:protocols = 'udp'] REPEATS 10 TIMES
+[url:value = 'http://example.com/login'] REPEATS 2 TIMES
+[domain-name:value = 'evil.example'] REPEATS 4 TIMES WITHIN 600 SECONDS

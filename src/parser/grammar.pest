@@ -1,0 +1,101 @@
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
+// Entry point
+rule = { observation_expressions }
+
+// Observation layer (FOLLOWEDBY is parsed and lowered to IR as sequence intent)
+observation_expressions = { observation_expression ~ (FOLLOWEDBY ~ observation_expression)* }
+observation_expression = { observation_or }
+observation_or = { observation_and ~ (OR ~ observation_and)* }
+observation_and = { observation_term ~ (AND ~ observation_term)* }
+observation_term = { observation_primary ~ qualifier* }
+observation_primary = _{ bracket_expr | "(" ~ observation_expressions ~ ")" }
+
+qualifier = { start_stop_qualifier | within_qualifier | repeated_qualifier }
+start_stop_qualifier = { START ~ timestamp_literal ~ STOP ~ timestamp_literal }
+within_qualifier = { WITHIN ~ (int_pos_literal | float_pos_literal) ~ SECONDS }
+repeated_qualifier = { REPEATS ~ int_pos_literal ~ TIMES }
+
+// Comparison layer
+bracket_expr = { "[" ~ comparison_expr ~ "]" }
+comparison_expr = { comparison_and ~ (OR ~ comparison_and)* }
+comparison_and = { comparison_term ~ (AND ~ comparison_term)* }
+comparison_term = _{ prop_test | "(" ~ comparison_expr ~ ")" }
+
+prop_test = {
+    object_path ~ NOT? ~ (eq_op | neq_op | ge_op | le_op | gt_op | lt_op) ~ primitive_literal
+    | object_path ~ NOT? ~ LIKE ~ string_literal
+    | object_path ~ NOT? ~ MATCHES ~ string_literal
+    | object_path ~ NOT? ~ ISSUBSET ~ string_literal
+    | object_path ~ NOT? ~ ISSUPERSET ~ string_literal
+    | object_path ~ NOT? ~ IN ~ set_literal
+    | NOT? ~ EXISTS ~ object_path
+}
+
+// Object paths
+object_path = { object_type ~ ":" ~ first_path_component ~ object_path_component* }
+object_type = { identifier_with_hyphen }
+first_path_component = { identifier_without_hyphen | string_literal }
+object_path_component = { key_path_step | index_path_step }
+key_path_step = { "." ~ (identifier_without_hyphen | string_literal) }
+index_path_step = { "[" ~ (int_pos_literal | int_neg_literal | "*") ~ "]" }
+
+// Literals
+primitive_literal = { orderable_literal | bool_literal }
+orderable_literal = {
+    int_pos_literal
+    | int_neg_literal
+    | float_pos_literal
+    | float_neg_literal
+    | string_literal
+    | binary_literal
+    | hex_literal
+    | timestamp_literal
+}
+string_literal = @{ "'" ~ ( "\\'" | "\\\\" | (!"'" ~ ANY) )* ~ "'" }
+bool_literal = _{ TRUE | FALSE }
+int_pos_literal = @{ "+"? ~ ASCII_DIGIT+ }
+int_neg_literal = @{ "-" ~ ASCII_DIGIT+ }
+float_pos_literal = @{ "+"? ~ ASCII_DIGIT* ~ "." ~ ASCII_DIGIT+ }
+float_neg_literal = @{ "-" ~ ASCII_DIGIT* ~ "." ~ ASCII_DIGIT+ }
+hex_literal = @{ "h'" ~ ASCII_HEX_DIGIT* ~ "'" }
+binary_literal = @{ "b'" ~ (ASCII_ALPHANUMERIC | "+" | "/" | "=")* ~ "'" }
+timestamp_literal = @{
+    "t'"
+    ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2}
+    ~ "T" ~ ASCII_DIGIT{2} ~ ":" ~ ASCII_DIGIT{2} ~ ":" ~ ASCII_DIGIT{2}
+    ~ ("." ~ ASCII_DIGIT+)? ~ "Z'"
+}
+
+set_literal = { "(" ~ (primitive_literal ~ ("," ~ primitive_literal)*)? ~ ")" }
+
+identifier_without_hyphen = @{ (ASCII_ALPHANUMERIC | "_" )+ }
+identifier_with_hyphen = @{ (ASCII_ALPHANUMERIC | "_" | "-" )+ }
+
+// Operators (kept non-silent so transform can see them)
+eq_op = { "=" | "==" }
+neq_op = { "!=" | "<>" }
+lt_op = { "<" }
+le_op = { "<=" }
+gt_op = { ">" }
+ge_op = { ">=" }
+
+// Keywords
+AND = _{ "AND" }
+OR = _{ "OR" }
+NOT = { "NOT" }
+FOLLOWEDBY = _{ "FOLLOWEDBY" }
+LIKE = { "LIKE" }
+MATCHES = { "MATCHES" }
+ISSUPERSET = { "ISSUPERSET" }
+ISSUBSET = { "ISSUBSET" }
+EXISTS = _{ "EXISTS" }
+IN = _{ "IN" }
+START = _{ "START" }
+STOP = _{ "STOP" }
+SECONDS = _{ "SECONDS" }
+TRUE = _{ "true" }
+FALSE = _{ "false" }
+WITHIN = _{ "WITHIN" }
+REPEATS = _{ "REPEATS" }
+TIMES = _{ "TIMES" }

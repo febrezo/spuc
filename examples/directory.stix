@@ -1,0 +1,5 @@
+[directory:path = 'C:\\Windows\\System32']
+[directory:path LIKE 'C:\\Users\\%\\AppData\\Local\\Temp%']
+[directory:path MATCHES '(?i)^/home/[^/]+/\\.ssh/?$']
+[directory:mtime >= t'2025-01-01T00:00:00Z' AND directory:path LIKE '/var/log/%']
+[directory:path LIKE 'C:\\Windows\\Tasks%' AND directory:mtime > t'2025-01-01T00:00:00Z']

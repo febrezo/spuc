@@ -1,0 +1,1 @@
+[email-message:sender_ref.value = 'jdoe@example.com' AND email-message:subject = 'Conference Info']

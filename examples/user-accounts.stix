@@ -1,0 +1,2 @@
+[user-account:account_type = 'unix' AND user-account:user_id = '1007' AND user-account:account_login = 'Peter']
+[user-account:account_type = 'unix' AND user-account:user_id = '1007' AND user-account:account_login = 'Peter'] AND [user-account:account_type = 'unix' AND user-account:user_id = '1008' AND user-account:account_login = 'Paul'] AND [user-account:account_type = 'unix' AND user-account:user_id = '1009' AND user-account:account_login = 'Mary']

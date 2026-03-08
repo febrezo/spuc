@@ -1,0 +1,26 @@
+[artifact:mime_type = 'application/pdf']
+[artifact:mime_type LIKE 'application/%']
+[artifact:mime_type MATCHES '^application\\/(pdf|zip|x-msdownload)$']
+
+[artifact:payload_bin = b'QUJD']
+[artifact:payload_bin = b'TVo=']
+
+[artifact:payload_bin = h'414243']
+[artifact:payload_bin = h'4d5a']
+[artifact:payload_bin = h'7468697320697320612074657374']
+
+[artifact:payload_bin = 'ABC']
+[artifact:payload_bin = 'MZ']
+[artifact:payload_bin = 'QUJD']
+[artifact:payload_bin = 'this is a test']
+[artifact:payload_bin = b'dGhpcyBpcyBhIHRlc3Q=']
+
+[artifact:payload_bin LIKE 'MZ%']
+[artifact:payload_bin LIKE '%PDF%']
+[artifact:payload_bin MATCHES '\\x4d\\x5a']
+[artifact:payload_bin MATCHES '^MZ']
+[artifact:payload_bin MATCHES '%PDF']
+[artifact:payload_bin MATCHES '(?i)powershell']
+
+[artifact:mime_type = 'application/octet-stream' AND artifact:payload_bin = h'4d5a']
+[artifact:mime_type = 'application/pdf' AND artifact:payload_bin = h'25504446']

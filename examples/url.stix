@@ -1,0 +1,3 @@
+[url:value = 'http://example.com/a']
+[url:value MATCHES 'https?://example\.(com|net)']
+[url:value = 'http://example.com/a'] FOLLOWEDBY [url:value = 'http://example.com/b']
