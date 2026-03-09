@@ -80,6 +80,25 @@ Options:
 cargo test
 ```
 
+## CI/CD Pipeline
+
+This repository is prepared for automated builds in GitHub Actions:
+
+- `.github/workflows/ci.yml`
+  - runs `cargo fmt --check`, `cargo check -q`, and `cargo test -q` on push/PR.
+- `.github/workflows/release.yml`
+  - builds release binaries for Linux, macOS, and Windows.
+  - includes ARM targets for Raspberry Pi (`aarch64-unknown-linux-gnu` and `armv7-unknown-linux-gnueabihf`).
+  - uploads build artifacts on each run.
+  - publishes GitHub Release assets automatically when pushing a tag like `v0.1.0`.
+
+Release flow:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
 ## Available Targets
 
 - `eql`
