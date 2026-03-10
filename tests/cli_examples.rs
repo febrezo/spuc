@@ -8,6 +8,54 @@ fn spuc_bin() -> &'static str {
 }
 
 #[test]
+fn version_flag_prints_current_version_only() {
+    let out = Command::new(spuc_bin())
+        .arg("--version")
+        .output()
+        .expect("failed to run spuc --version");
+    assert!(
+        out.status.success(),
+        "spuc --version failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let version = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    assert_eq!(version, env!("CARGO_PKG_VERSION"));
+}
+
+#[test]
+fn doc_command_replaces_describe() {
+    let out = Command::new(spuc_bin())
+        .args(["doc", "--target", "sigma"])
+        .output()
+        .expect("failed to run spuc doc");
+    assert!(
+        out.status.success(),
+        "spuc doc failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("Coverage for Sigma"));
+}
+
+#[test]
+fn learn_command_lists_challenges() {
+    let out = Command::new(spuc_bin())
+        .args(["learn", "--list"])
+        .output()
+        .expect("failed to run spuc learn --list");
+    assert!(
+        out.status.success(),
+        "spuc learn --list failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("Learning Paths"));
+    assert!(stdout.contains("core001"));
+    assert!(stdout.contains("core002"));
+    assert!(stdout.contains("time001"));
+}
+
+#[test]
 fn convert_smoke_single_example() {
     let status = Command::new(spuc_bin())
         .args([

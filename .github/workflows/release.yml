@@ -20,6 +20,9 @@ jobs:
           - name: linux-x64
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+          - name: linux-x64-musl
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
           - name: linux-arm64
             os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
@@ -49,6 +52,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-arm-linux-gnueabihf
 
+      - name: Install musl toolchain
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
       - name: Build release binary (Unix)
         if: runner.os != 'Windows'
         shell: bash
@@ -56,6 +65,8 @@ jobs:
           set -euo pipefail
           if [ "${{ matrix.target }}" = "armv7-unknown-linux-gnueabihf" ]; then
             export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc
+          elif [ "${{ matrix.target }}" = "x86_64-unknown-linux-musl" ]; then
+            export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc
           fi
           cargo build --release --target "${{ matrix.target }}"
 
@@ -70,7 +81,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          OUT="spuc-${{ matrix.target }}"
+          VERSION="$(sed -nE 's/^version\\s*=\\s*\"([^\"]+)\"/\\1/p' Cargo.toml | head -n1)"
+          OUT="spuc-v${VERSION}-${{ matrix.target }}"
           mkdir -p "dist/${OUT}"
           cp "target/${{ matrix.target }}/release/spuc" "dist/${OUT}/"
           cp README.md LICENSE.md "dist/${OUT}/"
@@ -82,7 +94,9 @@ jobs:
         id: package_windows
         shell: pwsh
         run: |
-          $out = "spuc-${{ matrix.target }}"
+          $versionLine = Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"(.*)"' | Select-Object -First 1
+          $version = $versionLine.Matches[0].Groups[1].Value
+          $out = "spuc-v$version-${{ matrix.target }}"
           New-Item -ItemType Directory -Force -Path "dist/$out" | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/spuc.exe" "dist/$out/"
           Copy-Item "README.md","LICENSE.md" "dist/$out/"

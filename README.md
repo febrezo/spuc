@@ -5,15 +5,26 @@ SPUC is a Rust CLI that parses STIX 2.1 patterns, normalizes them to IR, and emi
 ```mermaid
 flowchart LR
   A[STIX Pattern] --> B[Parser]
-  B --> C[AST]
-  C --> D[Normalization]
-  D --> E[IR]
+  B --> C[Verify]
+  C --> E[Convert]
   E --> F[EQL]
   E --> G[KQL]
   E --> H[Sigma]
   E --> I[Snort]
   E --> J[Suricata]
   E --> K[YARA]
+  H -->|via sigma-cli| L[Splunk]
+  H -->|via sigma-cli| M[Graylog]
+  H -->|via sigma-cli| Z[...]
+
+  classDef stix fill:#e8f4ff,stroke:#1f6feb,stroke-width:2px
+  classDef command fill:#f5f5f5,stroke:#666
+  classDef targets fill:#fff3cd,stroke:#ff9800,stroke-width:2px
+  classDef sigmaTargets fill:#ffe0f0,stroke:#d81b60
+
+  class C,E command
+  class F,G,H,I,J,K targets
+  class L,M,Z sigmaTargets
 ```
 
 ## Status
@@ -34,11 +45,13 @@ flowchart LR
 ## Usage
 
 ```bash
-cargo run -- convert --rule "[ipv4-addr:value = '127.0.0.1']" --to sigma --to eql --to kql
-cargo run -- convert --rule "[network-traffic:src_ref.value = '10.0.0.5'] AND [network-traffic:dst_port = 443]" --to snort --to suricata
-cargo run -- convert --rule "([process:name = 'cmd.exe'] FOLLOWEDBY [process:name = 'powershell.exe']) WITHIN 300 SECONDS" --to eql
-cargo run -- convert --rule "[ipv4-addr:value ISSUBSET '198.51.100.0/24']" --to sigma --to eql --to kql --rule-confidence 80
-cargo run -- describe
+spuc convert --rule "[ipv4-addr:value = '127.0.0.1']" --to sigma --to eql --to kql
+spuc convert --rule "[network-traffic:src_ref.value = '10.0.0.5'] AND [network-traffic:dst_port = 443]" --to snort --to suricata
+spuc convert --rule "([process:name = 'cmd.exe'] FOLLOWEDBY [process:name = 'powershell.exe']) WITHIN 300 SECONDS" --to eql
+spuc convert --rule "[ipv4-addr:value ISSUBSET '198.51.100.0/24']" --to sigma --to eql --to kql --rule-confidence 80
+spuc doc --target sigma
+spuc learn --list
+spuc --version
 ```
 
 ## CLI Help Sample
@@ -46,29 +59,21 @@ cargo run -- describe
 ```text
 $ spuc help
 
-         ____  ____  _   _  ____
-        / ___||  _ \| | | |/ ___|
-        \___ \| |_) | | | | |
-         ___) |  __/| |_| | |___
-        |____/|_|    \___/ \____|
-
-     STIX Pattern Universal Conversor
-         Coded with ❤️  by febrezo
-
-
 SPUC is a Rust CLI that parses STIX 2.1 patterns, normalizes them to IR, and emits detection content for EQL, KQL, Sigma, Snort, Suricata, and YARA.
 
-Usage: spuc <COMMAND>
+Usage: spuc [COMMAND]
 
 Commands:
   convert   Convert STIX patterns to selected targets
   verify    Verify that STIX pattern(s) parse/normalize successfully
-  describe  Show converter documentation and coverage details [aliases: coverage, cover]
+  doc       Show converter documentation and coverage details [aliases: coverage, cover]
+  learn     Guided CTF-like learning mode for writing STIX patterns
   serve     Run a simple JSON-RPC-like service [aliases: service]
   interact  Interactive TUI (REPL-style) [aliases: interactive]
   help      Print this message or the help of the given subcommand(s)
 
 Options:
+  -V, --version  Print version and exit
   -h, --help  Print help
 ```
 
@@ -86,7 +91,8 @@ This repository is prepared for automated builds in GitHub Actions:
   - runs `cargo fmt --check`, `cargo check -q`, and `cargo test -q` on push/PR.
 - `.github/workflows/release.yml`
   - builds release binaries for Linux, macOS, and Windows.
-  - includes ARM targets for Raspberry Pi (`aarch64-unknown-linux-gnu` and `armv7-unknown-linux-gnueabihf`).
+  - includes ARM targets for Raspberry Pi (`aarch64-unknown-linux-gnu` and `armv7-unknown-linux-gnueabihf`) plus `x86_64-unknown-linux-musl`.
+  - packages artifacts with the current app version in filename (`spuc-v<version>-<target>.tar.gz` / `.zip`).
   - uploads build artifacts on each run.
   - publishes GitHub Release assets automatically when pushing a tag like `v0.1.1`.
 

@@ -4,11 +4,16 @@ use std::path::PathBuf;
 #[derive(Debug, Parser)]
 #[command(name = "spuc")]
 #[command(
-    about = "SPUC is a Rust CLI that parses STIX 2.1 patterns, normalizes them to IR, and emits detection content for EQL, KQL, Sigma, Snort, Suricata, and YARA."
+    about = "SPUC is a Rust CLI that parses STIX 2.1 patterns, normalizes them to IR, and emits detection content for EQL, KQL, Sigma, Snort, Suricata, and YARA.",
+    arg_required_else_help = true
 )]
 pub struct Cli {
+    /// Print version and exit
+    #[arg(short = 'V', long = "version", global = true)]
+    pub version: bool,
+
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Option<Commands>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -65,14 +70,20 @@ pub enum Commands {
     },
 
     /// Show converter documentation and coverage details
-    #[command(
-        name = "describe",
-        visible_alias = "coverage",
-        visible_alias = "cover"
-    )]
-    Describe {
+    #[command(name = "doc", visible_alias = "coverage", visible_alias = "cover")]
+    Doc {
         #[arg(short = 't', long = "target", value_enum)]
         target: Option<OutputTarget>,
+    },
+
+    /// Guided CTF-like learning mode for writing STIX patterns
+    #[command(name = "learn")]
+    Learn {
+        /// List available learning challenges and exit
+        #[arg(short = 'l', long = "list")]
+        list: bool,
+        /// Optional challenge id (e.g. core001, core002, time001)
+        challenge: Option<String>,
     },
 
     /// Run a simple JSON-RPC-like service
