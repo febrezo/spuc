@@ -1,0 +1,77 @@
+<svg width="980" height="280" viewBox="0 0 980 280" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Conversion fidelity thermometer">
+  <style>
+    .tick {
+      font: 11px sans-serif;
+      fill: #64748b;
+    }
+    .bar-bg {
+      fill: #f8fafc;
+      stroke: #e5e7eb;
+      stroke-width: 1;
+      rx: 8;
+      ry: 8;
+    }
+    .label-exact, .label-warn, .label-bad {
+      font: 600 13px sans-serif;
+      dominant-baseline: middle;
+    }
+    .label-exact { fill: #16a34a; }
+    .label-warn  { fill: #ca8a04; }
+    .label-bad   { fill: #dc2626; }
+
+    .bar-exact { fill: #22c55e; rx: 8; ry: 8; }
+    .bar-warn  { fill: #facc15; rx: 8; ry: 8; }
+    .bar-bad   { fill: #ef4444; rx: 8; ry: 8; }
+  </style>
+
+  <!-- Scale labels every 10 points -->
+  <!-- chart starts at x=140, width=700 -->
+  <g>
+    <text x="140" y="32" text-anchor="middle" class="tick">0%</text>
+    <text x="210" y="32" text-anchor="middle" class="tick">10%</text>
+    <text x="280" y="32" text-anchor="middle" class="tick">20%</text>
+    <text x="350" y="32" text-anchor="middle" class="tick">30%</text>
+    <text x="420" y="32" text-anchor="middle" class="tick">40%</text>
+    <text x="490" y="32" text-anchor="middle" class="tick">50%</text>
+    <text x="560" y="32" text-anchor="middle" class="tick">60%</text>
+    <text x="630" y="32" text-anchor="middle" class="tick">70%</text>
+    <text x="700" y="32" text-anchor="middle" class="tick">80%</text>
+    <text x="770" y="32" text-anchor="middle" class="tick">90%</text>
+    <text x="840" y="32" text-anchor="middle" class="tick">100%</text>
+  </g>
+
+  <!-- Row backgrounds -->
+  <rect x="140" y="50" width="700" height="26" class="bar-bg"></rect>
+  <rect x="140" y="85" width="700" height="26" class="bar-bg"></rect>
+  <rect x="140" y="120" width="700" height="26" class="bar-bg"></rect>
+  <rect x="140" y="155" width="700" height="26" class="bar-bg"></rect>
+  <rect x="140" y="190" width="700" height="26" class="bar-bg"></rect>
+  <rect x="140" y="225" width="700" height="26" class="bar-bg"></rect>
+
+  <!-- Bars -->
+  <!-- 1 unit = 7 px -->
+
+  <!-- exact: 90-100 -->
+  <rect x="770" y="54" width="70" height="18" class="bar-exact"></rect>
+  <text x="805" y="63" text-anchor="middle" class="label-exact">exact</text>
+
+  <!-- schema-dependent: 65-85 -->
+  <rect x="595" y="89" width="140" height="18" class="bar-warn"></rect>
+  <text x="665" y="98" text-anchor="middle" class="label-warn">schema-dependent</text>
+
+  <!-- backend-dependent: 55-75 -->
+  <rect x="525" y="124" width="140" height="18" class="bar-warn"></rect>
+  <text x="515" y="133" text-anchor="end" class="label-warn">backend-dependent</text>
+
+  <!-- partial: 40-70 -->
+  <rect x="420" y="159" width="210" height="18" class="bar-warn"></rect>
+  <text x="525" y="168" text-anchor="middle" class="label-warn">partial</text>
+
+  <!-- lossy: 25-60 -->
+  <rect x="315" y="194" width="245" height="18" class="bar-warn"></rect>
+  <text x="437.5" y="203" text-anchor="middle" class="label-warn">lossy</text>
+
+  <!-- unsupported: 0 -->
+  <rect x="140" y="229" width="12" height="18" class="bar-bad"></rect>
+  <text x="160" y="238" text-anchor="start" class="label-bad">unsupported</text>
+</svg>

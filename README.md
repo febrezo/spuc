@@ -23,9 +23,9 @@ flowchart LR
   classDef targets fill:#fff8eb,stroke:#d97706,stroke-width:2px,color:#9a3412
   classDef sigmaTargets fill:#f1f5f9,stroke:#94a3b8,stroke-width:2px,color:#334155
 
-  class C,E command
+  class D,E command
   class F,G,H,I,J,K targets
-  class L,M,Z sigmaTargets
+  class L,M,N,Z sigmaTargets
 ```
 
 ## Status
@@ -134,14 +134,7 @@ Confidence is independent and explicit:
 - `--mode strict` (default): if required predicates are not representable faithfully, output is `unsupported`.
 - `--mode partial`: supported subset only, status `partial`, omitted parts noted.
 
-```mermaid
-flowchart TD
-  E["exact<br/>90-100"] --> S["schema-dependent<br/>65-85"]
-  S --> B["backend-dependent<br/>55-75"]
-  B --> P["partial<br/>40-70"]
-  P --> L["lossy<br/>25-60"]
-  L --> U["unsupported<br/>0"]
-```
+![Conversion fidelity](kb/semantic-fidelity.svg)
 
 ## Result Model and CSV
 
