@@ -167,7 +167,8 @@ fn lower_predicate(p: &IrPredicate) -> Result<KqlPred> {
     };
 
     let condition = if p.op == IrOp::Matches {
-        format!("{} {} \"{}\"", mapping.field, op, value.trim_matches('"'))
+        let regex = value.trim_matches('"').replace('"', "\"\"");
+        format!("{} {} @\"{}\"", mapping.field, op, regex)
     } else {
         format!("{} {} {}", mapping.field, op, value)
     };
@@ -723,6 +724,10 @@ fn standalone_network_condition(p: &IrPredicate) -> Result<Option<String>> {
                 "ipv4_is_in_range"
             };
             format!("({fn_name}({local}, \"{value}\") or {fn_name}({remote}, \"{value}\"))")
+        }
+        IrOp::Matches => {
+            let escaped = value.replace('"', "\"\"");
+            format!("({local} {op} @\"{escaped}\" or {remote} {op} @\"{escaped}\")")
         }
         _ => format!("({local} {op} \"{value}\" or {remote} {op} \"{value}\")"),
     };

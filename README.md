@@ -44,9 +44,7 @@ cargo run -- describe
 ## CLI Help Sample
 
 ```text
-felix@localhost:~/Proyectos/spuc $ cargo run -- help
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.08s
-     Running `target/debug/spuc help`
+$ spuc help
 
          ____  ____  _   _  ____
         / ___||  _ \| | | |/ ___|
@@ -90,13 +88,13 @@ This repository is prepared for automated builds in GitHub Actions:
   - builds release binaries for Linux, macOS, and Windows.
   - includes ARM targets for Raspberry Pi (`aarch64-unknown-linux-gnu` and `armv7-unknown-linux-gnueabihf`).
   - uploads build artifacts on each run.
-  - publishes GitHub Release assets automatically when pushing a tag like `v0.1.0`.
+  - publishes GitHub Release assets automatically when pushing a tag like `v0.1.1`.
 
 Release flow:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 ## Available Targets

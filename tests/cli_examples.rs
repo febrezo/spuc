@@ -228,14 +228,14 @@ fn directory_and_autonomous_system_baseline() {
         "[autonomous-system:name MATCHES '^(?i)(google|cloudflare).*$']",
         "kql",
     );
-    assert!(asn_name_re.contains("RemoteASName matches regex"));
+    assert!(asn_name_re.contains("RemoteASName matches regex @\""));
 
     let asn_rir_eq = run_convert("[autonomous-system:rir = 'ARIN']", "eql");
     assert!(asn_rir_eq.contains("as.rir == \"ARIN\""));
     assert!(asn_rir_eq.contains("status=schema-dependent"));
 
     let asn_rir_like = run_convert("[autonomous-system:rir LIKE 'RI%']", "kql");
-    assert!(asn_rir_like.contains("RemoteASRIR matches regex"));
+    assert!(asn_rir_like.contains("RemoteASRIR matches regex @\""));
 
     let asn_compound = run_convert(
         "[autonomous-system:number = 13335 AND autonomous-system:name = 'Cloudflare, Inc.' AND autonomous-system:rir = 'ARIN']",
