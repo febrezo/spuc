@@ -5,8 +5,8 @@ SPUC is a Rust CLI that parses STIX 2.1 patterns, normalizes them to IR, and emi
 ```mermaid
 flowchart LR
   A[STIX Pattern] --> B[Parser]
-  B --> C[Verify]
-  C --> E[Convert]
+  B --> D[Verify]
+  D --> E[Convert]
   E --> F[EQL]
   E --> G[KQL]
   E --> H[Sigma]
@@ -15,12 +15,13 @@ flowchart LR
   E --> K[YARA]
   H -->|via sigma-cli| L[Splunk]
   H -->|via sigma-cli| M[Graylog]
+  H -->|via sigma-cli| N[Chronicle]
   H -->|via sigma-cli| Z[...]
 
-  classDef stix fill:#e8f4ff,stroke:#1f6feb,stroke-width:2px
-  classDef command fill:#f5f5f5,stroke:#666
-  classDef targets fill:#fff3cd,stroke:#ff9800,stroke-width:2px
-  classDef sigmaTargets fill:#ffe0f0,stroke:#d81b60
+  classDef stix fill:#edf4ff,stroke:#3b82f6,stroke-width:2px,color:#1e3a8a
+  classDef command fill:#eafaf0,stroke:#16a34a,stroke-width:2px,color:#166534
+  classDef targets fill:#fff8eb,stroke:#d97706,stroke-width:2px,color:#9a3412
+  classDef sigmaTargets fill:#f1f5f9,stroke:#94a3b8,stroke-width:2px,color:#334155
 
   class C,E command
   class F,G,H,I,J,K targets
