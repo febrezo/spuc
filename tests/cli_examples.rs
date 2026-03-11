@@ -53,6 +53,9 @@ fn learn_command_lists_challenges() {
     assert!(stdout.contains("core001"));
     assert!(stdout.contains("core002"));
     assert!(stdout.contains("time001"));
+    assert!(stdout.contains("ops001"));
+    assert!(stdout.contains("net001"));
+    assert!(stdout.contains("file001"));
 }
 
 #[test]

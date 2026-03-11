@@ -207,7 +207,7 @@ struct LearnPath {
     challenge_ids: &'static [&'static str],
 }
 
-const LEARN_CHALLENGES: [LearnChallenge; 3] = [
+const LEARN_CHALLENGES: [LearnChallenge; 15] = [
     LearnChallenge {
         id: "core001",
         path_id: "core",
@@ -225,6 +225,54 @@ const LEARN_CHALLENGES: [LearnChallenge; 3] = [
         example: "[process:name = 'powershell.exe' AND process:command_line LIKE '%-enc%']",
     },
     LearnChallenge {
+        id: "core003",
+        path_id: "core",
+        title: "Exact Match Basics",
+        goal: "Detect powershell.exe by exact process name.",
+        hint: "Use process:name with '=' and the value 'powershell.exe'.",
+        example: "[process:name = 'powershell.exe']",
+    },
+    LearnChallenge {
+        id: "core004",
+        path_id: "core",
+        title: "Simple Negation",
+        goal: "Exclude cmd.exe using != on process:name.",
+        hint: "Use process:name != 'cmd.exe'.",
+        example: "[process:name != 'cmd.exe']",
+    },
+    LearnChallenge {
+        id: "core005",
+        path_id: "core",
+        title: "OR Composition",
+        goal: "Combine mshta.exe and rundll32.exe with OR.",
+        hint: "Use OR between two process:name conditions.",
+        example: "[process:name = 'mshta.exe' OR process:name = 'rundll32.exe']",
+    },
+    LearnChallenge {
+        id: "ops001",
+        path_id: "ops",
+        title: "Triple AND",
+        goal: "Write one observation with three conditions joined by AND.",
+        hint: "Use process:name, process:command_line and process:pid together.",
+        example: "[process:name = 'powershell.exe' AND process:command_line LIKE '%-enc%' AND process:pid > 1000]",
+    },
+    LearnChallenge {
+        id: "ops002",
+        path_id: "ops",
+        title: "LIKE + MATCHES",
+        goal: "Use both LIKE and MATCHES against process:command_line.",
+        hint: "One condition with LIKE and another with MATCHES.",
+        example: "[process:command_line LIKE '%powershell%' AND process:command_line MATCHES '(?i).*\\s-enc\\s.*']",
+    },
+    LearnChallenge {
+        id: "ops003",
+        path_id: "ops",
+        title: "Boolean Precedence",
+        goal: "Mix AND/OR with parentheses to avoid ambiguity.",
+        hint: "Group OR branch inside parentheses, then AND another condition.",
+        example: "[(process:name = 'cmd.exe' OR process:name = 'powershell.exe') AND process:command_line LIKE '%http%']",
+    },
+    LearnChallenge {
         id: "time001",
         path_id: "time",
         title: "Qualifier Drill",
@@ -232,20 +280,86 @@ const LEARN_CHALLENGES: [LearnChallenge; 3] = [
         hint: "Start from one observable and append REPEATS and WITHIN qualifiers.",
         example: "[process:command_line LIKE '%powershell%'] REPEATS 3 TIMES WITHIN 300 SECONDS",
     },
+    LearnChallenge {
+        id: "time002",
+        path_id: "time",
+        title: "FOLLOWEDBY Window",
+        goal: "Use FOLLOWEDBY with WITHIN for a short sequence.",
+        hint: "Create two process observations and connect them with FOLLOWEDBY.",
+        example: "([process:name = 'cmd.exe'] FOLLOWEDBY [process:name = 'powershell.exe']) WITHIN 120 SECONDS",
+    },
+    LearnChallenge {
+        id: "time003",
+        path_id: "time",
+        title: "Network Repetition",
+        goal: "Use REPEATS ... TIMES WITHIN with a network destination port.",
+        hint: "Start with network-traffic:dst_port, then append repetition qualifiers.",
+        example: "[network-traffic:dst_port = 22] REPEATS 10 TIMES WITHIN 60 SECONDS",
+    },
+    LearnChallenge {
+        id: "time004",
+        path_id: "time",
+        title: "START / STOP Window",
+        goal: "Constrain a process pattern with START and STOP timestamps.",
+        hint: "Append START t'...' STOP t'...' after the observation.",
+        example: "[process:name = 'wscript.exe'] START t'2025-01-01T00:00:00Z' STOP t'2025-01-01T01:00:00Z'",
+    },
+    LearnChallenge {
+        id: "net001",
+        path_id: "net",
+        title: "Full Network Tuple",
+        goal: "Use src IP, dst IP, dst port and protocol in one pattern.",
+        hint: "Combine src_ref.value, dst_ref.value, dst_port and protocols with AND.",
+        example: "[network-traffic:src_ref.value = '10.0.0.5' AND network-traffic:dst_ref.value = '203.0.113.10' AND network-traffic:dst_port = 443 AND network-traffic:protocols = 'tcp']",
+    },
+    LearnChallenge {
+        id: "net002",
+        path_id: "net",
+        title: "CIDR ISSUBSET",
+        goal: "Write ISSUBSET for source IPv4 range with explicit src_ref.type.",
+        hint: "Use src_ref.type = 'ipv4-addr' and src_ref.value ISSUBSET '<cidr>'.",
+        example: "[network-traffic:src_ref.type = 'ipv4-addr' AND network-traffic:src_ref.value ISSUBSET '10.0.0.0/8']",
+    },
+    LearnChallenge {
+        id: "file001",
+        path_id: "file",
+        title: "File Triad",
+        goal: "Combine SHA-256 hash, size threshold and executable filename.",
+        hint: "Use file:hashes.SHA-256, file:size and file:name LIKE '%.exe'.",
+        example: "[file:hashes.SHA-256 = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' AND file:size > 500000 AND file:name LIKE '%.exe']",
+    },
 ];
 
-const LEARN_PATHS: [LearnPath; 2] = [
+const LEARN_PATHS: [LearnPath; 5] = [
     LearnPath {
         id: "core",
         title: "Path 1: Core Patterns",
-        description: "Observables and boolean operator composition.",
-        challenge_ids: &["core001", "core002"],
+        description: "Observables, exact match, negation and OR composition.",
+        challenge_ids: &["core001", "core002", "core003", "core004", "core005"],
+    },
+    LearnPath {
+        id: "ops",
+        title: "Path 2: Operator Craft",
+        description: "AND/OR composition, precedence and mixed text operators.",
+        challenge_ids: &["ops001", "ops002", "ops003"],
     },
     LearnPath {
         id: "time",
-        title: "Path 2: Temporal Logic",
-        description: "Qualifiers, repetition and time windows.",
-        challenge_ids: &["time001"],
+        title: "Path 3: Temporal Logic",
+        description: "Qualifiers, sequence and explicit time windows.",
+        challenge_ids: &["time001", "time002", "time003", "time004"],
+    },
+    LearnPath {
+        id: "net",
+        title: "Path 4: Network Signals",
+        description: "Network tuple composition and CIDR constraints.",
+        challenge_ids: &["net001", "net002"],
+    },
+    LearnPath {
+        id: "file",
+        title: "Path 5: File Indicators",
+        description: "File hash/size/name triage patterns.",
+        challenge_ids: &["file001"],
     },
 ];
 
@@ -485,7 +599,7 @@ fn handle_learn_input(session: &mut LearnSession, input: &str) -> Result<bool> {
     if lower == "help" || lower == "?" {
         println!("{}", learn_title("Learn Commands"));
         println!("- list");
-        println!("- <challenge-id> (core001, core002, time001)");
+        println!("- <challenge-id> (see 'list')");
         println!("- hint");
         println!("- solution");
         println!("- forget");
@@ -607,6 +721,84 @@ fn evaluate_learn_submission(
                 missing.push("process:command_line");
             }
         }
+        "core003" => {
+            if !lower.contains("process:name") {
+                missing.push("process:name");
+            }
+            if !lower.contains("=") {
+                missing.push("=");
+            }
+            if !lower.contains("powershell.exe") {
+                missing.push("powershell.exe");
+            }
+        }
+        "core004" => {
+            if !lower.contains("process:name") {
+                missing.push("process:name");
+            }
+            if !lower.contains("!=") {
+                missing.push("!=");
+            }
+            if !lower.contains("cmd.exe") {
+                missing.push("cmd.exe");
+            }
+        }
+        "core005" => {
+            if !lower.contains(" or ") {
+                missing.push("OR");
+            }
+            if !lower.contains("process:name") {
+                missing.push("process:name");
+            }
+            if !lower.contains("mshta.exe") {
+                missing.push("mshta.exe");
+            }
+            if !lower.contains("rundll32.exe") {
+                missing.push("rundll32.exe");
+            }
+        }
+        "ops001" => {
+            if lower.matches(" and ").count() < 2 {
+                missing.push("three conditions joined by AND");
+            }
+            if !lower.contains("process:name") {
+                missing.push("process:name");
+            }
+            if !lower.contains("process:command_line") {
+                missing.push("process:command_line");
+            }
+            if !lower.contains("process:pid") {
+                missing.push("process:pid");
+            }
+        }
+        "ops002" => {
+            if !lower.contains("process:command_line") {
+                missing.push("process:command_line");
+            }
+            if !lower.contains("like") {
+                missing.push("LIKE");
+            }
+            if !lower.contains("matches") {
+                missing.push("MATCHES");
+            }
+        }
+        "ops003" => {
+            if !lower.contains(" and ") {
+                missing.push("AND");
+            }
+            if !lower.contains(" or ") {
+                missing.push("OR");
+            }
+            if !lower.contains('(') || !lower.contains(')') {
+                missing.push("parentheses");
+            }
+            if !lower.contains("process:name") {
+                missing.push("process:name");
+            }
+            if !lower.contains("process:command_line") {
+                missing.push("process:command_line");
+            }
+        }
         "time001" => {
             if !lower.contains("repeats") {
                 missing.push("REPEATS");
@@ -616,6 +808,78 @@ fn evaluate_learn_submission(
             }
             if !lower.contains("within") {
                 missing.push("WITHIN");
+            }
+        }
+        "time002" => {
+            if !lower.contains("followedby") {
+                missing.push("FOLLOWEDBY");
+            }
+            if !lower.contains("within") {
+                missing.push("WITHIN");
+            }
+        }
+        "time003" => {
+            if !lower.contains("network-traffic:dst_port") {
+                missing.push("network-traffic:dst_port");
+            }
+            if !lower.contains("repeats") {
+                missing.push("REPEATS");
+            }
+            if !lower.contains("times") {
+                missing.push("TIMES");
+            }
+            if !lower.contains("within") {
+                missing.push("WITHIN");
+            }
+        }
+        "time004" => {
+            if !lower.contains("process:name") {
+                missing.push("process:name");
+            }
+            if !lower.contains("start") {
+                missing.push("START");
+            }
+            if !lower.contains("stop") {
+                missing.push("STOP");
+            }
+        }
+        "net001" => {
+            if !lower.contains("network-traffic:src_ref.value") {
+                missing.push("network-traffic:src_ref.value");
+            }
+            if !lower.contains("network-traffic:dst_ref.value") {
+                missing.push("network-traffic:dst_ref.value");
+            }
+            if !lower.contains("network-traffic:dst_port") {
+                missing.push("network-traffic:dst_port");
+            }
+            if !lower.contains("network-traffic:protocols") {
+                missing.push("network-traffic:protocols");
+            }
+        }
+        "net002" => {
+            if !lower.contains("network-traffic:src_ref.type") {
+                missing.push("network-traffic:src_ref.type");
+            }
+            if !lower.contains("network-traffic:src_ref.value") {
+                missing.push("network-traffic:src_ref.value");
+            }
+            if !lower.contains("issubset") {
+                missing.push("ISSUBSET");
+            }
+        }
+        "file001" => {
+            if !lower.contains("file:hashes.sha-256") {
+                missing.push("file:hashes.SHA-256");
+            }
+            if !lower.contains("file:size") {
+                missing.push("file:size");
+            }
+            if !lower.contains("file:name") {
+                missing.push("file:name");
+            }
+            if !lower.contains("like") {
+                missing.push("LIKE");
             }
         }
         _ => {}
