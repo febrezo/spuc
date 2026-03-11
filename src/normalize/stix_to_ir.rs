@@ -147,6 +147,7 @@ fn validate_stix21_path(object_type: &str, field: &str) -> Result<()> {
         ("email-message", f) if f.starts_with("body_multipart[*].body_raw_ref.hashes.") => true,
 
         ("file", "name")
+        | ("file", "mime_type")
         | ("file", "size")
         | ("file", "ctime")
         | ("file", "mtime")

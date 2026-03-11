@@ -1,0 +1,9 @@
+schema_version: "1.0"
+intrusion_set_id: "intrusion-set-example-001"
+name: "Validation intrusion set"
+description: "intrusion set generated with SPUC"
+confidence: 70
+steps:
+  - id: "step-001"
+    ability_ref: "abl-example-001"
+    platform: "linux"

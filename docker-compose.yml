@@ -1,0 +1,15 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: spuc-ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11435:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./deploy/ollama:/models:ro
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+
+volumes:
+  ollama_data:

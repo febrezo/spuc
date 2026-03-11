@@ -1,7 +1,7 @@
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 
-// Entry point
-rule = { observation_expressions }
+// Entry point (must consume full input; no trailing garbage accepted)
+rule = { SOI ~ observation_expressions ~ EOI }
 
 // Observation layer (FOLLOWEDBY is parsed and lowered to IR as sequence intent)
 observation_expressions = { observation_expression ~ (FOLLOWEDBY ~ observation_expression)* }
