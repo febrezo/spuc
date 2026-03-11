@@ -1,0 +1,10 @@
+#[path = "../ast.rs"]
+pub(crate) mod ast;
+#[path = "../emitters/mod.rs"]
+pub(crate) mod emitters;
+#[path = "../ir.rs"]
+pub(crate) mod ir;
+#[path = "../normalize/mod.rs"]
+pub(crate) mod normalize;
+#[path = "../parser/mod.rs"]
+pub(crate) mod parser;

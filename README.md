@@ -1,22 +1,26 @@
 # SPUC (STIX Pattern Universal Converter)
 
 SPUC is a Rust CLI that parses STIX 2.1 patterns, normalizes them to IR, and emits detection content for EQL, KQL, Sigma, Snort, Suricata, and YARA.
+When `sigma` is available, SPUC also discovers compatible Sigma backends dynamically and exposes them as `sigma-to-<backend>` targets.
 
 ```mermaid
 flowchart LR
   A[STIX Pattern] --> B[Parser]
   B --> D[Verify]
-  D --> E[Convert]
+  D --> E[Translate]
+  D --> Z[Emulate]
   E --> F[EQL]
   E --> G[KQL]
   E --> H[Sigma]
   E --> I[Snort]
   E --> J[Suricata]
   E --> K[YARA]
-  H -->|via sigma-cli| L[Splunk]
-  H -->|via sigma-cli| M[Graylog]
-  H -->|via sigma-cli| N[Chronicle]
-  H -->|via sigma-cli| Z[...]
+  H -->|via sigma| L[sigma-to-<backend>]
+  Z -->|via atomic-red-team| Z1[Atomic Red Team]
+  Z -->|via bash| Z2[Bash]
+  Z -->|via mitre-caldera| Z3[MITRE Caldera]
+  Z -->|via powershell| Z4[PowerShell]
+  Z -->|via spuc-agent| Z5[SPUC Agent]
 
   classDef stix fill:#edf4ff,stroke:#3b82f6,stroke-width:2px,color:#1e3a8a
   classDef command fill:#eafaf0,stroke:#16a34a,stroke-width:2px,color:#166534
@@ -24,8 +28,8 @@ flowchart LR
   classDef sigmaTargets fill:#f1f5f9,stroke:#94a3b8,stroke-width:2px,color:#334155
 
   class D,E command
-  class F,G,H,I,J,K targets
-  class L,M,N,Z sigmaTargets
+  class F,G,H,I,J,K,Z1,Z2,Z3,Z4,Z5 targets
+  class L sigmaTargets
 ```
 
 ## Status
@@ -46,36 +50,44 @@ flowchart LR
 ## Usage
 
 ```bash
-spuc convert --rule "[ipv4-addr:value = '127.0.0.1']" --to sigma --to eql --to kql
-spuc convert --rule "[network-traffic:src_ref.value = '10.0.0.5'] AND [network-traffic:dst_port = 443]" --to snort --to suricata
-spuc convert --rule "([process:name = 'cmd.exe'] FOLLOWEDBY [process:name = 'powershell.exe']) WITHIN 300 SECONDS" --to eql
-spuc convert --rule "[ipv4-addr:value ISSUBSET '198.51.100.0/24']" --to sigma --to eql --to kql --rule-confidence 80
-spuc doc --target sigma
-spuc learn --list
+spuc translate --rule "[ipv4-addr:value = '127.0.0.1']" --to sigma --to eql --to kql
+spuc translate --rule "[network-traffic:src_ref.value = '10.0.0.5'] AND [network-traffic:dst_port = 443]" --to snort --to suricata
+spuc translate --rule "([process:name = 'cmd.exe'] FOLLOWEDBY [process:name = 'powershell.exe']) WITHIN 300 SECONDS" --to eql
+spuc translate --rule "[ipv4-addr:value ISSUBSET '198.51.100.0/24']" --to sigma --to eql --to kql --rule-confidence 80
+spuc translate --rule "[process:name = 'cmd.exe']" --to sigma --output ./exports --export csv
+spuc emulate --rule "[process:command_line MATCHES '^.*echo.*$']" --to spuc-agent --output ./artifacts
+spuc emulate --rule "[process:command_line MATCHES '^.*echo.*$']" --to spuc-agent --output ./artifacts --export csv
+spuc emulate --rule "[process:command_line MATCHES '^.*echo.*$']" --to atomic-red-team --to mitre-caldera --output ./artifacts
+spuc emulate --rule "[process:command_line MATCHES '^.*echo.*$']" --to spuc-agent --refresh
+spuc sigma status
+spuc sigma list-targets
 spuc --version
+spuc version
 ```
+
+Behavior notes:
+
+- `translate` prints only translation output.
+- `emulate` prints only emulation output.
+- Both commands always run a background dual-flow update for catalog convertibility (translation + emulation matrices), cached by normalized `rule_hash` + engine version.
+- Use `--refresh` to force cache recomputation.
 
 ## CLI Help Sample
 
 ```text
 $ spuc help
 
-SPUC is a Rust CLI that parses STIX 2.1 patterns, normalizes them to IR, and emits detection content for EQL, KQL, Sigma, Snort, Suricata, and YARA.
-
 Usage: spuc [COMMAND]
 
 Commands:
-  convert   Convert STIX patterns to selected targets
-  verify    Verify that STIX pattern(s) parse/normalize successfully
-  doc       Show converter documentation and coverage details [aliases: coverage, cover]
-  learn     Guided CTF-like learning mode for writing STIX patterns
-  serve     Run a simple JSON-RPC-like service [aliases: service]
-  interact  Interactive TUI (REPL-style) [aliases: interactive]
-  help      Print this message or the help of the given subcommand(s)
-
-Options:
-  -V, --version  Print version and exit
-  -h, --help  Print help
+  emulate
+  jsonrpc
+  translate
+  verify
+  version
+  sigma
+  web
+  help
 ```
 
 ## Testing
@@ -83,6 +95,65 @@ Options:
 ```bash
 cargo test
 ```
+
+## Docker + sigma
+
+The provided `Dockerfile` installs SPUC plus `sigma` and example backend plugins:
+
+- `pysigma-backend-splunk`
+- `pysigma-backend-elasticsearch` (ES|QL support)
+- `pysigma-backend-crowdstrike` (LogScale)
+- `pysigma-backend-secops` (Chronicle / Google SecOps)
+
+SPUC probes `sigma` once at process startup and only enables dynamic `sigma-to-*` targets that are actually compatible in that runtime.
+
+## Web Interface
+
+- Running `spuc` with no command starts standalone mode.
+- For native GUI window mode (no browser), run: `cargo run --bin spuc --features desktop-tauri`
+- Without the desktop feature, `spuc` still starts local web mode (`--no-login`) on `http://127.0.0.1:8090/`.
+- Linux desktop prerequisites for `desktop-tauri`: install WebKitGTK and JavaScriptCoreGTK development packages (for example `webkit2gtk-4.1` and `javascriptcoregtk-4.1` development headers).
+- `spuc web --port 8090 --admin-user admin --admin-password <password>` starts the localized web UI on localhost.
+- `spuc web --no-login` disables the login screen, enters directly as local administrator and hides logout (desktop/standalone mode).
+- If `--admin-password` is omitted, SPUC generates a 25-character password and prints it in startup logs.
+- Authentication supports local user/password accounts persisted in `<config_root>/web_users.json`.
+- Google/GitHub OAuth login supports authorization code callback flow configured by environment variables (`SPUC_WEB_GOOGLE_CLIENT_ID`, `SPUC_WEB_GOOGLE_CLIENT_SECRET`, `SPUC_WEB_GOOGLE_REDIRECT_URI`, `SPUC_WEB_GITHUB_CLIENT_ID`, `SPUC_WEB_GITHUB_CLIENT_SECRET`, `SPUC_WEB_GITHUB_REDIRECT_URI`).
+- Typical local callback URIs are `http://127.0.0.1:8090/api/login/oauth/google/callback` and `http://127.0.0.1:8090/api/login/oauth/github/callback`.
+- In `User management`, administrators can explicitly authorize/disable Google and GitHub login per provider; this policy is persisted in `<config_root>/web_oauth_policy.json` and is enforced in login.
+- Login/start screen is centered and includes branded logo/title/subtitle plus footer attribution (project, license, coded-with-love).
+- The web UI is localized in English and Spanish only. CLI and JSON-RPC remain unchanged.
+
+### App Home Screenshot
+
+![SPUC app home](kb/assets/app-home.png)
+
+## JSON-RPC Quick Check
+
+```bash
+spuc jsonrpc --port 8080
+curl -X POST 'http://127.0.0.1:8080/rpc' \
+  -H 'Authorization: Bearer <token>' \
+  -H 'Content-Type: application/json' \
+  --data-raw "{\"rule\":\"[ipv4-addr:value = '1.1.1.1']\",\"to\":[\"sigma\"]}"
+```
+
+## Source Layout
+
+- `src/main.rs`: thin entrypoint
+- `src/core/`: technical core namespace (`ast`, `ir`, `parser`, `normalize`, `emitters`)
+- `src/domain/`: product-domain namespace (`catalog`, emulation-facing integration points)
+- `src/app/`: application runner and shared services/cases (`run`, `services/*`)
+- `src/commands/`: CLI command adapters (delegate to shared app/domain logic)
+- `src/tui/`: interactive console logic
+- `src/ui/`: shared terminal styling and rendering helpers
+- `src/web/`: localized web UI, lightweight HTTP server and web API adapters
+
+## Abilities
+
+- See dedicated docs in [`docs/abilities.md`](docs/abilities.md).
+- Catalog docs: [`docs/catalog.md`](docs/catalog.md).
+- Intrusion set docs: [`docs/intrusion-sets.md`](docs/intrusion-sets.md).
+- JSON-RPC docs: [`docs/jsonrpc.md`](docs/jsonrpc.md).
 
 ## CI/CD Pipeline
 
@@ -112,6 +183,20 @@ git push origin v0.1.1
 - `snort`
 - `suricata`
 - `yara`
+- dynamic: `sigma-to-<backend>` for every compatible backend discovered from `sigma plugin list` (for example `sigma-to-splunk`, `sigma-to-elasticsearch`, `sigma-to-loki`).
+
+Use these inspection commands:
+
+- `spuc sigma status`
+- `spuc sigma list-targets`
+
+## Available Emulation Targets
+
+- `spuc-agent`
+- `bash`
+- `powershell`
+- `atomic-red-team`
+- `mitre-caldera`
 
 ## Semantic Fidelity Status
 
@@ -129,12 +214,12 @@ Confidence is independent and explicit:
 - `conversion_confidence` (`0..100`): SPUC semantic-fidelity confidence.
 - `rule_confidence` (`0..100`, optional): analyst/indicator confidence via `--rule-confidence`.
 
-`convert` modes:
+`translate` modes:
 
 - `--mode strict` (default): if required predicates are not representable faithfully, output is `unsupported`.
 - `--mode partial`: supported subset only, status `partial`, omitted parts noted.
 
-![Conversion fidelity](kb/semantic-fidelity.svg)
+![Conversion fidelity](kb/assets/semantic-fidelity.svg)
 
 ## Result Model and CSV
 
@@ -255,10 +340,39 @@ Columns and rows are sorted alphabetically. Each cell shows supported comparison
 
 For authoritative details on mappings, implementation details, hash coverage, STIX literal handling (`string`, `b'...'`, `h'...'`) and others see guides:
 
-- English guide: `kb/GUIDE_EN.md`
-- Spanish guide: `kb/GUIDE_ES.md`
+- English guide: `kb/guides/GUIDE_EN.md`
+- Spanish guide: `kb/guides/GUIDE_ES.md`
 
-Sample rules and conversions can be found with comments in [`kb/spuc_output.csv`](kb/spuc_output.csv).
+Sample rules and conversions can be found with comments in [`kb/assets/spuc_output.csv`](kb/assets/spuc_output.csv).
+
+## Knowledge Base Layout
+
+- `kb/standards/`: immutable standards/reference files.
+- `kb/guides/`: analyst interpretation guides.
+- `kb/assets/`: diagrams and sample/generated data.
+
+Immutable files:
+
+- `kb/standards/STIXPattern.g4`
+- `kb/standards/stix-v2.1-cs01.html`
+
+See [`kb/README.md`](kb/README.md) for details.
+
+## Analyst Workflow (Examples + Catalog)
+
+```bash
+# 1) choose a STIX example
+spuc emulate --file examples/process.stix --to spuc-agent --to bash --to atomic-red-team --output ./artifacts
+
+# 2) inspect catalog in web UI
+spuc
+```
+
+Ready-to-read workflow artifacts:
+
+- `examples/workflow/ability-sample.json`
+- `examples/workflow/intrusion-set-sample.yaml`
+- `examples/workflow/README.md`
 
 ## Engine-Specific Semantics
 

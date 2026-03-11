@@ -33,9 +33,8 @@ pub fn emit(ir: &IrExpr, description: Option<&str>) -> Result<EmitResult> {
         ));
     }
     match build_detections(base) {
-        Ok(detections) => {
+        Ok((selections, condition)) => {
             let category = sigma_category(base);
-            let mut out_rules = Vec::new();
             let mut notes = sigma_notes(base);
             for q in qualifiers {
                 match q {
@@ -52,32 +51,28 @@ pub fn emit(ir: &IrExpr, description: Option<&str>) -> Result<EmitResult> {
                     }
                 }
             }
-            for (selections, condition) in detections {
-                let rule = SigmaRule {
-                    title: match description {
-                        Some(desc) => format!("[SPUC Generated Sigma Rule] {desc}"),
-                        None => "[SPUC Generated Sigma Rule] auto".to_string(),
-                    },
-                    logsource: SigmaLogSource {
-                        category: category.clone(),
-                    },
-                    detection: SigmaDetection {
-                        selections,
-                        condition,
-                    },
-                };
-                out_rules.push(serde_yaml::to_string(&rule)?);
-            }
+            let rule = SigmaRule {
+                title: match description {
+                    Some(desc) => format!("[SPUC Generated Sigma Rule] {desc}"),
+                    None => "[SPUC Generated Sigma Rule] auto".to_string(),
+                },
+                logsource: SigmaLogSource { category },
+                detection: SigmaDetection {
+                    selections,
+                    condition,
+                },
+            };
+            let yaml = serde_yaml::to_string(&rule)?;
 
             notes.sort();
             notes.dedup();
             if notes.is_empty() {
-                Ok(EmitResult::exact(out_rules.join("---\n")))
+                Ok(EmitResult::exact(yaml))
             } else {
                 Ok(EmitResult {
                     status: crate::emitters::FidelityStatus::Partial,
                     notes,
-                    rule: Some(out_rules.join("---\n")),
+                    rule: Some(yaml),
                     cause: None,
                 })
             }
@@ -712,20 +707,18 @@ fn build_dual_ip_selections(ips: &[String]) -> Result<serde_yaml::Mapping> {
     Ok(map)
 }
 
-fn build_detections(ir: &IrExpr) -> Result<Vec<(serde_yaml::Mapping, String)>> {
+fn build_detections(ir: &IrExpr) -> Result<(serde_yaml::Mapping, String)> {
     // Special-case IP OR handled via aggregation when no AND is present.
     if let IrExpr::Any(exprs) = ir {
         if let Some(ips) = collect_ip_any(exprs)? {
             let selections = build_dual_ip_selections(&ips)?;
-            return Ok(vec![(
-                selections,
-                "selection_src or selection_dst".to_string(),
-            )]);
+            return Ok((selections, "selection_src or selection_dst".to_string()));
         }
     }
 
     let conjunctions = expand_conjunctions(ir)?;
-    let mut results = Vec::new();
+    let mut selections = serde_yaml::Mapping::new();
+    let mut branch_conditions = Vec::new();
     for (idx, conj) in conjunctions.iter().enumerate() {
         let name = if conjunctions.len() > 1 {
             format!("selection{}", idx + 1)
@@ -740,9 +733,36 @@ fn build_detections(ir: &IrExpr) -> Result<Vec<(serde_yaml::Mapping, String)>> {
                 _ => None,
             })
             .ok_or_else(|| anyhow!("missing sigma condition"))?;
-        results.push((selection, condition));
+        for (key, value) in selection {
+            if selections.contains_key(&key) {
+                let key_label = match &key {
+                    Value::String(name) => name.as_str(),
+                    _ => "<non-string-key>",
+                };
+                bail!("duplicate sigma selection name generated: {key_label}");
+            }
+            selections.insert(key, value);
+        }
+        branch_conditions.push(condition);
     }
-    Ok(results)
+    let condition = if branch_conditions.len() == 1 {
+        branch_conditions
+            .pop()
+            .ok_or_else(|| anyhow!("missing sigma condition"))?
+    } else {
+        branch_conditions
+            .into_iter()
+            .map(|branch| {
+                if branch.contains(" and ") || branch.contains(" or ") {
+                    format!("({branch})")
+                } else {
+                    branch
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" or ")
+    };
+    Ok((selections, condition))
 }
 
 fn expand_conjunctions(ir: &IrExpr) -> Result<Vec<Vec<IrPredicate>>> {

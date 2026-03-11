@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "id": "abl-example-001",
+  "name": "Echo command-line trace",
+  "description": "Defensive and controlled telemetry emulation derived from one STIX pattern (1 action(s)).",
+  "supported_platforms": [
+    "linux",
+    "macos",
+    "windows"
+  ],
+  "requires": [
+    {
+      "id": "cap.process.spawn",
+      "description": "Host can spawn a benign process for telemetry simulation."
+    }
+  ],
+  "optional": [],
+  "agent_capabilities": [
+    "cap.telemetry.process"
+  ],
+  "actions": [
+    {
+      "id": "act-001",
+      "title": "Emit process command-line observable",
+      "action_type": "emit_process_command_line",
+      "observable": "process:command_line",
+      "operator": "MATCHES",
+      "value": "^.*echo.*$",
+      "safe_instructions": "Run a benign command that produces telemetry aligned with this predicate."
+    }
+  ],
+  "source_pattern": "[process:command_line MATCHES '^.*echo.*$']",
+  "classification": "command_line_trace",
+  "emulation_level": "trace_simulation",
+  "confidence": 70
+}

@@ -23,46 +23,91 @@ fn version_flag_prints_current_version_only() {
 }
 
 #[test]
-fn doc_command_replaces_describe() {
+fn help_groups_root_commands() {
     let out = Command::new(spuc_bin())
-        .args(["doc", "--target", "sigma"])
+        .arg("help")
         .output()
-        .expect("failed to run spuc doc");
+        .expect("failed to run spuc help");
     assert!(
         out.status.success(),
-        "spuc doc failed: {}",
+        "spuc help failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("Coverage for Sigma"));
+    assert!(stdout.contains("Usage: spuc"));
+    assert!(stdout.contains("Commands:"));
+
+    let order = [
+        "emulate",
+        "jsonrpc",
+        "translate",
+        "verify",
+        "version",
+        "web",
+    ];
+    let mut previous = 0usize;
+    for name in order {
+        let marker = format!("\n  {name}");
+        let pos = stdout
+            .find(&marker)
+            .unwrap_or_else(|| panic!("missing command in help output: {name}"));
+        assert!(
+            pos >= previous,
+            "commands are not ordered alphabetically around: {name}"
+        );
+        previous = pos;
+    }
+
+    assert!(!stdout.contains("\n  serve"));
+    assert!(!stdout.contains("\n  explore"));
 }
 
 #[test]
-fn learn_command_lists_challenges() {
+fn version_command_prints_current_version_only() {
     let out = Command::new(spuc_bin())
-        .args(["learn", "--list"])
+        .arg("version")
         .output()
-        .expect("failed to run spuc learn --list");
+        .expect("failed to run spuc version");
     assert!(
         out.status.success(),
-        "spuc learn --list failed: {}",
+        "spuc version failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("Learning Paths"));
-    assert!(stdout.contains("core001"));
-    assert!(stdout.contains("core002"));
-    assert!(stdout.contains("time001"));
-    assert!(stdout.contains("ops001"));
-    assert!(stdout.contains("net001"));
-    assert!(stdout.contains("file001"));
+    let version = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    assert_eq!(version, env!("CARGO_PKG_VERSION"));
+}
+
+#[test]
+fn removed_cli_commands_are_rejected() {
+    for command in [
+        "adversaries",
+        "console",
+        "plan",
+        "rules",
+        "learn",
+        "explore",
+    ] {
+        let out = Command::new(spuc_bin())
+            .arg(command)
+            .output()
+            .unwrap_or_else(|error| panic!("failed to run `spuc {command}`: {error}"));
+        assert!(
+            !out.status.success(),
+            "`spuc {command}` should be rejected after CLI cleanup"
+        );
+        let stderr = String::from_utf8_lossy(&out.stderr).to_ascii_lowercase();
+        assert!(
+            stderr.contains("unrecognized") || stderr.contains("unknown"),
+            "expected unknown command error for `{command}`, got: {stderr}"
+        );
+    }
 }
 
 #[test]
 fn convert_smoke_single_example() {
     let status = Command::new(spuc_bin())
         .args([
-            "convert",
+            "translate",
             "--file",
             "examples/network-traffic.stix",
             "--to",
@@ -72,7 +117,7 @@ fn convert_smoke_single_example() {
         .expect("failed to run spuc binary");
     assert!(
         status.success(),
-        "spuc convert failed for single smoke example"
+        "spuc translate failed for single smoke example"
     );
 }
 
@@ -91,14 +136,14 @@ fn convert_all_examples_without_crashing() {
 
     for file in files {
         let status = Command::new(spuc_bin())
-            .args(["convert", "--file"])
+            .args(["translate", "--file"])
             .arg(&file)
             .args(["--to", "sigma"])
             .status()
             .unwrap_or_else(|e| panic!("failed to run spuc for {}: {e}", file.display()));
         assert!(
             status.success(),
-            "spuc convert failed for {}",
+            "spuc translate failed for {}",
             file.display()
         );
     }
@@ -106,12 +151,12 @@ fn convert_all_examples_without_crashing() {
 
 fn run_convert(rule: &str, target: &str) -> String {
     let out = Command::new(spuc_bin())
-        .args(["convert", "--to", target, "--rule", rule])
+        .args(["translate", "--to", target, "--rule", rule])
         .output()
-        .expect("failed to run spuc convert");
+        .expect("failed to run spuc translate");
     assert!(
         out.status.success(),
-        "spuc convert failed: {}",
+        "spuc translate failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
     String::from_utf8_lossy(&out.stdout).to_string()
@@ -120,7 +165,7 @@ fn run_convert(rule: &str, target: &str) -> String {
 fn run_convert_with_conf(rule: &str, target: &str, conf: &str) -> (bool, String, String) {
     let out = Command::new(spuc_bin())
         .args([
-            "convert",
+            "translate",
             "--to",
             target,
             "--rule",
@@ -129,7 +174,7 @@ fn run_convert_with_conf(rule: &str, target: &str, conf: &str) -> (bool, String,
             conf,
         ])
         .output()
-        .expect("failed to run spuc convert with confidence");
+        .expect("failed to run spuc translate with confidence");
     (
         out.status.success(),
         String::from_utf8_lossy(&out.stdout).to_string(),
@@ -148,7 +193,7 @@ fn csv_output_uses_structured_result_columns() {
 
     let out = Command::new(spuc_bin())
         .args([
-            "convert",
+            "translate",
             "--to",
             "sigma",
             "--rule",
@@ -158,10 +203,10 @@ fn csv_output_uses_structured_result_columns() {
         .arg(&out_dir)
         .args(["--rule-confidence", "80"])
         .output()
-        .expect("failed to run spuc convert for csv");
+        .expect("failed to run spuc translate for csv");
     assert!(
         out.status.success(),
-        "spuc convert failed for csv: {}",
+        "spuc translate failed for csv: {}",
         String::from_utf8_lossy(&out.stderr)
     );
 
@@ -180,6 +225,16 @@ fn normalization_scope_errors_are_specific() {
     let low = out.to_ascii_lowercase();
     assert!(low.contains("normalization_not_implemented"));
     assert!(low.contains("reference traversal"));
+}
+
+#[test]
+fn file_mime_type_is_accepted_in_normalization_scope() {
+    let out = run_convert(
+        "[file:hashes.'SHA-256' = 'aec070645fe53ee3b3763059376134f058cc337247c978add178b6ccdfb0019f' AND file:mime_type = 'application/x-pdf']",
+        "sigma",
+    );
+    let low = out.to_ascii_lowercase();
+    assert!(!low.contains("stix21_invalid_or_unsupported_path"));
 }
 
 #[test]
@@ -230,6 +285,20 @@ fn issubset_network_regressions() {
 
     let unsupported = run_convert("[domain-name:value ISSUBSET 'evil.example']", "eql");
     assert!(unsupported.contains("unsupported"));
+}
+
+#[test]
+fn network_ref_type_is_ignored_when_ref_value_exists_in_outputs() {
+    let sigma = run_convert(
+        "[network-traffic:dst_ref.type = 'domain-name' AND network-traffic:dst_ref.value = 'example.com']",
+        "sigma",
+    );
+    assert!(
+        !sigma
+            .to_ascii_lowercase()
+            .contains("no documented field mapping")
+    );
+    assert!(sigma.contains("destination.ip"));
 }
 
 #[test]
@@ -323,6 +392,24 @@ fn standalone_ip_semantics_are_not_forced_into_sigma_source_side() {
     let sigma_ip = run_convert("[ipv4-addr:value = '198.51.100.42']", "sigma");
     assert!(sigma_ip.contains("unsupported"));
     assert!(sigma_ip.contains("directionality bias"));
+}
+
+#[test]
+fn sigma_or_registry_branches_are_emitted_in_single_rule() {
+    let sigma = run_convert(
+        "[windows-registry-key:key = 'HKEY_CURRENT_USER\\\\Software\\\\CryptoLocker\\\\Files' OR windows-registry-key:key = 'HKEY_CURRENT_USER\\\\Software\\\\Microsoft\\\\CurrentVersion\\\\Run\\\\CryptoLocker_0388']",
+        "sigma",
+    );
+    assert!(sigma.contains("selection1:"));
+    assert!(sigma.contains("selection2:"));
+    assert!(sigma.contains("condition: selection1 or selection2"));
+    assert!(!sigma.contains("\n---\n"));
+    assert_eq!(
+        sigma
+            .matches("title: '[SPUC Generated Sigma Rule] auto'")
+            .count(),
+        1
+    );
 }
 
 #[test]
