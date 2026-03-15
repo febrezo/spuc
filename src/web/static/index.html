@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SPUC Web</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -75,13 +76,13 @@
         </section>
         <section class="nav-section">
           <p class="nav-section-title" data-i18n="nav.section.rules_ops">Workspaces</p>
-          <button class="nav-item" data-route="rulelab">
-            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3h6v3l3 5.2V13l-4 6H10l-4-6v-1.8L9 6V3zm1.9 8.8L9 15h6l-1.9-3.2-1.1-1.9-1.1 1.9z"/></svg></span>
-            <span data-i18n="nav.rulelab">Laboratory</span>
-          </button>
           <button class="nav-item" data-route="rules">
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 3h10l4 4v14H5V3zm9 1.5V8h3.5L14 4.5zM8 12h8v1.8H8V12zm0 4h8v1.8H8V16z"/></svg></span>
             <span data-i18n="nav.rules">Rules</span>
+          </button>
+          <button class="nav-item" data-route="rulelab">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3h6v3l3 5.2V13l-4 6H10l-4-6v-1.8L9 6V3zm1.9 8.8L9 15h6l-1.9-3.2-1.1-1.9-1.1 1.9z"/></svg></span>
+            <span data-i18n="nav.rulelab">Laboratory</span>
           </button>
           <button class="nav-item" data-route="adversaries">
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 10a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm7 2a3 3 0 1 1 0-6 3 3 0 0 1 0 6zM3 21v-1.5C3 16.9 5.9 15 9 15s6 1.9 6 4.5V21H3zm11 0v-1.2c0-1.3-.5-2.4-1.3-3.3 2.3.2 4.3 1.8 4.3 3.9V21h-3z"/></svg></span>
@@ -421,20 +422,27 @@
                 <button id="rules-bulk-cancel" class="btn btn-danger" data-action="rules-bulk-cancel" data-i18n="rules.bulk.cancel">Abort</button>
               </div>
               <div class="rules-actions-left">
-                <button id="rules-select-all-toggle" class="btn btn-ghost" data-action="rules-select-all-toggle" data-i18n="rules.bulk.select_all">Select all</button>
-                <button id="rules-bulk-toggle" class="btn btn-ghost" data-action="rules-bulk-toggle" data-i18n="rules.bulk.enable" disabled>Bulk edit</button>
+                <div class="rules-view-mode" role="group" aria-label="Rule view mode">
+                  <button id="rules-view-cards" class="btn btn-ghost icon-only active" data-action="rules-view-mode" data-mode="cards" data-i18n-title="rules.view.cards" aria-label="Cards" title="Cards"><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i></button>
+                  <button id="rules-view-table" class="btn btn-ghost icon-only" data-action="rules-view-mode" data-mode="table" data-i18n-title="rules.view.table" aria-label="Table" title="Table"><i class="fa-solid fa-table-list" aria-hidden="true"></i></button>
+                </div>
+                <button id="rules-select-all-toggle" class="btn btn-ghost icon-only" data-action="rules-select-all-toggle" data-i18n-title="rules.bulk.select_all" aria-label="Select all" title="Select all"><i class="fa-regular fa-square" aria-hidden="true"></i></button>
+                <button id="rules-bulk-toggle" class="btn btn-ghost icon-only" data-action="rules-bulk-toggle" data-i18n-title="rules.bulk.enable" aria-label="Bulk edit" title="Bulk edit" disabled><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>
                 <div class="column-picker">
-                  <button id="rules-columns-toggle" class="btn btn-ghost" data-action="rules-columns-toggle" data-i18n="common.show_hide_columns">View columns</button>
+                  <button id="rules-columns-toggle" class="btn btn-ghost icon-only" data-action="rules-columns-toggle" data-i18n-title="common.show_hide_columns" aria-label="View columns" title="View columns"><i class="fa-solid fa-table-columns" aria-hidden="true"></i></button>
                   <div id="rules-columns-menu" class="column-menu hidden"></div>
                 </div>
               </div>
               <div class="rules-actions-right">
-                <button id="rules-export-selected" class="btn btn-success" data-action="rules-export-selected" data-i18n="rules.bulk.export_selected" disabled>Export selected</button>
-                <button id="rules-delete-selected" class="btn btn-danger" data-i18n="rules.bulk.delete_selected" disabled>Delete selected</button>
+                <button id="rules-export-selected-csv" class="btn btn-success" data-action="rules-export-selected-csv" data-i18n-title="rules.export_selected.download_csv" aria-label="CSV" title="CSV" disabled><i class="fa-solid fa-file-csv" aria-hidden="true"></i> CSV</button>
+                <button id="rules-export-selected-stix" class="btn btn-warning" data-action="rules-export-selected-stix" data-i18n-title="rules.export_selected.download_bundle" aria-label="STIX" title="STIX" disabled><i class="fa-solid fa-file-code" aria-hidden="true"></i> STIX</button>
+                <button id="rules-duplicate-selected" class="btn btn-ghost icon-only" data-action="rules-duplicate-selected" aria-label="Duplicate selected" title="Duplicate selected" disabled><i class="fa-regular fa-clone" aria-hidden="true"></i></button>
+                <button id="rules-delete-selected" class="btn btn-danger icon-only" data-i18n-title="rules.bulk.delete_selected" aria-label="Delete selected" title="Delete selected" disabled><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
               </div>
             </div>
             <div class="table-meta" id="rules-meta"></div>
-            <div class="table-wrap"><table id="rules-table"></table></div>
+            <div class="table-wrap" id="rules-table-wrap"><table id="rules-table"></table></div>
+            <div id="rules-cards" class="rules-cards hidden"></div>
             <div class="pager" id="rules-pager"></div>
           </article>
         </section>
@@ -607,8 +615,8 @@
               <div id="rulelab-autocomplete" class="autocomplete-list" hidden></div>
             </div>
             <div class="editor-actions rulelab-save-row">
-              <button id="rulelab-save" class="btn btn-success" data-i18n="rulelab.save" disabled>Save Rule</button>
-              <button id="rulelab-copy-prompt" class="btn btn-ghost" data-i18n="rulelab.copy_prompt">Copy LLM prompt</button>
+              <button id="rulelab-save" class="btn btn-success hidden" data-i18n="rulelab.save" disabled>Save Rule</button>
+              <span class="muted">Autosave activo</span>
             </div>
             <div class="compatibility-inline">
               <header class="compatibility-header">
@@ -733,6 +741,7 @@
                 </div>
               </div>
               <div class="adversaries-actions-right">
+                <button id="adversaries-duplicate-selected" class="btn btn-ghost" data-action="adversaries-duplicate-selected" disabled>Duplicar</button>
                 <button id="adversaries-delete-selected" class="btn btn-danger" data-i18n="adversaries.bulk.delete_selected" disabled>Delete selected</button>
               </div>
             </div>
@@ -834,6 +843,7 @@
         </div>
       </header>
       <div id="detail-tabs" class="detail-tabs">
+        <button id="detail-tab-overview" class="btn btn-ghost hidden" data-action="rule-detail-tab" data-tab="overview">Overview</button>
         <button id="detail-tab-view" class="btn btn-ghost active" data-action="detail-tab" data-tab="view" data-i18n="common.view">View</button>
         <button id="detail-tab-json" class="btn btn-ghost" data-action="detail-tab" data-tab="json">JSON</button>
       </div>
@@ -904,16 +914,17 @@
         <header class="adversary-modal-head">
           <div class="adversary-modal-title-wrap">
             <h3 id="adversary-form-title" data-i18n="adversaries.create.title">Create new adversary</h3>
-            <button type="button" id="adversary-title-edit" class="icon-btn hidden" title="Edit title" aria-label="Edit title">✏️</button>
             <input id="adversary-title-inline" class="hidden" data-i18n-placeholder="adversaries.create.name" placeholder="Name">
           </div>
-          <div id="adversary-export-inline" class="detail-copy-emulation hidden">
-            <button type="button" class="btn btn-primary" id="adversary-export-inline-button" title="Export full adversary" aria-label="Export full adversary" data-i18n="adversaries.detail.export_full">Export full adversary</button>
-          </div>
+          <div id="adversary-emulable-platforms" class="rule-card-tags" aria-label="Emulable platforms"></div>
         </header>
         <p class="muted" data-i18n="adversaries.create.flow_hint">Plan your adversary flow: filter catalog abilities, add ordered steps, and compile outputs.</p>
+        <div class="rule-detail-subtabs" id="adversary-tabs">
+          <button type="button" class="btn btn-ghost active" data-action="adversary-tab" data-tab="plan">Plan</button>
+          <button type="button" class="btn btn-ghost" data-action="adversary-tab" data-tab="criteria">Ayuda para la ejecucion</button>
+        </div>
         <section class="adversary-planner-grid">
-          <article class="planner-card">
+          <article class="planner-card" id="adversary-pane-plan-settings">
             <div class="planner-card-title" data-i18n="adversaries.create.plan">Plan settings</div>
             <div class="planner-meta-row">
               <label>
@@ -937,51 +948,96 @@
               </div>
             </label>
           </article>
-          <article class="planner-card">
-            <div class="planner-card-title" data-i18n="adversaries.create.available">Catalog abilities</div>
-            <div class="planner-filter-grid">
-              <label>
-                <span data-i18n="adversaries.create.filter_search">Search</span>
-                <input id="adversary-ability-search" type="search" data-i18n-placeholder="abilities.search" placeholder="Search abilities">
-              </label>
-              <label>
-                <span data-i18n="adversaries.create.filter_platform">Platform</span>
-                <select id="adversary-ability-platform">
-                  <option value="" data-i18n="common.all_platforms">All platforms</option>
-                </select>
-              </label>
-              <label>
-                <span data-i18n="adversaries.create.filter_utility">Utility type</span>
-                <select id="adversary-ability-utility">
-                  <option value="" data-i18n="common.all_utility_types">All utility types</option>
-                </select>
-              </label>
-              <label>
-                <span data-i18n="adversaries.create.filter_destination">Destination</span>
-                <select id="adversary-ability-destination">
-                  <option value="" data-i18n="common.all_destinations">All destinations</option>
-                </select>
-              </label>
-              <label>
-                <span data-i18n="adversaries.create.filter_min_confidence">Emulability</span>
-                <input id="adversary-ability-min-confidence" type="number" min="0" max="100" value="0">
-              </label>
-            </div>
-            <div id="adversary-abilities" class="ability-grid"></div>
-          </article>
-          <article class="planner-card">
+          <article class="planner-card" id="adversary-pane-plan-selected">
             <div class="planner-card-title">
               <span data-i18n="adversaries.create.selected">Selected steps</span>
               <span id="adversary-selected-count" class="badge success">0</span>
             </div>
             <div id="adversary-selected" class="selected-ability-list"></div>
           </article>
+          <article class="planner-card hidden" id="adversary-pane-criteria">
+            <div class="planner-card-title">Ayuda para la ejecucion</div>
+            <div id="adversary-execution-criteria" class="rule-tech-list"></div>
+          </article>
         </section>
         <div class="dialog-actions modal-actions-split">
           <button type="button" id="adversary-cancel" class="btn btn-danger" data-i18n="common.cancel">Cancel</button>
-          <button type="submit" id="adversary-submit" class="btn btn-primary" data-i18n="common.apply">Apply</button>
+          <div class="adversary-dialog-actions-right">
+            <button type="button" class="btn btn-primary" data-action="adversary-open-ability-picker">Anadir habilidades</button>
+            <div id="adversary-export-inline" class="detail-copy-emulation hidden">
+              <div class="rule-export-combo">
+                <button type="button" class="btn btn-success" id="adversary-export-inline-button" title="Export adversary" aria-label="Export adversary">Exportar</button>
+                <select id="adversary-export-inline-target" class="rule-export-select"></select>
+              </div>
+            </div>
+          </div>
+          <button type="submit" id="adversary-submit" class="btn btn-primary hidden" data-i18n="common.apply">Apply</button>
         </div>
       </form>
+    </article>
+  </dialog>
+
+  <dialog id="adversary-ability-picker-dialog" class="detail-dialog">
+    <article class="glass detail-card">
+      <header>
+        <h3>Catalogo de habilidades</h3>
+        <button type="button" class="btn btn-ghost" data-action="adversary-close-ability-picker">Cerrar</button>
+      </header>
+      <div class="rule-detail-subtabs" id="adversary-picker-tabs">
+        <button type="button" class="btn btn-ghost active" data-action="adversary-picker-tab" data-tab="catalog">Catalogo</button>
+        <button type="button" class="btn btn-ghost" data-action="adversary-picker-tab" data-tab="dummy">Dummy</button>
+      </div>
+      <section id="adversary-picker-pane-catalog">
+        <section class="planner-filter-grid">
+          <label>
+            <span data-i18n="adversaries.create.filter_search">Search</span>
+            <input id="adversary-ability-search" type="search" data-i18n-placeholder="abilities.search" placeholder="Search abilities">
+          </label>
+          <label>
+            <span data-i18n="adversaries.create.filter_platform">Platform</span>
+            <select id="adversary-ability-platform">
+              <option value="" data-i18n="common.all_platforms">All platforms</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="adversaries.create.filter_utility">Utility type</span>
+            <select id="adversary-ability-utility">
+              <option value="" data-i18n="common.all_utility_types">All utility types</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="adversaries.create.filter_destination">Destination</span>
+            <select id="adversary-ability-destination">
+              <option value="" data-i18n="common.all_destinations">All destinations</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="adversaries.create.filter_min_confidence">Emulability</span>
+            <input id="adversary-ability-min-confidence" type="number" min="0" max="100" value="0">
+          </label>
+        </section>
+        <div id="adversary-abilities" class="ability-grid"></div>
+      </section>
+      <section id="adversary-picker-pane-dummy" class="hidden">
+        <section class="detail-section">
+          <div class="planner-filter-grid">
+            <label>
+              <span>Dummy sleep (s)</span>
+              <input id="adversary-dummy-sleep" type="number" min="1" step="1" value="5">
+            </label>
+            <div class="dialog-actions dummy-actions-inline">
+              <button type="button" class="btn btn-ghost dummy-action-btn" data-action="adversary-add-dummy-sleep">Anadir dummy sleep</button>
+            </div>
+            <label>
+              <span>Dummy label</span>
+              <input id="adversary-dummy-label" type="text" value="phase_a">
+            </label>
+            <div class="dialog-actions dummy-actions-inline">
+              <button type="button" class="btn btn-ghost dummy-action-btn" data-action="adversary-add-dummy-label">Anadir dummy label</button>
+            </div>
+          </div>
+        </section>
+      </section>
     </article>
   </dialog>
 

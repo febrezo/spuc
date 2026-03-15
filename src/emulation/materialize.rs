@@ -541,10 +541,9 @@ fn synthesize_string_constraints(
         .collect::<Vec<_>>();
     eq_values.dedup();
     if eq_values.len() > 1 {
-        return Err(anyhow!(
-            "conflicting equality constraints: {}",
-            eq_values.join(", ")
-        ));
+        // Keep deterministic first EQ value so OR/flattened branches can still
+        // produce defensive artifacts without pretending all values are applied.
+        eq_values.truncate(1);
     }
 
     let ne_values = constraints

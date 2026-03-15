@@ -24,6 +24,7 @@ const state = {
     lastExportSelectedCsv: "",
     advancedFilters: [],
     workspaceMode: "welcome",
+    viewMode: localStorage.getItem("spuc-web-rules-view-mode") || "cards",
   },
   rulesImport: {
     active: false,
@@ -33,6 +34,13 @@ const state = {
     total: 0,
     ok: 0,
     failed: 0,
+  },
+  ruleDetail: {
+    activeTab: "detection",
+    focusedTarget: "",
+    entry: null,
+    detectionRows: [],
+    emulationRows: [],
   },
   abilities: { entries: [] },
   stixObjects: [],
@@ -65,6 +73,11 @@ const state = {
     editingId: null,
     originalSignature: "",
     compatibleExports: [],
+    exportPreviewByTarget: {},
+    exportPreviewLoading: false,
+    autoSaveTimer: null,
+    autoSaving: false,
+    activeTab: "plan",
   },
   learning: { guides: [], challenges: [], search: "", pathFilter: "", onlyPending: false },
   adminUsers: [],
@@ -80,6 +93,9 @@ const state = {
     compatibilityRequestId: 0,
     syntaxOk: null,
     compatFilter: "",
+    autoSaveTimer: null,
+    autoSaving: false,
+    autoSaveLastSignature: "",
   },
   learningEditor: {
     autocomplete: [],
@@ -410,9 +426,29 @@ function applyTranslations() {
   }
   const exportInlineBtn = document.getElementById("adversary-export-inline-button");
   if (exportInlineBtn) {
-    exportInlineBtn.title = t("adversaries.detail.export_full");
-    exportInlineBtn.setAttribute("aria-label", t("adversaries.detail.export_full"));
+    exportInlineBtn.title = t("detail.rule.export");
+    exportInlineBtn.setAttribute("aria-label", t("detail.rule.export"));
   }
+  const adversaryDuplicateButton = document.getElementById("adversaries-duplicate-selected");
+  if (adversaryDuplicateButton) {
+    adversaryDuplicateButton.textContent = t("adversaries.bulk.duplicate_selected");
+  }
+  [
+    ["rules-bulk-toggle", "rules.bulk.enable"],
+    ["rules-export-selected-csv", "rules.export_selected.download_csv"],
+    ["rules-export-selected-stix", "rules.export_selected.download_bundle"],
+    ["rules-duplicate-selected", "rules.bulk.duplicate_selected"],
+    ["rules-delete-selected", "rules.bulk.delete_selected"],
+    ["rules-columns-toggle", "common.show_hide_columns"],
+    ["rules-view-table", "rules.view.table"],
+    ["rules-view-cards", "rules.view.cards"],
+  ].forEach(([id, key]) => {
+    const node = document.getElementById(id);
+    if (!node) return;
+    const label = t(key);
+    node.title = label;
+    node.setAttribute("aria-label", label);
+  });
   renderRulesColumnPicker();
   renderAdversariesColumnPicker();
   renderStixObjectsTable();
@@ -431,12 +467,82 @@ function refreshRouteMeta() {
 
 function showToast(message, asKey = true) {
   const toast = document.getElementById("toast");
+  toast.classList.remove("toast-check-success");
   toast.hidden = false;
   toast.textContent = asKey ? t(message) : message;
   clearTimeout(showToast.timer);
   showToast.timer = setTimeout(() => {
     toast.hidden = true;
   }, 2800);
+}
+
+function askForConfirmation(message, title = "") {
+  const dialog = document.getElementById("confirm-dialog");
+  const titleNode = document.getElementById("confirm-title");
+  const messageNode = document.getElementById("confirm-message");
+  const acceptButton = document.getElementById("confirm-accept");
+  const cancelButton = document.getElementById("confirm-cancel");
+  if (!(dialog instanceof HTMLDialogElement) || !titleNode || !messageNode || !acceptButton || !cancelButton) {
+    return Promise.resolve(confirm(message));
+  }
+
+  const resolvedTitle = String(title || "").trim() || t("common.confirm_action");
+  titleNode.textContent = resolvedTitle;
+  messageNode.textContent = message;
+
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (value) => {
+      if (done) return;
+      done = true;
+      acceptButton.removeEventListener("click", onAccept);
+      cancelButton.removeEventListener("click", onCancel);
+      dialog.removeEventListener("cancel", onCancelEvent);
+      dialog.removeEventListener("close", onClose);
+      resolve(value);
+    };
+
+    const onAccept = () => {
+      dialog.close("accept");
+      finish(true);
+    };
+    const onCancel = () => {
+      dialog.close("cancel");
+      finish(false);
+    };
+    const onCancelEvent = (event) => {
+      event.preventDefault();
+      dialog.close("cancel");
+      finish(false);
+    };
+    const onClose = () => {
+      finish(dialog.returnValue === "accept");
+    };
+
+    acceptButton.addEventListener("click", onAccept);
+    cancelButton.addEventListener("click", onCancel);
+    dialog.addEventListener("cancel", onCancelEvent);
+    dialog.addEventListener("close", onClose);
+    dialog.showModal();
+  });
+}
+
+function showRuleSavedNavigationToast() {
+  const toast = document.getElementById("toast");
+  toast.hidden = false;
+  toast.classList.add("toast-check-success");
+  toast.innerHTML = `
+    <span class="toast-inline">
+      <span class="toast-check" aria-hidden="true">✓</span>
+      <span>${escapeHtml(t("toast.saved_navigating_rules"))}</span>
+    </span>
+  `;
+  clearTimeout(showToast.timer);
+  showToast.timer = setTimeout(() => {
+    toast.hidden = true;
+    toast.classList.remove("toast-check-success");
+    toast.textContent = "";
+  }, 2400);
 }
 
 async function api(path, options = {}) {
@@ -558,6 +664,45 @@ function renderDetailActions(rightHtml = "") {
   `;
 }
 
+function configureDetailTabs(mode = "json") {
+  const overviewBtn = document.getElementById("detail-tab-overview");
+  const viewBtn = document.getElementById("detail-tab-view");
+  const jsonBtn = document.getElementById("detail-tab-json");
+  if (!viewBtn || !jsonBtn || !overviewBtn) return;
+  if (mode === "rule") {
+    const overviewLabel = t("detail.rule.tab.overview");
+    const detectionLabel = t("detail.rule.tab.detection");
+    const emulationLabel = t("detail.rule.tab.emulation");
+    overviewBtn.classList.remove("hidden");
+    overviewBtn.innerHTML = `<span class="detail-tab-content"><i class="fa-solid fa-circle-info detail-tab-icon" aria-hidden="true"></i><span>${escapeHtml(overviewLabel)}</span></span>`;
+    overviewBtn.dataset.action = "rule-detail-tab";
+    overviewBtn.dataset.tab = "overview";
+    overviewBtn.title = overviewLabel;
+    overviewBtn.setAttribute("aria-label", overviewLabel);
+    viewBtn.innerHTML = `<span class="detail-tab-content"><i class="fa-solid fa-shield-halved detail-tab-icon" aria-hidden="true"></i><span>${escapeHtml(detectionLabel)}</span></span>`;
+    viewBtn.dataset.action = "rule-detail-tab";
+    viewBtn.dataset.tab = "detection";
+    viewBtn.title = detectionLabel;
+    viewBtn.setAttribute("aria-label", detectionLabel);
+    jsonBtn.innerHTML = `<span class="detail-tab-content"><i class="fa-solid fa-gears detail-tab-icon" aria-hidden="true"></i><span>${escapeHtml(emulationLabel)}</span></span>`;
+    jsonBtn.dataset.action = "rule-detail-tab";
+    jsonBtn.dataset.tab = "emulation";
+    jsonBtn.title = emulationLabel;
+    jsonBtn.setAttribute("aria-label", emulationLabel);
+  } else {
+    overviewBtn.classList.add("hidden");
+    overviewBtn.innerHTML = "";
+    overviewBtn.dataset.action = "";
+    overviewBtn.dataset.tab = "";
+    viewBtn.textContent = t("common.view");
+    viewBtn.dataset.action = "detail-tab";
+    viewBtn.dataset.tab = "view";
+    jsonBtn.textContent = "JSON";
+    jsonBtn.dataset.action = "detail-tab";
+    jsonBtn.dataset.tab = "json";
+  }
+}
+
 function setDetailModalMode(mode = "default", targetLabel = "", conversionStatus = "") {
   const tabs = document.getElementById("detail-tabs");
   const raw = document.getElementById("detail-raw");
@@ -594,6 +739,7 @@ function setDetailModalMode(mode = "default", targetLabel = "", conversionStatus
       conversionBadge.classList.add("hidden");
     }
   }
+  configureDetailTabs("json");
 }
 
 function statusLabel(status) {
@@ -845,7 +991,7 @@ function targetLabel(target, family = "emulation") {
     "spuc-agent": "SPUC",
     bash: "Bash",
     powershell: "PowerShell",
-    "atomic-red-team": "Atomic Red Team",
+    "atomic-red-team": "atomic-red",
     "mitre-caldera": "MITRE CALDERA",
   };
   return mapping[normalized] || String(target || "");
@@ -894,13 +1040,339 @@ function openDetail(title, payload, extra = "") {
   document.getElementById("detail-dialog").showModal();
 }
 
-function openRuleDetail(entry) {
+function targetSummaryText(target, family) {
+  const normalized = String(target || "").toLowerCase();
+  const key = `detail.target.summary.${family}.${normalized}`;
+  const text = t(key);
+  if (text !== key) return text;
+  if (family === "detection") {
+    return t("detail.target.summary.default_detection");
+  }
+  return t("detail.target.summary.default_emulation");
+}
+
+function localizeConverterComment(text) {
+  const source = String(text || "").trim();
+  if (!source || state.locale !== "es") return source;
+  let translated = source;
+  const exactMap = [
+    ["Semantic mapping preserved", "Mapeo semantico preservado"],
+    ["Mapping depends on backend schema/profile", "El mapeo depende del esquema/perfil del backend"],
+    ["Mapping depends on backend runtime behavior", "El mapeo depende del comportamiento en ejecucion del backend"],
+    ["Supported subset emitted", "Se ha emitido un subconjunto soportado"],
+    ["Mapping degraded but related", "El mapeo se degrada, pero mantiene relacion"],
+    ["No honest mapping available", "No hay un mapeo fiable disponible"],
+    ["Parse error", "Error de parseo"],
+    ["Normalization error", "Error de normalizacion"],
+    ["Emitter not implemented", "Emisor no implementado"],
+    ["Backend semantics missing", "Faltan semanticas del backend"],
+    ["Schema uncertain", "Esquema incierto"],
+  ];
+  exactMap.forEach(([needle, replacement]) => {
+    if (translated.toLowerCase() === needle.toLowerCase()) {
+      translated = replacement;
+    }
+  });
+  const partialMap = [
+    [/cannot/gi, "no puede"],
+    [/unsupported/gi, "no soportado"],
+    [/mapping/gi, "mapeo"],
+    [/backend/gi, "backend"],
+    [/event/gi, "evento"],
+    [/rule/gi, "regla"],
+    [/timestamp/gi, "marca de tiempo"],
+    [/exact/gi, "exacto"],
+    [/lossy/gi, "con perdida"],
+  ];
+  partialMap.forEach(([pattern, replacement]) => {
+    translated = translated.replace(pattern, replacement);
+  });
+  return translated;
+}
+
+function compactConverterComments(item) {
+  const comments = [];
+  const summary = String(item?.summary || "").trim();
+  const cause = String(item?.cause || "").trim();
+  if (summary) comments.push(summary);
+  if (cause) comments.push(cause);
+  const notes = Array.isArray(item?.notes) ? item.notes : [];
+  notes
+    .map((note) => String(note || "").trim())
+    .filter(Boolean)
+    .forEach((note) => comments.push(note));
+  const unique = [...new Set(comments)];
+  return unique
+    .map((line) => localizeConverterComment(line))
+    .filter(Boolean);
+}
+
+function renderGuideLinks(target, family) {
+  const links = family === "detection" ? detectionUtilityLinks(target) : emulationUtilityLinks(target);
+  if (!links.length) {
+    const fallbackKey = family === "detection" ? "detail.detection.no_links" : "detail.emulation.no_links";
+    return `<div class="muted">${escapeHtml(t(fallbackKey))}</div>`;
+  }
+  return `<ul class="hint-steps compact-list">${links.map((item) => `<li><a href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(item.label)}</a></li>`).join("")}</ul>`;
+}
+
+function normalizeConfidenceValue(raw) {
+  const value = Number(raw);
+  if (Number.isFinite(value)) {
+    return Math.max(0, Math.min(100, Math.round(value)));
+  }
+  const text = String(raw || "").trim();
+  const match = text.match(/\d{1,3}/);
+  if (!match) return null;
+  const parsed = Number(match[0]);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.min(100, Math.round(parsed)));
+}
+
+function renderConfidenceWidget(entry, targetConfidenceRaw) {
+  const ruleConfidence = normalizeConfidenceValue(entry?.confidence);
+  const targetConfidence = normalizeConfidenceValue(targetConfidenceRaw);
+  const targetFallback = String(targetConfidenceRaw ?? "-").trim() || "-";
+  const ruleLabel = t("detail.rule.tech.rule_confidence_short");
+  const targetLabelText = t("detail.rule.tech.target_confidence_short");
+  const renderItem = (label, numericValue, fallbackText, variant) => {
+    const valueText = numericValue == null ? fallbackText : `${numericValue}/100`;
+    const meter = numericValue == null
+      ? `<div class="rule-confidence-meter-empty">${escapeHtml(valueText)}</div>`
+      : `<div class="rule-confidence-meter"><span class="rule-confidence-meter-fill ${variant}" style="width:${numericValue}%;"></span></div>`;
+    return `
+      <div class="rule-confidence-item">
+        <div class="rule-confidence-head">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(valueText)}</strong>
+        </div>
+        ${meter}
+      </div>
+    `;
+  };
+  return `
+    <div class="rule-confidence-grid">
+      ${renderItem(ruleLabel, ruleConfidence, "-", "rule")}
+      ${renderItem(targetLabelText, targetConfidence, targetFallback, "target")}
+    </div>
+  `;
+}
+
+function renderRuleTechCard(entry, item, family) {
+  const normalizedTarget = String(item?.target || "").toLowerCase();
+  const heading = targetLabel(normalizedTarget, family);
+  const status = item?.status || "unsupported";
+  const rawOutput = String(item?.output || "").trim();
+  const outputText = rawOutput || t("detail.no_output_for_target");
+  const targetConfidence = item?.target_confidence == null || item?.target_confidence === ""
+    ? "-"
+    : String(item?.target_confidence);
+  const guideSteps = family === "detection"
+    ? detectionHintSteps(normalizedTarget)
+    : ruleExportHintSteps(normalizedTarget);
+  const guideCommand = family === "detection"
+    ? detectionExecutionCommand(normalizedTarget, entry?.name || "")
+    : emulationExecutionCommand(normalizedTarget, {
+      ability_id: entry?.ability_id || "",
+      export_files: item?.export_files || {},
+    });
+  const guideLabel = family === "detection" ? t("detail.detection.command") : t("detail.emulation.command");
+  const linksLabel = family === "detection" ? t("detail.detection.utility_links") : t("detail.emulation.utility_links");
+  const comments = compactConverterComments(item);
+  const previewLineCount = 6;
+  const outputLines = outputText.split(/\r?\n/);
+  const outputPreview = outputLines.slice(0, previewLineCount).join("\n");
+  const hasOutputOverflow = outputLines.length > previewLineCount;
+  const commentsPreviewCount = 2;
+  const commentsPreview = comments.slice(0, commentsPreviewCount);
+  const hasCommentsOverflow = comments.length > commentsPreviewCount;
+  const hasOutput = Boolean(rawOutput);
+  return `
+    <details class="rule-tech-card rule-tech-accordion status-${statusBucket(status)}" data-rule-tech-target="${escapeHtml(normalizedTarget)}">
+      <summary class="rule-tech-summary">
+        <div class="rule-tech-head">
+          <h4>${escapeHtml(heading)}</h4>
+          <span class="badge ${statusClass(status)}">${escapeHtml(statusLabel(status))}</span>
+        </div>
+        <p class="muted">${escapeHtml(targetSummaryText(normalizedTarget, family))}</p>
+        ${renderConfidenceWidget(entry, targetConfidence)}
+        ${comments.length
+    ? `<div class="rule-tech-preview ${hasCommentsOverflow ? "rule-tech-preview-truncated" : ""}"><h5>${escapeHtml(t("detail.converter.comments"))}</h5><ul class="hint-steps compact-list">${commentsPreview.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>${hasCommentsOverflow ? `<button class="rule-preview-more" data-action="rule-preview-expand"><span>${escapeHtml(t("detail.preview.more"))}</span><i class="fa-solid fa-angle-down" aria-hidden="true"></i></button>` : ""}</div>`
+    : ""}
+        <div class="rule-tech-preview ${hasOutputOverflow ? "rule-tech-preview-truncated" : ""}">
+          <div class="rule-tech-preview-head">
+            <h5>${escapeHtml(tf("detail.output_target", { target: heading }))}</h5>
+            ${copyButtonFor(rawOutput, t("detail.copy_output"))}
+          </div>
+          ${hasOutput
+    ? `<pre class="detail-code rule-output-preview">${escapeHtml(outputPreview)}</pre>`
+    : `<div class="rule-output-empty">${escapeHtml(t("detail.output.compact_unavailable"))}</div>`}
+          ${hasOutputOverflow ? `<button class="rule-preview-more" data-action="rule-preview-expand"><span>${escapeHtml(t("detail.preview.more"))}</span><i class="fa-solid fa-angle-down" aria-hidden="true"></i></button>` : ""}
+        </div>
+      </summary>
+      <div class="rule-tech-body">
+        ${comments.length
+    ? `<div class="rule-tech-comments"><h5>${escapeHtml(t("detail.converter.comments"))}</h5><ul class="hint-steps compact-list">${comments.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul></div>`
+    : ""}
+        <div class="detail-code-wrap">
+          <div class="detail-code-head">
+            <h4>${escapeHtml(tf("detail.output_target", { target: heading }))}</h4>
+            ${copyButtonFor(rawOutput, t("detail.copy_output"))}
+          </div>
+          ${hasOutput ? `<pre class="detail-code">${escapeHtml(outputText)}</pre>` : `<div class="rule-output-empty">${escapeHtml(t("detail.output.compact_unavailable"))}</div>`}
+        </div>
+        <div class="rule-tech-guide">
+          <h5>${escapeHtml(t("detail.rule.how_to_use"))}</h5>
+          <div class="rule-tech-guide-body">
+            ${guideSteps}
+            ${guideCommand ? `<h5>${escapeHtml(guideLabel)}</h5><pre class="detail-code">${escapeHtml(guideCommand)}</pre>` : `<div class="muted">${escapeHtml(t(family === "detection" ? "detail.detection.no_command" : "detail.emulation.no_command"))}</div>`}
+            <h5>${escapeHtml(linksLabel)}</h5>
+            ${renderGuideLinks(normalizedTarget, family)}
+          </div>
+        </div>
+      </div>
+    </details>
+  `;
+}
+
+function setRuleDetailTab(tab) {
+  setDetailTab("view");
+  const normalized = tab === "detection" || tab === "emulation" ? tab : "overview";
+  state.ruleDetail.activeTab = normalized;
+  document.querySelectorAll("[data-action='rule-detail-tab']").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.tab === normalized);
+  });
+  const overviewPane = document.getElementById("rule-detail-pane-overview");
+  const detectionPane = document.getElementById("rule-detail-pane-detection");
+  const emulationPane = document.getElementById("rule-detail-pane-emulation");
+  if (overviewPane) overviewPane.classList.toggle("hidden", normalized !== "overview");
+  if (detectionPane) detectionPane.classList.toggle("hidden", normalized !== "detection");
+  if (emulationPane) emulationPane.classList.toggle("hidden", normalized !== "emulation");
+  const focusTarget = state.ruleDetail.focusedTarget || "";
+  if (!focusTarget) return;
+  const pane = normalized === "detection" ? detectionPane : (normalized === "emulation" ? emulationPane : null);
+  if (!pane) return;
+  const node = pane
+    ? Array.from(pane.querySelectorAll("[data-rule-tech-target]")).find((item) => item.getAttribute("data-rule-tech-target") === focusTarget)
+    : null;
+  if (node) {
+    if (node instanceof HTMLDetailsElement) {
+      node.open = true;
+    }
+    node.classList.add("rule-tech-card-focus");
+    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => node.classList.remove("rule-tech-card-focus"), 1200);
+  }
+}
+
+function openRuleInLab(entry) {
+  if (!entry) return;
+  setRoute("rulelab");
+  const ruleInput = document.getElementById("rulelab-input");
+  const titleInput = document.getElementById("rulelab-title");
+  const descriptionInput = document.getElementById("rulelab-description");
+  const confidenceInput = document.getElementById("rulelab-confidence");
+  const ttpInput = document.getElementById("rulelab-ttp");
+  const tlpSelect = document.getElementById("rulelab-tlp");
+  const papSelect = document.getElementById("rulelab-pap");
+
+  if (ruleInput instanceof HTMLTextAreaElement) {
+    ruleInput.value = entry.rule || "";
+  }
+  if (titleInput instanceof HTMLInputElement) {
+    titleInput.value = entry.name || "";
+  }
+  if (descriptionInput instanceof HTMLTextAreaElement) {
+    descriptionInput.value = entry.description || "";
+    refreshMarkdownEditorPreview("rulelab-description");
+    setMarkdownEditorMode("rulelab-description", "preview");
+  }
+  if (confidenceInput instanceof HTMLInputElement) {
+    confidenceInput.value = String(entry.confidence ?? 70);
+  }
+  if (ttpInput instanceof HTMLInputElement) {
+    ttpInput.value = entry.ttp || "";
+  }
+  if (tlpSelect instanceof HTMLSelectElement) {
+    tlpSelect.value = normalizeTlpValue(entry.tlp || "TLP:GREEN");
+    updateLevelSelectStyle(tlpSelect);
+  }
+  if (papSelect instanceof HTMLSelectElement) {
+    papSelect.value = normalizePapValue(entry.pap || "PAP:GREEN");
+    updateLevelSelectStyle(papSelect);
+  }
+
+  renderRuleLabPreview();
+  scheduleRuleLabAnalysis();
+  setTimeout(() => {
+    if (ruleInput instanceof HTMLTextAreaElement) {
+      ruleInput.focus();
+      ruleInput.selectionStart = 0;
+      ruleInput.selectionEnd = 0;
+    }
+  }, 0);
+}
+
+async function openRuleDetail(entry, options = {}) {
   state.detailDetectionExport = null;
   state.detailLlmPrompt = null;
-  const targets = availableRuleEmulationTargets(entry);
+  const preferredTab = options.tab === "detection" || options.tab === "emulation" ? options.tab : "overview";
+  const focusedTarget = String(options.target || "").toLowerCase();
   const indicatesList = Array.isArray(entry.indicates_list) && entry.indicates_list.length
     ? entry.indicates_list
     : (entry.indicates ? [entry.indicates] : []);
+  const observables = (Array.isArray(entry.observables) ? entry.observables : [])
+    .map((observable) => String(observable || "").trim().toLowerCase())
+    .filter(Boolean);
+
+  let compatibilityEntries = [];
+  try {
+    const response = await api("/api/rules/compatibility", {
+      method: "POST",
+      body: JSON.stringify({
+        rule: entry.rule,
+        description: entry.description || "",
+        confidence: entry.confidence || 70,
+      }),
+    });
+    compatibilityEntries = response.entries || [];
+  } catch (_error) {
+    compatibilityEntries = [];
+  }
+
+  let abilityPayload = null;
+  if (entry.ability_id) {
+    try {
+      abilityPayload = await api(`/api/abilities/${encodeURIComponent(entry.ability_id)}`);
+    } catch (_error) {
+      abilityPayload = null;
+    }
+  }
+
+  const detectionRows = RULE_OUTPUT_TARGETS.map((target) => {
+    const detail = compatibilityEntries.find((row) => String(row.target || "").toLowerCase() === String(target || "").toLowerCase());
+    return {
+      target,
+      status: detail?.runtime_status || entry.target_statuses?.[target] || "unsupported",
+      summary: detail?.summary || targetSummaryText(target, "detection"),
+      cause: detail?.cause || "",
+      notes: Array.isArray(detail?.notes) ? detail.notes : [],
+      output: detail?.output || "",
+      target_confidence: detail?.conversion_confidence,
+    };
+  });
+
+  const artifacts = abilityPayload?.export_artifacts || {};
+  const exportFiles = abilityPayload?.export_files || {};
+  const emulationRows = RULE_EMULATION_TARGETS.map((target) => ({
+    target,
+    status: entry.emulation_statuses?.[target] || "unsupported",
+    summary: targetSummaryText(target, "emulation"),
+    output: artifacts[target] || artifacts[String(target || "").toLowerCase()] || "",
+    target_confidence: abilityPayload?.emulation_level || "-",
+    export_files: exportFiles,
+  }));
+
   const indicatesSection = indicatesList.length
     ? `
       <section class="detail-section">
@@ -918,72 +1390,95 @@ function openRuleDetail(entry) {
       </section>
     `
     : "";
-  const emulationSection = `
-    <section class="detail-section">
-      <h4>${escapeHtml(t("detail.rule.available_emulations"))}</h4>
-      <div class="chip-list">
-        ${targets.length
-          ? targets.map((target) => `<span class="rule-observable-tag">${escapeHtml(targetLabel(target, "emulation"))}</span>`).join("")
-          : `<span class="muted">${escapeHtml(t("common.no_data"))}</span>`}
-      </div>
-    </section>
-  `;
+
+  const detectionExportRows = detectionRows
+    .filter((item) => String(item.output || "").trim().length > 0);
+  const emulationExportRows = emulationRows
+    .filter((item) => String(item.output || "").trim().length > 0);
+
   const view = `
-    <section class="detail-section">
-      <h4>${escapeHtml(t("detail.rule.summary"))}</h4>
-      <div class="detail-grid">
-        <div class="detail-kv"><span class="label">${escapeHtml(t("rules.col.name"))}</span><code>${escapeHtml(entry.name || "-")}</code></div>
-        <div class="detail-kv"><span class="label">${escapeHtml(t("common.id"))}</span><code>${escapeHtml(entry.id || "-")}</code></div>
-        <div class="detail-kv"><span class="label">${escapeHtml(t("rules.col.confidence"))}</span><code>${escapeHtml(String(entry.confidence ?? "-"))}</code></div>
-        <div class="detail-kv"><span class="label">TLP</span>${trafficBadge(entry.tlp, "tlp")}</div>
-        <div class="detail-kv"><span class="label">PAP</span>${trafficBadge(entry.pap, "pap")}</div>
-        <div class="detail-kv"><span class="label">TTP</span><code>${escapeHtml(entry.ttp || "-")}</code></div>
-      </div>
-    </section>
-    <section class="detail-section">
-      <div class="detail-code-wrap">
+    <div id="rule-detail-pane-overview" class="rule-tech-list">
+      <section class="detail-section">
         <div class="detail-code-head">
-          <h4>${escapeHtml(t("rules.col.rule"))}</h4>
-          ${copyButtonFor(entry.rule || "", t("common.copy"))}
+          <h4>${escapeHtml(t("detail.rule.summary"))}</h4>
+          <div class="detail-summary-actions">
+            <button class="btn btn-ghost" data-action="detail-show-json">JSON</button>
+            <button class="btn btn-primary" data-action="rule-open-in-lab" data-id="${escapeHtml(entry.id || "")}">${escapeHtml(t("rules.edit"))}</button>
+          </div>
         </div>
-        <pre class="detail-code">${escapeHtml(entry.rule || "")}</pre>
+        <div class="detail-grid">
+          <div class="detail-kv"><span class="label">${escapeHtml(t("rules.col.name"))}</span><code>${escapeHtml(entry.name || "-")}</code></div>
+          <div class="detail-kv"><span class="label">${escapeHtml(t("common.id"))}</span><code>${escapeHtml(entry.id || "-")}</code></div>
+          <div class="detail-kv"><span class="label">${escapeHtml(t("rules.col.confidence"))}</span><code>${escapeHtml(String(entry.confidence ?? "-"))}</code></div>
+          <div class="detail-kv"><span class="label">TLP</span>${trafficBadge(entry.tlp, "tlp")}</div>
+          <div class="detail-kv"><span class="label">PAP</span>${trafficBadge(entry.pap, "pap")}</div>
+          <div class="detail-kv"><span class="label">TTP</span><code>${escapeHtml(entry.ttp || "-")}</code></div>
+        </div>
+      </section>
+      <section class="detail-section">
+        <div class="detail-code-wrap">
+          <div class="detail-code-head">
+            <h4>${escapeHtml(t("rules.col.rule"))}</h4>
+            ${copyButtonFor(entry.rule || "", t("detail.copy_rule"))}
+          </div>
+          <pre class="detail-code">${escapeHtml(entry.rule || "")}</pre>
+        </div>
+      </section>
+      <section class="detail-section">
+        <h4>${escapeHtml(t("rules.col.observables"))}</h4>
+        <div class="rule-card-tags">
+          ${observables.length
+            ? observables.map((observable) => `<span class="rule-observable-tag">${escapeHtml(observable)}</span>`).join("")
+            : `<span class="muted">${escapeHtml(t("common.no_data"))}</span>`}
+        </div>
+      </section>
+      ${indicatesSection}
+    </div>
+    <section class="detail-section hidden" id="rule-detail-pane-detection">
+      <div class="rule-tech-list">
+        ${detectionRows.map((item) => renderRuleTechCard(entry, item, "detection")).join("")}
+      </div>
+      <div class="rule-detail-export-row">
+        <div class="rule-export-combo">
+          <button class="btn btn-success" data-action="rule-detail-export" data-family="detection" ${detectionExportRows.length ? "" : "disabled"}>${escapeHtml(t("detail.rule.export"))}</button>
+          <select id="rule-detail-export-detection-target" class="rule-export-select" ${detectionExportRows.length ? "" : "disabled"}>
+            ${detectionExportRows
+              .map((item) => `<option value="${escapeHtml(String(item.target || ""))}">${escapeHtml(targetLabel(item.target, "detection"))}</option>`)
+              .join("")}
+          </select>
+        </div>
       </div>
     </section>
-    ${emulationSection}
-    ${indicatesSection}
-  `;
-  const emulationActions = targets.length
-    ? `
-      <div class="detail-copy-emulation">
-        <select id="detail-emulation-target">
-          ${targets
-            .map((target) => `<option value="${escapeHtml(target)}">${escapeHtml(target)}</option>`)
-            .join("")}
-        </select>
-        <button
-          class="btn btn-primary"
-          data-action="rule-copy-emulation"
-          data-id="${escapeHtml(entry.id)}"
-          data-ability="${escapeHtml(entry.ability_id || "")}"
-        >
-          ${escapeHtml(t("detail.copy_emulation"))}
-        </button>
+    <section class="detail-section hidden" id="rule-detail-pane-emulation">
+      <div class="rule-tech-list">
+        ${emulationRows.map((item) => renderRuleTechCard(entry, item, "emulation")).join("")}
       </div>
-    `
-    : "";
-  const promptActions = `
-    <div class="detail-copy-emulation">
-      <button class="btn btn-ghost" data-action="rule-copy-llm-prompt" data-id="${escapeHtml(entry.id)}" data-task="improve">${escapeHtml(t("detail.copy_prompt_improve"))}</button>
-      <button class="btn btn-ghost" data-action="rule-copy-llm-prompt" data-id="${escapeHtml(entry.id)}" data-task="explain">${escapeHtml(t("detail.copy_prompt_explain"))}</button>
-    </div>
+      <div class="rule-detail-export-row">
+        <div class="rule-export-combo">
+          <button class="btn btn-success" data-action="rule-detail-export" data-family="emulation" ${entry.ability_id && emulationExportRows.length ? "" : "disabled"}>${escapeHtml(t("detail.rule.export"))}</button>
+          <select id="rule-detail-export-emulation-target" class="rule-export-select" ${entry.ability_id && emulationExportRows.length ? "" : "disabled"}>
+            ${emulationExportRows
+              .map((item) => `<option value="${escapeHtml(String(item.target || ""))}">${escapeHtml(targetLabel(item.target, "emulation"))}</option>`)
+              .join("")}
+          </select>
+        </div>
+      </div>
+    </section>
   `;
+
+  state.ruleDetail.entry = entry;
+  state.ruleDetail.detectionRows = detectionRows;
+  state.ruleDetail.emulationRows = emulationRows;
+  state.ruleDetail.focusedTarget = focusedTarget;
   document.getElementById("detail-title").textContent = entry.name || t("rules.col.rule");
   setDetailModalMode("detection", t("detail.stix_pattern"), "");
   document.getElementById("detail-view").innerHTML = view;
   document.getElementById("detail-raw").textContent = JSON.stringify(entry, null, 2);
-  document.getElementById("detail-actions").innerHTML = renderDetailActions(`${promptActions}${emulationActions}`);
+  document.getElementById("detail-actions").innerHTML = renderDetailActions("");
+  configureDetailTabs("rule");
   setDetailTab("view");
   document.getElementById("detail-dialog").showModal();
+  setRuleDetailTab(preferredTab);
 }
 
 function renderIndicatesExistingList(relations) {
@@ -1183,15 +1678,7 @@ function openConversionDetail(title, stixRule, detail) {
     ${renderDetectionDetonationGuide(target, title)}
   `;
   const rightActions = [];
-  const promptContext = collectRuleLabPromptContext();
-  const promptTask = statusBucket(detail?.runtime_status) === "unsupported" ? "improve" : "explain";
-  state.detailLlmPrompt = buildStixLlmPrompt(promptContext, {
-    task: promptTask,
-    syntaxOk: state.ruleLab.syntaxOk === true,
-  });
-  rightActions.push(
-    `<button class="btn btn-ghost" data-action="rulelab-copy-llm-prompt" data-task="${escapeHtml(promptTask)}">${escapeHtml(t("detail.copy_prompt"))}</button>`,
-  );
+  state.detailLlmPrompt = null;
   if (output && String(output).trim()) {
     rightActions.push(
       `<button class="btn btn-success" data-action="detail-export-detection">${escapeHtml(tf("detail.export_rule", { target: displayTarget }))}</button>`,
@@ -1218,7 +1705,7 @@ function emulationUtilityLinks(target) {
     return [{ label: "PowerShell Releases", url: "https://github.com/PowerShell/PowerShell/releases" }];
   }
   if (normalized === "atomic-red-team") {
-    return [{ label: "Atomic Red Team", url: "https://github.com/redcanaryco/atomic-red-team" }];
+    return [{ label: "atomic-red", url: "https://github.com/redcanaryco/atomic-red-team" }];
   }
   if (normalized === "mitre-caldera") {
     return [{ label: "MITRE CALDERA", url: "https://github.com/mitre/caldera" }];
@@ -1557,9 +2044,7 @@ function setupLoginProviders() {
 }
 
 function applyNavSelection(route) {
-  const rootRoute = route === "rulelab"
-    ? "rules"
-    : route.startsWith("rules-")
+  const rootRoute = route.startsWith("rules-")
     ? "rules"
     : route.startsWith("adversaries-")
       ? "adversaries"
@@ -1983,6 +2468,7 @@ function rulesColumnLabel(columnKey) {
   switch (columnKey) {
     case "name": return t("rules.col.name");
     case "confidence": return t("rules.col.confidence");
+    case "markings": return "Markings";
     case "tlp": return "TLP";
     case "pap": return "PAP";
     case "ttp": return "TTP";
@@ -1999,6 +2485,7 @@ function adversaryColumnLabel(columnKey) {
   switch (columnKey) {
     case "name": return t("adversaries.col.name");
     case "confidence": return t("adversaries.col.confidence");
+    case "markings": return "Markings";
     case "tlp": return "TLP";
     case "pap": return "PAP";
     case "steps": return t("adversaries.col.steps");
@@ -2011,14 +2498,19 @@ function adversaryColumnLabel(columnKey) {
 function renderRulesColumnPicker() {
   const menu = document.getElementById("rules-columns-menu");
   if (!menu) return;
-  menu.innerHTML = RULE_COLUMN_KEYS
+  const columns = [
+    ...RULE_COLUMN_KEYS.filter((column) => column !== "tlp" && column !== "pap"),
+    "markings",
+  ];
+  const markingsChecked = state.rules.visibleColumns.has("tlp") || state.rules.visibleColumns.has("pap");
+  menu.innerHTML = columns
     .map((column) => `
       <label class="column-menu-item">
         <input
           type="checkbox"
           data-action="rules-column-toggle"
           data-column="${column}"
-          ${state.rules.visibleColumns.has(column) ? "checked" : ""}
+          ${column === "markings" ? (markingsChecked ? "checked" : "") : (state.rules.visibleColumns.has(column) ? "checked" : "")}
         >
         <span>${escapeHtml(rulesColumnLabel(column))}</span>
       </label>
@@ -2029,14 +2521,19 @@ function renderRulesColumnPicker() {
 function renderAdversariesColumnPicker() {
   const menu = document.getElementById("adversaries-columns-menu");
   if (!menu) return;
-  menu.innerHTML = ADVERSARY_COLUMN_KEYS
+  const columns = [
+    ...ADVERSARY_COLUMN_KEYS.filter((column) => column !== "tlp" && column !== "pap"),
+    "markings",
+  ];
+  const markingsChecked = state.adversaries.visibleColumns.has("tlp") || state.adversaries.visibleColumns.has("pap");
+  menu.innerHTML = columns
     .map((column) => `
       <label class="column-menu-item">
         <input
           type="checkbox"
           data-action="adversaries-column-toggle"
           data-column="${column}"
-          ${state.adversaries.visibleColumns.has(column) ? "checked" : ""}
+          ${column === "markings" ? (markingsChecked ? "checked" : "") : (state.adversaries.visibleColumns.has(column) ? "checked" : "")}
         >
         <span>${escapeHtml(adversaryColumnLabel(column))}</span>
       </label>
@@ -2197,14 +2694,103 @@ function openRulesSelectedExportPreview(entries) {
   document.getElementById("detail-dialog").showModal();
 }
 
-async function exportSelectedRules() {
+function buildRulesSelectedCsv(entries) {
+  const visibleColumns = RULE_COLUMN_KEYS.filter((column) => state.rules.visibleColumns.has(column));
+  const headers = [t("common.id"), ...visibleColumns.map((column) => rulesColumnLabel(column))];
+  const rows = entries.map((entry) => {
+    const values = [entry.id, ...visibleColumns.map((column) => ruleColumnExportValue(entry, column))];
+    return values;
+  });
+  const csvLines = [
+    headers.map(csvEscape).join(","),
+    ...rows.map((row) => row.map(csvEscape).join(",")),
+  ];
+  return csvLines.join("\n");
+}
+
+async function exportSelectedRules(format = "csv") {
   if (state.rules.selected.size === 0) return;
   const entries = state.rules.allEntries.filter((entry) => state.rules.selected.has(entry.id));
   if (!entries.length) {
     showToast("common.no_data", true);
     return;
   }
-  openRulesSelectedExportPreview(entries);
+  if (format === "stix-bundle") {
+    const payload = {
+      rule_ids: entries.map((entry) => entry.id),
+    };
+    const response = await fetch("/api/rules/export/bundle", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const maybeJson = await response.json().catch(() => ({ error: "bundle_export_failed" }));
+      throw new Error(maybeJson.error || "bundle_export_failed");
+    }
+    const blob = await response.blob();
+    const ts = new Date().toISOString().slice(0, 19).replaceAll(":", "-");
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = `spuc-rules-${ts}.stix-bundle.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showToast("toast.export_ready");
+    return;
+  }
+  const csv = buildRulesSelectedCsv(entries);
+  const ts = new Date().toISOString().slice(0, 19).replaceAll(":", "-");
+  downloadTextFile(csv, `spuc-rules-selected-${ts}.csv`, "text/csv;charset=utf-8");
+  showToast("toast.export_ready");
+}
+
+async function duplicateSelectedRules() {
+  const selected = state.rules.allEntries.filter((entry) => state.rules.selected.has(entry.id));
+  if (!selected.length) return;
+  for (const entry of selected) {
+    const name = `${entry.name || "Rule"} (copy)`;
+    const indicatesList = Array.isArray(entry.indicates_list) ? entry.indicates_list : [];
+    const firstIndicates = indicatesList[0] || entry.indicates || null;
+    await api("/api/rules/save", {
+      method: "POST",
+      body: JSON.stringify({
+        rule: entry.rule,
+        name,
+        description: entry.description || "",
+        confidence: Number(entry.confidence || 70),
+        tlp: entry.tlp || "TLP:GREEN",
+        pap: entry.pap || "PAP:GREEN",
+        ttp: entry.ttp || "",
+        indicates: firstIndicates,
+      }),
+    });
+  }
+  showToast("toast.saved");
+  await loadRules(state.rules.page);
+}
+
+async function duplicateSelectedAdversaries() {
+  const selected = state.adversaries.allEntries.filter((entry) => state.adversaries.selected.has(entry.id));
+  if (!selected.length) return;
+  for (const entry of selected) {
+    const detail = await api(`/api/adversaries/${encodeURIComponent(entry.id)}`);
+    await api("/api/adversaries", {
+      method: "POST",
+      body: JSON.stringify({
+        name: `${detail.name || entry.name || "Adversary"} (copy)`,
+        description: detail.description || entry.description || "",
+        confidence: Number(detail.confidence || entry.confidence || 70),
+        ability_ids: detail.ability_refs || [],
+        order: detail.ability_refs || [],
+      }),
+    });
+  }
+  showToast("toast.saved");
+  await loadAdversaries(state.adversaries.page);
 }
 
 function updateRulesBulkState() {
@@ -2213,22 +2799,35 @@ function updateRulesBulkState() {
   const allFilteredSelected = filteredEntries.length > 0
     && filteredEntries.every((entry) => state.rules.selected.has(entry.id));
   const bulkToggleButton = document.getElementById("rules-bulk-toggle");
-  const exportSelectedButton = document.getElementById("rules-export-selected");
+  const exportSelectedCsvButton = document.getElementById("rules-export-selected-csv");
+  const exportSelectedStixButton = document.getElementById("rules-export-selected-stix");
+  const duplicateSelectedButton = document.getElementById("rules-duplicate-selected");
   const deleteButton = document.getElementById("rules-delete-selected");
   const selectAllButton = document.getElementById("rules-select-all-toggle");
   if (bulkToggleButton) {
     bulkToggleButton.disabled = count === 0;
     bulkToggleButton.classList.toggle("active", state.rules.bulkEditOpen && count > 0);
   }
-  if (exportSelectedButton) {
-    exportSelectedButton.disabled = count === 0;
+  if (exportSelectedCsvButton) {
+    exportSelectedCsvButton.disabled = count === 0;
+  }
+  if (exportSelectedStixButton) {
+    exportSelectedStixButton.disabled = count === 0;
   }
   if (deleteButton) {
     deleteButton.disabled = count === 0;
   }
+  if (duplicateSelectedButton) {
+    duplicateSelectedButton.disabled = count === 0;
+  }
   if (selectAllButton) {
     selectAllButton.disabled = filteredEntries.length === 0;
-    selectAllButton.textContent = allFilteredSelected ? t("rules.bulk.deselect_all") : t("rules.bulk.select_all");
+    const selectLabel = allFilteredSelected ? t("rules.bulk.deselect_all") : t("rules.bulk.select_all");
+    selectAllButton.title = selectLabel;
+    selectAllButton.setAttribute("aria-label", selectLabel);
+    selectAllButton.innerHTML = allFilteredSelected
+      ? '<i class="fa-regular fa-square-check" aria-hidden="true"></i>'
+      : '<i class="fa-regular fa-square" aria-hidden="true"></i>';
   }
   const bulkEdit = document.getElementById("rules-bulk-edit");
   if (bulkEdit) {
@@ -2243,11 +2842,138 @@ function updateRulesBulkState() {
   }
 }
 
+function renderRulesCards() {
+  const cardsRoot = document.getElementById("rules-cards");
+  if (!cardsRoot) return;
+  if (!state.rules.entries.length) {
+    cardsRoot.innerHTML = `<div class="rules-cards-empty">${escapeHtml(t("common.no_data"))}</div>`;
+    return;
+  }
+
+  cardsRoot.innerHTML = state.rules.entries
+    .map((entry, rowIndex) => {
+      const indicatesList = Array.isArray(entry.indicates_list) && entry.indicates_list.length
+        ? entry.indicates_list
+        : (entry.indicates ? [entry.indicates] : []);
+      const observables = (Array.isArray(entry.observables) ? entry.observables : [])
+        .map((observable) => String(observable || "").trim().toLowerCase())
+        .filter(Boolean);
+
+      const outputChips = RULE_OUTPUT_TARGETS
+        .map((target) =>
+          renderStatusChip(target.toUpperCase(), entry.target_statuses?.[target] || "unsupported", "rule-target-detail", {
+            rule: entry.id,
+            target,
+          }),
+        )
+        .join("");
+      const emulationChips = RULE_EMULATION_TARGETS
+        .map((target) =>
+          renderStatusChip(target, entry.emulation_statuses?.[target] || "unsupported", "rule-emulation-detail", {
+            rule: entry.id,
+            target,
+            ability: entry.ability_id || "",
+          }),
+        )
+        .join("");
+      const globalStatus = ruleStatusFromEntry(entry);
+
+      return `
+        <article class="rule-card ${globalStatus}" data-rule-card-id="${escapeHtml(entry.id)}">
+          <header class="rule-card-head">
+            <label class="rule-card-check">
+              <input type="checkbox" data-action="rule-select" data-id="${entry.id}" data-index="${rowIndex}" ${state.rules.selected.has(entry.id) ? "checked" : ""}>
+            </label>
+            <div class="rule-card-title-wrap">
+              <h4>${escapeHtml(entry.name || t("rules.col.rule"))}</h4>
+              <div class="rule-card-subtitle">
+                <span class="rule-card-id">${escapeHtml(entry.id)}</span>
+                <span class="badge ${statusClass(globalStatus)}">${escapeHtml(statusLabel(globalStatus))}</span>
+              </div>
+            </div>
+            <div class="rule-card-markings">
+              ${trafficBadge(entry.tlp, "tlp")}
+              ${trafficBadge(entry.pap, "pap")}
+            </div>
+          </header>
+
+          <section class="rule-card-body">
+            <div class="rule-card-grid">
+              <div class="rule-card-kv"><span>${escapeHtml(t("rules.col.confidence"))}</span><strong>${escapeHtml(String(entry.confidence ?? "-"))}</strong></div>
+              <div class="rule-card-kv"><span>TTP</span><strong>${escapeHtml(entry.ttp || "-")}</strong></div>
+              <div class="rule-card-kv"><span>${escapeHtml(t("rules.col.indicates"))}</span><strong>${escapeHtml(String(indicatesList.length))}</strong></div>
+              <div class="rule-card-kv"><span>${escapeHtml(t("rules.col.observables"))}</span><strong>${escapeHtml(String(observables.length))}</strong></div>
+            </div>
+
+            <div class="rule-card-code-wrap">
+              <div class="detail-code-head">
+                <h4>${escapeHtml(t("rules.col.rule"))}</h4>
+                <button class="icon-btn icon-only" data-action="rule-copy" data-id="${escapeHtml(entry.id)}" title="${escapeHtml(t("detail.copy_rule"))}" aria-label="${escapeHtml(t("detail.copy_rule"))}">📋</button>
+              </div>
+              <code class="rule-card-code">${escapeHtml(entry.rule || "")}</code>
+            </div>
+
+            <div class="rule-card-pill-columns">
+              <div class="rule-card-pill-group">
+                <span class="rule-card-pill-label">${escapeHtml(t("detail.rule.tab.detection_short"))}</span>
+                <div class="chip-list">${outputChips}</div>
+              </div>
+              <div class="rule-card-pill-group">
+                <span class="rule-card-pill-label">${escapeHtml(t("rules.col.emulation"))}</span>
+                <div class="chip-list">${emulationChips}</div>
+              </div>
+              <div class="rule-card-pill-group">
+                <span class="rule-card-pill-label">${escapeHtml(t("rules.col.observables"))}</span>
+                <div class="rule-card-tags">
+                  ${(observables.length
+                    ? observables.map((observable) => `<span class="rule-observable-tag">${escapeHtml(observable)}</span>`).join("")
+                    : `<span class="muted">${escapeHtml(t("common.no_data"))}</span>`)}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <footer class="rule-card-actions">
+            <button class="btn btn-ghost" data-action="rule-show" data-id="${escapeHtml(entry.id)}">${escapeHtml(t("common.details"))}</button>
+          </footer>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function updateRulesViewModeUI() {
+  const mode = state.rules.viewMode === "cards" ? "cards" : "table";
+  const tableBtn = document.getElementById("rules-view-table");
+  const cardsBtn = document.getElementById("rules-view-cards");
+  const tableWrap = document.getElementById("rules-table-wrap");
+  const cardsWrap = document.getElementById("rules-cards");
+  const columnsToggle = document.getElementById("rules-columns-toggle");
+
+  if (tableBtn) tableBtn.classList.toggle("active", mode === "table");
+  if (cardsBtn) cardsBtn.classList.toggle("active", mode === "cards");
+  if (tableWrap) tableWrap.classList.toggle("hidden", mode !== "table");
+  if (cardsWrap) cardsWrap.classList.toggle("hidden", mode !== "cards");
+  if (columnsToggle) columnsToggle.disabled = mode !== "table";
+}
+
+function setRulesViewMode(mode) {
+  state.rules.viewMode = mode === "cards" ? "cards" : "table";
+  localStorage.setItem("spuc-web-rules-view-mode", state.rules.viewMode);
+  updateRulesViewModeUI();
+  if (state.rules.allEntries.length > 0) {
+    renderRulesTable();
+  }
+}
+
 function renderRulesTable() {
   const outputTargets = RULE_OUTPUT_TARGETS;
   const emulationTargets = RULE_EMULATION_TARGETS;
   const currentSort = state.rules.sort || "confidence_desc";
   const isVisible = (column) => state.rules.visibleColumns.has(column);
+  const markingsVisible = isVisible("tlp") || isVisible("pap");
+  const displayedRulesColumns = RULE_COLUMN_KEYS.filter((column) => column !== "tlp" && column !== "pap");
+  if (markingsVisible) displayedRulesColumns.splice(2, 0, "markings");
   const filtered = applyRulesClientFilters(state.rules.allEntries);
   state.rules.total = filtered.length;
   const maxPage = Math.max(1, Math.ceil(filtered.length / state.rules.pageSize));
@@ -2313,8 +3039,16 @@ function renderRulesTable() {
     if (isVisible("confidence")) {
       cells.push(`<td><input type="number" min="0" max="100" class="rules-confidence-input" data-id="${entry.id}" value="${Number(entry.confidence || 0)}"></td>`);
     }
-    if (isVisible("tlp")) cells.push(`<td>${trafficBadge(entry.tlp, "tlp")}</td>`);
-    if (isVisible("pap")) cells.push(`<td>${trafficBadge(entry.pap, "pap")}</td>`);
+    if (markingsVisible) {
+      cells.push(`
+        <td>
+          <div class="markings-stack">
+            ${trafficBadge(entry.tlp, "tlp")}
+            ${trafficBadge(entry.pap, "pap")}
+          </div>
+        </td>
+      `);
+    }
     if (isVisible("ttp")) cells.push(`<td><code>${escapeHtml(entry.ttp || "-")}</code></td>`);
     if (isVisible("rule")) {
       cells.push(`
@@ -2352,7 +3086,7 @@ function renderRulesTable() {
     }
     return `<tr data-rule-row-id="${escapeHtml(entry.id)}">${cells.join("")}</tr>`;
   });
-  const visibleCount = RULE_COLUMN_KEYS.filter((column) => isVisible(column)).length;
+  const visibleCount = displayedRulesColumns.filter((column) => column === "markings" || isVisible(column)).length;
   const emptyRow = `
     <tr class="table-empty-row">
       <td colspan="${1 + visibleCount}">${escapeHtml(t("common.no_data"))}</td>
@@ -2366,11 +3100,8 @@ function renderRulesTable() {
   if (isVisible("confidence")) {
     headers.push(sortableHeader(t("rules.col.confidence"), "rules-sort-column", "confidence", currentSort, "confidence_asc", "confidence_desc"));
   }
-  if (isVisible("tlp")) {
-    headers.push(sortableHeader("TLP", "rules-sort-column", "tlp", currentSort, "tlp_asc", "tlp_desc"));
-  }
-  if (isVisible("pap")) {
-    headers.push(sortableHeader("PAP", "rules-sort-column", "pap", currentSort, "pap_asc", "pap_desc"));
+  if (markingsVisible) {
+    headers.push(`<th>${escapeHtml(rulesColumnLabel("markings"))}</th>`);
   }
   if (isVisible("ttp")) headers.push(`<th>TTP</th>`);
   if (isVisible("rule")) headers.push(`<th>${escapeHtml(t("rules.col.rule"))}</th>`);
@@ -2386,7 +3117,10 @@ function renderRulesTable() {
     </thead>
     <tbody>${rows.length ? rows.join("") : emptyRow}</tbody>
   `;
-  document.getElementById("rules-meta").textContent = `${state.rules.entries.length}/${state.rules.total} ${t("common.entries")}`;
+  renderRulesCards();
+  updateRulesViewModeUI();
+  const modeLabel = state.rules.viewMode === "cards" ? t("rules.view.cards") : t("rules.view.table");
+  document.getElementById("rules-meta").textContent = `${state.rules.entries.length}/${state.rules.total} ${t("common.entries")} · ${modeLabel}`;
   renderPager("rules-pager", state.rules.page, state.rules.pageSize, state.rules.total, "rules");
   updateRulesBulkState();
 }
@@ -2575,6 +3309,7 @@ function updateAdversariesBulkState() {
 
   const bulkToggleButton = document.getElementById("adversaries-bulk-toggle");
   const deleteButton = document.getElementById("adversaries-delete-selected");
+  const duplicateButton = document.getElementById("adversaries-duplicate-selected");
   const selectAllButton = document.getElementById("adversaries-select-all-toggle");
   if (bulkToggleButton) {
     bulkToggleButton.disabled = count === 0;
@@ -2582,6 +3317,9 @@ function updateAdversariesBulkState() {
   }
   if (deleteButton) {
     deleteButton.disabled = count === 0;
+  }
+  if (duplicateButton) {
+    duplicateButton.disabled = count === 0;
   }
   if (selectAllButton) {
     selectAllButton.disabled = filteredEntries.length === 0;
@@ -2600,6 +3338,9 @@ function updateAdversariesBulkState() {
 
 function renderAdversariesTable() {
   const isVisible = (column) => state.adversaries.visibleColumns.has(column);
+  const markingsVisible = isVisible("tlp") || isVisible("pap");
+  const displayedAdversaryColumns = ADVERSARY_COLUMN_KEYS.filter((column) => column !== "tlp" && column !== "pap");
+  if (markingsVisible) displayedAdversaryColumns.splice(2, 0, "markings");
   const filtered = applyAdversariesClientFilters(state.adversaries.allEntries || []);
   state.adversaries.total = filtered.length;
   const maxPage = Math.max(1, Math.ceil(filtered.length / state.adversaries.pageSize));
@@ -2633,8 +3374,16 @@ function renderAdversariesTable() {
     ];
     if (isVisible("name")) cells.push(`<td>${escapeHtml(entry.name)}</td>`);
     if (isVisible("confidence")) cells.push(`<td>${adversaryConfidenceBadge(entry.confidence)}</td>`);
-    if (isVisible("tlp")) cells.push(`<td>${trafficBadge(entry.tlp || "TLP:GREEN", "tlp")}</td>`);
-    if (isVisible("pap")) cells.push(`<td>${trafficBadge(entry.pap || "PAP:GREEN", "pap")}</td>`);
+    if (markingsVisible) {
+      cells.push(`
+        <td>
+          <div class="markings-stack">
+            ${trafficBadge(entry.tlp || "TLP:GREEN", "tlp")}
+            ${trafficBadge(entry.pap || "PAP:GREEN", "pap")}
+          </div>
+        </td>
+      `);
+    }
     if (isVisible("steps")) cells.push(`<td>${entry.steps}</td>`);
     if (isVisible("platforms")) cells.push(`<td>${escapeHtml((entry.platforms || []).join(", "))}</td>`);
     if (isVisible("exporters")) {
@@ -2646,7 +3395,7 @@ function renderAdversariesTable() {
     }
     return `<tr data-adversary-row-id="${escapeHtml(entry.id)}">${cells.join("")}</tr>`;
   });
-  const visibleCount = ADVERSARY_COLUMN_KEYS.filter((column) => isVisible(column)).length;
+  const visibleCount = displayedAdversaryColumns.filter((column) => column === "markings" || isVisible(column)).length;
   const emptyRow = `
     <tr class="table-empty-row">
       <td colspan="${1 + Math.max(1, visibleCount)}">${escapeHtml(t("common.no_data"))}</td>
@@ -2661,11 +3410,8 @@ function renderAdversariesTable() {
   if (isVisible("confidence")) {
     headers.push(sortableHeader(t("adversaries.col.confidence"), "adversaries-sort-column", "confidence", currentSort, "confidence_asc", "confidence_desc"));
   }
-  if (isVisible("tlp")) {
-    headers.push(sortableHeader("TLP", "adversaries-sort-column", "tlp", currentSort, "tlp_asc", "tlp_desc"));
-  }
-  if (isVisible("pap")) {
-    headers.push(sortableHeader("PAP", "adversaries-sort-column", "pap", currentSort, "pap_asc", "pap_desc"));
+  if (markingsVisible) {
+    headers.push(`<th>${escapeHtml(adversaryColumnLabel("markings"))}</th>`);
   }
   if (isVisible("steps")) {
     headers.push(sortableHeader(t("adversaries.col.steps"), "adversaries-sort-column", "steps", currentSort, "steps_asc", "steps_desc"));
@@ -2763,6 +3509,8 @@ function resetAdversaryComposer() {
   state.adversaryCompose.minConfidence = 0;
   state.adversaryCompose.selectedOrder = [];
   state.adversaryCompose.executor = "manifest";
+  state.adversaryCompose.exportPreviewByTarget = {};
+  state.adversaryCompose.exportPreviewLoading = false;
   const searchNode = document.getElementById("adversary-ability-search");
   const platformNode = document.getElementById("adversary-ability-platform");
   const utilityNode = document.getElementById("adversary-ability-utility");
@@ -2773,6 +3521,89 @@ function resetAdversaryComposer() {
   if (utilityNode) utilityNode.value = "";
   if (destinationNode) destinationNode.value = "";
   if (minConfidenceNode) minConfidenceNode.value = "0";
+}
+
+function selectedAdversaryExportTarget() {
+  const exportTarget = document.getElementById("adversary-export-inline-target");
+  if (exportTarget instanceof HTMLSelectElement && exportTarget.value) {
+    return String(exportTarget.value || "").toLowerCase();
+  }
+  return String(state.adversaryCompose.compatibleExports?.[0] || "").toLowerCase();
+}
+
+function normalizedDownloadName(item) {
+  const raw = String(item?.name || "").trim();
+  if (raw) return raw;
+  const link = String(item?.url || "");
+  if (!link) return "";
+  const marker = "name=";
+  const index = link.indexOf(marker);
+  if (index < 0) return "";
+  const encoded = link.slice(index + marker.length).split("&")[0] || "";
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return encoded;
+  }
+}
+
+function triggerDownloadByUrl(url, fileName = "") {
+  if (!url) return;
+  const link = document.createElement("a");
+  link.href = url;
+  if (fileName) {
+    link.download = fileName;
+  }
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+function pickOperationalDownload(downloads, target) {
+  const normalizedTarget = String(target || "").toLowerCase();
+  const entries = Array.isArray(downloads) ? downloads : [];
+  const hasOperationalName = (item) => String(normalizedDownloadName(item) || "").toLowerCase().includes("-operational.");
+  const inTargetBucket = (item) => String(normalizedDownloadName(item) || "").toLowerCase().startsWith(`${normalizedTarget}-`);
+  return entries.find((item) => inTargetBucket(item) && hasOperationalName(item))
+    || entries.find((item) => hasOperationalName(item))
+    || null;
+}
+
+function abilityArtifactFilename(target, filenames) {
+  const extByTarget = {
+    "spuc-agent": ".json",
+    bash: ".sh",
+    powershell: ".ps1",
+    "atomic-red-team": ".yaml",
+    "mitre-caldera": ".json",
+  };
+  const expectedExt = extByTarget[target] || "";
+  if (!expectedExt) return "";
+  return filenames.find((name) => name.toLowerCase().endsWith(expectedExt) && !name.toLowerCase().endsWith(".yaml"))
+    || filenames.find((name) => name.toLowerCase().endsWith(expectedExt))
+    || "";
+}
+
+async function ensureAdversaryExportPreview(target, force = false) {
+  const normalized = String(target || "").toLowerCase();
+  if (!normalized) return;
+  if (state.adversaryCompose.mode !== "edit" || !state.adversaryCompose.editingId) return;
+  if (!force && state.adversaryCompose.exportPreviewByTarget[normalized]) return;
+  if (state.adversaryCompose.exportPreviewLoading) return;
+  state.adversaryCompose.exportPreviewLoading = true;
+  renderAdversaryExecutionCriteria();
+  try {
+    const response = await api(`/api/adversaries/${encodeURIComponent(state.adversaryCompose.editingId)}/export${toQuery({ to: normalized })}`);
+    const names = (response.downloads || [])
+      .map((item) => normalizedDownloadName(item))
+      .filter((value) => Boolean(String(value || "").trim()));
+    state.adversaryCompose.exportPreviewByTarget[normalized] = names;
+  } catch {
+    state.adversaryCompose.exportPreviewByTarget[normalized] = [];
+  } finally {
+    state.adversaryCompose.exportPreviewLoading = false;
+    renderAdversaryExecutionCriteria();
+  }
 }
 
 function setSelectOptions(selectNode, values, allLabel, selectedValue = "") {
@@ -2796,6 +3627,21 @@ function renderAdversaryAbilityFilterOptions() {
   setSelectOptions(platformNode, platforms, t("common.all_platforms"), state.adversaryCompose.platform);
   setSelectOptions(utilityNode, utilities, t("common.all_utility_types"), state.adversaryCompose.utility);
   setSelectOptions(destinationNode, destinations, t("common.all_destinations"), state.adversaryCompose.destination);
+}
+
+async function createDummyAbility(params) {
+  const response = await api("/api/abilities/dummy", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+  await loadAbilities();
+  const newId = String(response?.id || "").trim();
+  if (newId && !state.adversaryCompose.selectedOrder.includes(newId)) {
+    state.adversaryCompose.selectedOrder.push(newId);
+  }
+  renderAdversaryAbilitySelector();
+  scheduleAdversaryAutoSave();
+  showToast("toast.saved");
 }
 
 function filteredAdversaryAbilities() {
@@ -2901,7 +3747,7 @@ function renderAdversaryAbilitySelector() {
             <button type="button" class="export-pill available" data-action="ability-export" data-id="${entry.id}" data-target="spuc-agent">SPUC</button>
             <button type="button" class="export-pill available" data-action="ability-export" data-id="${entry.id}" data-target="bash">Bash</button>
             <button type="button" class="export-pill available" data-action="ability-export" data-id="${entry.id}" data-target="powershell">PowerShell</button>
-            <button type="button" class="export-pill available" data-action="ability-export" data-id="${entry.id}" data-target="atomic-red-team">Atomic</button>
+            <button type="button" class="export-pill available" data-action="ability-export" data-id="${entry.id}" data-target="atomic-red-team">atomic-red</button>
             <button type="button" class="export-pill available" data-action="ability-export" data-id="${entry.id}" data-target="mitre-caldera">Caldera</button>
           </div>
         </div>
@@ -2919,7 +3765,211 @@ function renderAdversaryAbilitySelector() {
   if (selectedCount) {
     selectedCount.textContent = String(state.adversaryCompose.selectedOrder.length);
   }
+  renderAdversaryEmulablePlatforms();
+  renderAdversaryExecutionCriteria();
   setAdversaryFormSubmitState();
+}
+
+function setAdversaryTab(tab) {
+  const normalized = tab === "criteria" ? "criteria" : "plan";
+  state.adversaryCompose.activeTab = normalized;
+  const settings = document.getElementById("adversary-pane-plan-settings");
+  const selected = document.getElementById("adversary-pane-plan-selected");
+  const criteria = document.getElementById("adversary-pane-criteria");
+  if (settings) settings.classList.toggle("hidden", normalized !== "plan");
+  if (selected) selected.classList.toggle("hidden", normalized !== "plan");
+  if (criteria) criteria.classList.toggle("hidden", normalized !== "criteria");
+  document.querySelectorAll("[data-action='adversary-tab']").forEach((button) => {
+    button.classList.toggle("active", button.dataset.tab === normalized);
+  });
+  if (normalized === "criteria") {
+    const target = selectedAdversaryExportTarget();
+    if (target) {
+      void ensureAdversaryExportPreview(target);
+    }
+  }
+}
+
+function renderAdversaryEmulablePlatforms() {
+  const root = document.getElementById("adversary-emulable-platforms");
+  if (!root) return;
+  const selected = state.adversaryCompose.selectedOrder
+    .map((id) => state.abilities.entries.find((entry) => entry.id === id))
+    .filter(Boolean);
+  const platforms = [...new Set(selected.flatMap((entry) => entry.platforms || []))]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  root.innerHTML = platforms.length
+    ? platforms.map((platform) => `<span class="rule-observable-tag">${escapeHtml(platform)}</span>`).join("")
+    : `<span class="muted">${escapeHtml(t("common.no_data"))}</span>`;
+}
+
+function renderAdversaryExecutionCriteria() {
+  const root = document.getElementById("adversary-execution-criteria");
+  if (!root) return;
+  const selectedCount = state.adversaryCompose.selectedOrder.length;
+  const abilityId = state.adversaryCompose.editingId || "<adversary-id>";
+  const selectedTarget = selectedAdversaryExportTarget();
+  const targetNames = selectedTarget
+    ? (state.adversaryCompose.exportPreviewByTarget[selectedTarget] || [])
+    : [];
+  const targetArtifact = abilityArtifactFilename(selectedTarget, targetNames);
+  const criteriaRows = [
+    {
+      exporter: "spuc-agent",
+      instruction: "Validar estructura y ejecutar en entorno controlado con traza completa.",
+      command: selectedTarget === "spuc-agent" && targetArtifact
+        ? `spuc adversaries export ${abilityId} --to spuc-agent --output ./artifacts && spuc-agent validate --file ./${targetArtifact}`
+        : `spuc adversaries export ${abilityId} --to spuc-agent --output ./artifacts && spuc-agent validate --file <artifact.json>`,
+    },
+    {
+      exporter: "bash",
+      instruction: "Ejecutar en host Linux/macOS de laboratorio con telemetria habilitada.",
+      command: selectedTarget === "bash" && targetArtifact
+        ? `spuc adversaries export ${abilityId} --to bash --output ./artifacts && bash ./${targetArtifact}`
+        : `spuc adversaries export ${abilityId} --to bash --output ./artifacts && bash ./<script.sh>`,
+    },
+    {
+      exporter: "powershell",
+      instruction: "Ejecutar en host Windows monitorizado; para registro usar este exportador.",
+      command: selectedTarget === "powershell" && targetArtifact
+        ? `spuc adversaries export ${abilityId} --to powershell --output ./artifacts && powershell -ExecutionPolicy Bypass -File .\\${targetArtifact}`
+        : `spuc adversaries export ${abilityId} --to powershell --output ./artifacts && powershell -ExecutionPolicy Bypass -File .\\<script.ps1>`,
+    },
+    {
+      exporter: "atomic-red-team",
+      instruction: "Importar artefacto atomic-red y mapear parametros seguros del plan.",
+      command: `spuc adversaries export ${abilityId} --to atomic-red-team --output ./artifacts`,
+    },
+    {
+      exporter: "mitre-caldera",
+      instruction: "Publicar JSON de habilidad en servidor CALDERA y verificar plataforma objetivo.",
+      command: `spuc adversaries export ${abilityId} --to mitre-caldera --output ./artifacts`,
+    },
+  ];
+  root.innerHTML = `
+    <article class="detail-section">
+      <div class="detail-grid">
+        <div class="detail-kv"><span class="label">Pasos seleccionados</span><code>${escapeHtml(String(selectedCount))}</code></div>
+        <div class="detail-kv"><span class="label">Modo guardado</span><code>Autosave</code></div>
+        <div class="detail-kv"><span class="label">Export objetivo</span><code>${escapeHtml(selectedTarget || "sin seleccionar")}</code></div>
+      </div>
+    </article>
+    <article class="rule-tech-card">
+      <div class="rule-tech-head">
+        <h4>Nombres reales de archivo</h4>
+        ${selectedTarget ? `<button type="button" class="btn btn-ghost" data-action="adversary-refresh-execution-help" data-target="${escapeHtml(selectedTarget)}" ${state.adversaryCompose.exportPreviewLoading ? "disabled" : ""}>Actualizar</button>` : ""}
+      </div>
+      ${selectedTarget
+    ? (targetNames.length
+      ? `<div class="detail-code-wrap">
+              <div class="detail-code-head">
+                <small class="muted">${escapeHtml(selectedTarget)}</small>
+                <button type="button" class="btn btn-ghost code-copy-btn" data-action="detail-copy" data-copy="${encodeURIComponent(targetNames.join("\n"))}"><i class="fa-regular fa-copy" aria-hidden="true"></i><span>Copiar</span></button>
+              </div>
+              <pre class="detail-code">${escapeHtml(targetNames.join("\n"))}</pre>
+            </div>`
+      : `<p class="muted">Aun no hay nombres disponibles para este destino. Pulsa "Actualizar" para generar y ver los nombres reales.</p>`)
+    : `<p class="muted">Selecciona un destino de export para mostrar los nombres reales.</p>`}
+    </article>
+    ${criteriaRows
+      .map((row) => `
+        <article class="rule-tech-card">
+          <div class="rule-tech-head">
+            <h4>${escapeHtml(row.exporter)}</h4>
+          </div>
+          <p class="muted">${escapeHtml(row.instruction)}</p>
+          <div class="detail-code-wrap">
+            <div class="detail-code-head">
+              <small class="muted">Comando sugerido</small>
+              <button type="button" class="btn btn-ghost code-copy-btn" data-action="detail-copy" data-copy="${encodeURIComponent(row.command)}"><i class="fa-regular fa-copy" aria-hidden="true"></i><span>Copiar</span></button>
+            </div>
+            <pre class="detail-code">${escapeHtml(row.command)}</pre>
+          </div>
+        </article>
+      `)
+      .join("")}
+  `;
+}
+
+function openAdversaryAbilityPicker() {
+  const dialog = document.getElementById("adversary-ability-picker-dialog");
+  if (!(dialog instanceof HTMLDialogElement)) return;
+  setAdversaryPickerTab("catalog");
+  renderAdversaryAbilitySelector();
+  dialog.showModal();
+}
+
+function setAdversaryPickerTab(tab) {
+  const normalized = tab === "dummy" ? "dummy" : "catalog";
+  const catalogPane = document.getElementById("adversary-picker-pane-catalog");
+  const dummyPane = document.getElementById("adversary-picker-pane-dummy");
+  if (catalogPane) catalogPane.classList.toggle("hidden", normalized !== "catalog");
+  if (dummyPane) dummyPane.classList.toggle("hidden", normalized !== "dummy");
+  document.querySelectorAll("[data-action='adversary-picker-tab']").forEach((button) => {
+    button.classList.toggle("active", button.dataset.tab === normalized);
+  });
+}
+
+function closeAdversaryAbilityPicker() {
+  const dialog = document.getElementById("adversary-ability-picker-dialog");
+  if (dialog instanceof HTMLDialogElement) {
+    dialog.close();
+  }
+}
+
+function scheduleAdversaryAutoSave() {
+  if (state.adversaryCompose.autoSaving) return;
+  clearTimeout(state.adversaryCompose.autoSaveTimer);
+  state.adversaryCompose.autoSaveTimer = setTimeout(async () => {
+    if (!document.getElementById("adversary-dialog")?.open) return;
+    await persistAdversaryAutosave();
+  }, 520);
+}
+
+async function persistAdversaryAutosave() {
+  syncAdversaryComposerFromInputs();
+  const selected = [...state.adversaryCompose.selectedOrder];
+  const name = document.getElementById("adversary-name")?.value?.trim() || "";
+  if (!name || selected.length === 0) return;
+  const payload = {
+    name,
+    description: document.getElementById("adversary-description")?.value?.trim() || "",
+    confidence: Number(document.getElementById("adversary-confidence")?.value || 70),
+    ability_ids: selected,
+    order: selected,
+  };
+  const signature = JSON.stringify(payload);
+  if (signature === state.adversaryCompose.originalSignature) {
+    return;
+  }
+  state.adversaryCompose.autoSaving = true;
+  try {
+    if (state.adversaryCompose.mode === "edit" && state.adversaryCompose.editingId) {
+      await api(`/api/adversaries/${encodeURIComponent(state.adversaryCompose.editingId)}/update`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    } else {
+      const response = await api("/api/adversaries", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      const createdId = response.id || null;
+      const created = createdId
+        ? await api(`/api/adversaries/${encodeURIComponent(createdId)}`).catch(() => response)
+        : response;
+      state.adversaryCompose.mode = "edit";
+      state.adversaryCompose.editingId = createdId;
+      state.adversaryCompose.compatibleExports = [];
+      setAdversaryFormMode("edit", created);
+    }
+    state.adversaryCompose.originalSignature = signature;
+    showToast("toast.saved");
+    await loadAdversaries(state.adversaries.page);
+  } finally {
+    state.adversaryCompose.autoSaving = false;
+  }
 }
 
 function adversaryFormSignature() {
@@ -2985,9 +4035,10 @@ function setAdversaryFormMode(mode, adversary = null) {
   state.adversaryCompose.compatibleExports = normalized === "edit"
     ? [...new Set((adversary?.compatible_exports || []).map((target) => String(target).toLowerCase()))]
     : [];
+  state.adversaryCompose.exportPreviewByTarget = {};
+  state.adversaryCompose.exportPreviewLoading = false;
   const title = document.getElementById("adversary-form-title");
   const inlineTitle = document.getElementById("adversary-title-inline");
-  const editBtn = document.getElementById("adversary-title-edit");
   const submit = document.getElementById("adversary-submit");
   if (title) {
     title.textContent = normalized === "edit" ? (adversary?.name || t("adversaries.edit.untitled")) : t("adversaries.create.title");
@@ -2996,13 +4047,9 @@ function setAdversaryFormMode(mode, adversary = null) {
     inlineTitle.classList.add("hidden");
     inlineTitle.value = "";
   }
-  if (editBtn) {
-    editBtn.classList.toggle("hidden", normalized !== "edit");
-    editBtn.title = t("adversaries.edit.title_action");
-    editBtn.setAttribute("aria-label", t("adversaries.edit.title_action"));
-  }
   if (submit) {
     submit.textContent = normalized === "edit" ? t("common.save") : t("common.apply");
+    submit.classList.add("hidden");
   }
 
   const exportRoot = document.getElementById("adversary-export-inline");
@@ -3014,13 +4061,29 @@ function setAdversaryFormMode(mode, adversary = null) {
     }
   }
   const exportButton = document.getElementById("adversary-export-inline-button");
+  const exportTarget = document.getElementById("adversary-export-inline-target");
   if (exportButton) {
     const enabled = normalized === "edit" && Boolean(state.adversaryCompose.editingId);
     exportButton.disabled = !enabled;
-    exportButton.title = t("adversaries.detail.export_full");
-    exportButton.setAttribute("aria-label", t("adversaries.detail.export_full"));
-    exportButton.textContent = t("adversaries.detail.export_full");
+    exportButton.title = t("detail.rule.export");
+    exportButton.setAttribute("aria-label", t("detail.rule.export"));
+    exportButton.textContent = t("detail.rule.export");
   }
+  if (exportTarget instanceof HTMLSelectElement) {
+    const options = [...new Set((state.adversaryCompose.compatibleExports || []).map((target) => String(target).toLowerCase()))];
+    exportTarget.innerHTML = options
+      .map((target) => `<option value="${escapeHtml(target)}">${escapeHtml(target)}</option>`)
+      .join("");
+    const enabled = normalized === "edit" && Boolean(state.adversaryCompose.editingId) && options.length > 0;
+    exportTarget.disabled = !enabled;
+    if (enabled) {
+      exportTarget.value = options[0];
+    }
+    if (exportButton) {
+      exportButton.disabled = !enabled;
+    }
+  }
+  renderAdversaryExecutionCriteria();
   syncAdversaryModalTitle();
 }
 
@@ -3029,12 +4092,7 @@ function setAdversaryFormSubmitState() {
   if (!(submit instanceof HTMLButtonElement)) return;
   const hasName = Boolean(document.getElementById("adversary-name")?.value?.trim());
   const hasSteps = state.adversaryCompose.selectedOrder.length > 0;
-  if (state.adversaryCompose.mode === "edit") {
-    const dirty = adversaryFormSignature() !== state.adversaryCompose.originalSignature;
-    submit.disabled = !dirty || !hasName || !hasSteps;
-  } else {
-    submit.disabled = !hasName || !hasSteps;
-  }
+  submit.disabled = !hasName || !hasSteps;
 }
 
 function openAdversaryDialog() {
@@ -3044,9 +4102,11 @@ function openAdversaryDialog() {
   document.getElementById("adversary-form")?.reset();
   setAdversaryFormMode("create");
   state.adversaryCompose.originalSignature = adversaryFormSignature();
+  state.adversaryCompose.activeTab = "plan";
   setMarkdownEditorMode("adversary-description", "preview");
   refreshMarkdownEditorPreview("adversary-description");
   renderAdversaryAbilitySelector();
+  setAdversaryTab("plan");
   dialog.showModal();
   setTimeout(() => document.getElementById("adversary-name")?.focus(), 0);
 }
@@ -3064,9 +4124,11 @@ async function openAdversaryEditor(adversaryId) {
     : [];
   setAdversaryFormMode("edit", adversary);
   state.adversaryCompose.originalSignature = adversaryFormSignature();
+  state.adversaryCompose.activeTab = "plan";
   setMarkdownEditorMode("adversary-description", "preview");
   refreshMarkdownEditorPreview("adversary-description");
   renderAdversaryAbilitySelector();
+  setAdversaryTab("plan");
   dialog.showModal();
 }
 
@@ -3074,6 +4136,7 @@ function closeAdversaryDialog() {
   const dialog = document.getElementById("adversary-dialog");
   if (!(dialog instanceof HTMLDialogElement)) return;
   dialog.close();
+  closeAdversaryAbilityPicker();
   resetAdversaryComposer();
   setAdversaryFormMode("create");
   state.adversaryCompose.originalSignature = "";
@@ -3089,65 +4152,38 @@ function closeAdversaryDialog() {
 
 async function createAdversary(event) {
   event.preventDefault();
-  syncAdversaryComposerFromInputs();
-  const selected = [...state.adversaryCompose.selectedOrder];
-  if (!selected.length) {
-    showToast("adversaries.create.none_selected", true);
-    return;
-  }
-  const executor = state.adversaryCompose.executor || "manifest";
-  const payload = {
-    name: document.getElementById("adversary-name").value.trim(),
-    description: document.getElementById("adversary-description").value.trim(),
-    confidence: Number(document.getElementById("adversary-confidence").value || 70),
-    ability_ids: selected,
-    order: selected,
-  };
-  const isEdit = state.adversaryCompose.mode === "edit" && state.adversaryCompose.editingId;
-  if (isEdit) {
-    await api(`/api/adversaries/${encodeURIComponent(state.adversaryCompose.editingId)}/update`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    showToast("toast.saved");
-    closeAdversaryDialog();
-    await loadAdversaries(state.adversaries.page);
-    return;
-  }
-
-  const response = await api("/api/adversaries", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-
-  let downloads = Array.isArray(response.downloads) ? [...response.downloads] : [];
-  if (executor !== "manifest" && response?.id) {
-    const compiled = await api(`/api/adversaries/${encodeURIComponent(response.id)}/export${toQuery({ to: executor })}`);
-    const extraDownloads = Array.isArray(compiled.downloads) ? compiled.downloads : [];
-    const known = new Set(downloads.map((entry) => `${entry.name}|${entry.url}`));
-    for (const entry of extraDownloads) {
-      const key = `${entry.name}|${entry.url}`;
-      if (known.has(key)) continue;
-      known.add(key);
-      downloads.push(entry);
-    }
-  }
-
-  showToast("toast.saved");
-  renderDownloadsModal(response.name || response.id, downloads);
+  await persistAdversaryAutosave();
   closeAdversaryDialog();
-  event.target.reset();
-  resetAdversaryComposer();
-  renderAdversaryAbilitySelector();
-  await loadAdversaries(1);
 }
 
 async function exportAdversaryFromDialog() {
   if (state.adversaryCompose.mode !== "edit" || !state.adversaryCompose.editingId) {
     return;
   }
-  const response = await api(`/api/adversaries/${encodeURIComponent(state.adversaryCompose.editingId)}/export`);
-  renderDownloadsModal(response.id, response.downloads);
+  const target = document.getElementById("adversary-export-inline-target")?.value || "";
+  if (!target) {
+    showToast("common.no_data", true);
+    return;
+  }
+  const response = await api(`/api/adversaries/${encodeURIComponent(state.adversaryCompose.editingId)}/export${toQuery({ to: target })}`);
+  state.adversaryCompose.exportPreviewByTarget[String(target).toLowerCase()] = (response.downloads || [])
+    .map((item) => normalizedDownloadName(item))
+    .filter((value) => Boolean(String(value || "").trim()));
+  renderAdversaryExecutionCriteria();
+
+  const operational = pickOperationalDownload(response.downloads, target);
+  if (operational?.url) {
+    triggerDownloadByUrl(operational.url, normalizedDownloadName(operational));
+    showToast("toast.export_ready");
+    return;
+  }
+  const first = (response.downloads || [])[0] || null;
+  if (first?.url) {
+    triggerDownloadByUrl(first.url, normalizedDownloadName(first));
+    showToast("toast.export_ready");
+  } else {
+    showToast("common.no_data", true);
+  }
 }
 
 function renderRuleLabPreview() {
@@ -3568,11 +4604,26 @@ async function compatibilityRuleLab({ silent = false } = {}) {
   if (!silent && state.compatibility.length === 0) {
     showToast("common.no_data", true);
   }
+  scheduleRuleLabAutoSave();
 }
 
 async function saveRuleLab() {
+  await persistRuleLab({ silent: false });
+}
+
+function scheduleRuleLabAutoSave() {
+  clearTimeout(state.ruleLab.autoSaveTimer);
+  state.ruleLab.autoSaveTimer = setTimeout(async () => {
+    await persistRuleLab({ silent: true });
+  }, 700);
+}
+
+async function persistRuleLab({ silent = false } = {}) {
+  if (state.ruleLab.autoSaving) return;
   if (state.ruleLab.syntaxOk !== true) {
-    showToast("rulelab.syntax_error", true);
+    if (!silent) {
+      showToast("rulelab.syntax_error", true);
+    }
     return;
   }
   const payload = {
@@ -3584,14 +4635,25 @@ async function saveRuleLab() {
     pap: document.getElementById("rulelab-pap").value || "PAP:GREEN",
     ttp: normalizeTtpValue(document.getElementById("rulelab-ttp")?.value || ""),
   };
-  const response = await api("/api/rules/save", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-  showToast("toast.saved");
-  openDetail(t("rulelab.saved"), response);
-  await Promise.all([loadRules(1), loadOverview()]);
-  renderDashboard();
+  const signature = JSON.stringify(payload);
+  if (signature === state.ruleLab.autoSaveLastSignature) {
+    return;
+  }
+  state.ruleLab.autoSaving = true;
+  try {
+    await api("/api/rules/save", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    state.ruleLab.autoSaveLastSignature = signature;
+    if (!silent) {
+      showToast("toast.saved");
+    }
+    await Promise.all([loadRules(state.rules.page || 1), loadOverview()]);
+    renderDashboard();
+  } finally {
+    state.ruleLab.autoSaving = false;
+  }
 }
 
 async function copyRuleLabPrompt(task = "") {
@@ -3877,7 +4939,10 @@ async function saveRulesBatch(rules) {
 
 async function deleteSelectedRules() {
   if (state.rules.selected.size === 0) return;
-  const confirmed = confirm(t("rules.confirm_delete_selected"));
+  const confirmed = await askForConfirmation(
+    t("rules.confirm_delete_selected"),
+    t("common.confirm_action"),
+  );
   if (!confirmed) return;
   const selectedIds = [...state.rules.selected];
   for (const id of selectedIds) {
@@ -4369,51 +5434,13 @@ async function downloadAbility(abilityId, target) {
 async function showRuleTargetDetail(ruleId, target) {
   const entry = state.rules.entries.find((item) => item.id === ruleId);
   if (!entry) return;
-  const response = await api("/api/rules/compatibility", {
-    method: "POST",
-    body: JSON.stringify({
-      rule: entry.rule,
-      description: entry.description || "",
-      confidence: entry.confidence || 70,
-    }),
-  });
-  const detail = (response.entries || []).find((row) => row.target === target) || null;
-  if (!detail) {
-    openDetail(`${entry.name} · ${target.toUpperCase()}`, { error: t("detail.no_compatibility_detail") });
-    return;
-  }
-  openConversionDetail(entry.name, entry.rule, detail);
+  await openRuleDetail(entry, { tab: "detection", target });
 }
 
 async function showRuleEmulationDetail(ruleId, target, abilityId) {
   const entry = state.rules.entries.find((item) => item.id === ruleId);
   if (!entry) return;
-  const availableTargets = availableRuleEmulationTargets(entry);
-  if (!abilityId) {
-    openEmulationDetail(entry.name, entry.rule, {
-      selected_target: target,
-      available_targets: availableTargets,
-      status: "unsupported",
-      note: t("detail.no_cataloged_ability"),
-    });
-    return;
-  }
-  const ability = await api(`/api/abilities/${encodeURIComponent(abilityId)}`);
-  const status = entry.emulation_statuses?.[target] || "unsupported";
-  openEmulationDetail(entry.name, entry.rule, {
-    selected_target: target,
-    available_targets: availableTargets,
-    status,
-    ability_id: abilityId,
-    ability_name: ability.name,
-    ttp: ability.ttp,
-    platforms: ability.platforms,
-    classification: ability.classification,
-    emulation_level: ability.emulation_level,
-    export_files: ability.export_files,
-    export_artifacts: ability.export_artifacts,
-    actions: ability.actions,
-  });
+  await openRuleDetail(entry, { tab: "emulation", target, abilityId });
 }
 
 async function copyRuleEmulation(ruleId, abilityId) {
@@ -4625,6 +5652,7 @@ function installEventHandlers() {
     node.addEventListener("change", (event) => updateLevelSelectStyle(event.target));
   });
   renderRulesWorkspace();
+  updateRulesViewModeUI();
   renderAdversaryWorkspace();
   renderStixObjectsWorkspace();
   const rulesSave = document.getElementById("rules-new-save");
@@ -4701,6 +5729,16 @@ function installEventHandlers() {
       await exportAdversaryFromDialog();
     });
   }
+  const adversaryExportInlineTarget = document.getElementById("adversary-export-inline-target");
+  if (adversaryExportInlineTarget instanceof HTMLSelectElement) {
+    adversaryExportInlineTarget.addEventListener("change", () => {
+      renderAdversaryExecutionCriteria();
+      const target = selectedAdversaryExportTarget();
+      if (target && state.adversaryCompose.activeTab === "criteria") {
+        void ensureAdversaryExportPreview(target);
+      }
+    });
+  }
   ["adversary-name", "adversary-description", "adversary-confidence"].forEach((id) => {
     const node = document.getElementById(id);
     if (!node) return;
@@ -4712,6 +5750,7 @@ function installEventHandlers() {
         syncAdversaryModalTitle();
       }
       setAdversaryFormSubmitState();
+      scheduleAdversaryAutoSave();
     });
   });
   const adversaryTitleEdit = document.getElementById("adversary-title-edit");
@@ -4750,7 +5789,10 @@ function installEventHandlers() {
   ["rulelab-title", "rulelab-description", "rulelab-confidence", "rulelab-ttp"].forEach((id) => {
     const node = document.getElementById(id);
     if (!node) return;
-    node.addEventListener("input", scheduleRuleLabAnalysis);
+    node.addEventListener("input", () => {
+      scheduleRuleLabAnalysis();
+      scheduleRuleLabAutoSave();
+    });
   });
   document.querySelectorAll("[data-action='markdown-tab']").forEach((button) => {
     button.addEventListener("click", () => {
@@ -4775,14 +5817,6 @@ function installEventHandlers() {
     });
   }
   document.getElementById("rulelab-save").addEventListener("click", saveRuleLab);
-  const ruleLabCopyPrompt = document.getElementById("rulelab-copy-prompt");
-  if (ruleLabCopyPrompt) {
-    ruleLabCopyPrompt.addEventListener("click", async () => {
-      const hasPattern = Boolean(String(document.getElementById("rulelab-input")?.value || "").trim());
-      const task = normalizePromptTask("", hasPattern, state.ruleLab.syntaxOk === true);
-      await copyRuleLabPrompt(task);
-    });
-  }
   document.getElementById("adversary-form").addEventListener("submit", createAdversary);
 
   const learningInput = document.getElementById("learning-input");
@@ -4877,7 +5911,7 @@ function installEventHandlers() {
     }
   });
 
-  document.body.addEventListener("click", (event) => {
+  document.body.addEventListener("click", async (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const row = target.closest("#rules-table tbody tr[data-rule-row-id]");
@@ -4889,7 +5923,11 @@ function installEventHandlers() {
     if (!ruleId) return;
     const entry = state.rules.entries.find((item) => item.id === ruleId);
     if (entry) {
-      openRuleDetail(entry);
+      try {
+        await openRuleDetail(entry);
+      } catch (error) {
+        showToast(error.payload?.error || error.message || "toast.unexpected", true);
+      }
     }
   });
 
@@ -4944,7 +5982,13 @@ function installEventHandlers() {
       } else if (action === "adversaries-bulk-cancel") {
         cancelBulkAdversariesEdit();
       } else if (action === "rules-export-selected") {
-        await exportSelectedRules();
+        await exportSelectedRules("csv");
+      } else if (action === "rules-export-selected-csv") {
+        await exportSelectedRules("csv");
+      } else if (action === "rules-export-selected-stix") {
+        await exportSelectedRules("stix-bundle");
+      } else if (action === "rules-duplicate-selected") {
+        await duplicateSelectedRules();
       } else if (action === "rules-export-selected-download") {
         if (!state.rules.lastExportSelectedCsv) return;
         const ts = new Date().toISOString().slice(0, 19).replaceAll(":", "-");
@@ -4952,6 +5996,8 @@ function installEventHandlers() {
         showToast("toast.export_ready");
       } else if (action === "rules-sort-column") {
         toggleRulesSortColumn(target.dataset.column);
+      } else if (action === "rules-view-mode") {
+        setRulesViewMode(target.dataset.mode || "table");
       } else if (action === "adversaries-sort-column") {
         await toggleAdversariesSortColumn(target.dataset.column);
       } else if (action === "rules-type-toggle") {
@@ -4987,7 +6033,7 @@ function installEventHandlers() {
         renderAdversariesTable();
       } else if (action === "rule-show") {
         const entry = state.rules.entries.find((rule) => rule.id === target.dataset.id);
-        if (entry) openRuleDetail(entry);
+        if (entry) await openRuleDetail(entry);
       } else if (action === "rule-copy") {
         const entry = state.rules.entries.find((rule) => rule.id === target.dataset.id);
         if (entry) {
@@ -5005,6 +6051,8 @@ function installEventHandlers() {
         await showRuleTargetDetail(target.dataset.rule, target.dataset.target);
       } else if (action === "rule-emulation-detail") {
         await showRuleEmulationDetail(target.dataset.rule, target.dataset.target, target.dataset.ability);
+      } else if (action === "rule-detail-tab") {
+        setRuleDetailTab(target.dataset.tab || "detection");
       } else if (action === "emulation-export-download") {
         const selectedTarget = String(target.dataset.target || "").trim();
         if (!selectedTarget) {
@@ -5030,7 +6078,19 @@ function installEventHandlers() {
         showToast("toast.export_ready");
       } else if (action === "adversary-export") {
         const response = await api(`/api/adversaries/${encodeURIComponent(target.dataset.id)}/export${toQuery({ to: target.dataset.target })}`);
-        renderDownloadsModal(response.id, response.downloads);
+        const operational = pickOperationalDownload(response.downloads, target.dataset.target || "");
+        if (operational?.url) {
+          triggerDownloadByUrl(operational.url, normalizedDownloadName(operational));
+          showToast("toast.export_ready");
+        } else {
+          const first = (response.downloads || [])[0] || null;
+          if (first?.url) {
+            triggerDownloadByUrl(first.url, normalizedDownloadName(first));
+            showToast("toast.export_ready");
+          } else {
+            showToast("common.no_data", true);
+          }
+        }
       } else if (action === "adversary-select-ability") {
         const abilityId = target.dataset.id;
         if (!abilityId) return;
@@ -5038,21 +6098,60 @@ function installEventHandlers() {
           state.adversaryCompose.selectedOrder.push(abilityId);
         }
         renderAdversaryAbilitySelector();
+        scheduleAdversaryAutoSave();
       } else if (action === "adversary-remove-ability") {
         const abilityId = target.dataset.id;
         if (!abilityId) return;
         state.adversaryCompose.selectedOrder = state.adversaryCompose.selectedOrder.filter((id) => id !== abilityId);
         renderAdversaryAbilitySelector();
+        scheduleAdversaryAutoSave();
       } else if (action === "adversary-move-up") {
         const abilityId = target.dataset.id;
         if (!abilityId) return;
         moveAdversarySelectedAbility(abilityId, -1);
         renderAdversaryAbilitySelector();
+        scheduleAdversaryAutoSave();
       } else if (action === "adversary-move-down") {
         const abilityId = target.dataset.id;
         if (!abilityId) return;
         moveAdversarySelectedAbility(abilityId, 1);
         renderAdversaryAbilitySelector();
+        scheduleAdversaryAutoSave();
+      } else if (action === "adversary-open-ability-picker") {
+        openAdversaryAbilityPicker();
+      } else if (action === "adversary-close-ability-picker") {
+        closeAdversaryAbilityPicker();
+      } else if (action === "adversary-tab") {
+        setAdversaryTab(target.dataset.tab || "plan");
+      } else if (action === "adversary-picker-tab") {
+        setAdversaryPickerTab(target.dataset.tab || "catalog");
+      } else if (action === "adversary-refresh-execution-help") {
+        await ensureAdversaryExportPreview(target.dataset.target || selectedAdversaryExportTarget(), true);
+      } else if (action === "adversary-add-dummy-sleep") {
+        const secondsRaw = document.getElementById("adversary-dummy-sleep")?.value || "5";
+        const seconds = Number(secondsRaw);
+        if (!Number.isFinite(seconds) || seconds <= 0) {
+          showToast("toast.unexpected", true);
+          return;
+        }
+        await createDummyAbility({
+          kind: "sleep",
+          seconds: Math.round(seconds),
+          platform: document.getElementById("adversary-ability-platform")?.value || "",
+        });
+      } else if (action === "adversary-add-dummy-label") {
+        const label = String(document.getElementById("adversary-dummy-label")?.value || "").trim();
+        if (!label) {
+          showToast("toast.unexpected", true);
+          return;
+        }
+        await createDummyAbility({
+          kind: "label",
+          label,
+          platform: document.getElementById("adversary-ability-platform")?.value || "",
+        });
+      } else if (action === "adversaries-duplicate-selected") {
+        await duplicateSelectedAdversaries();
       } else if (action === "rule-copy-emulation") {
         await copyRuleEmulation(target.dataset.id, target.dataset.ability);
       } else if (action === "detail-export-detection") {
@@ -5103,7 +6202,56 @@ function installEventHandlers() {
         }
       } else if (action === "detail-tab") {
         setDetailTab(target.dataset.tab || "view");
+      } else if (action === "detail-show-json") {
+        setDetailTab("json");
+      } else if (action === "rule-open-in-lab") {
+        const ruleId = target.dataset.id || "";
+        const entry = state.rules.entries.find((item) => item.id === ruleId)
+          || state.rules.allEntries.find((item) => item.id === ruleId)
+          || state.ruleDetail.entry;
+        if (!entry) return;
+        document.getElementById("detail-dialog").close();
+        openRuleInLab(entry);
+      } else if (action === "rule-detail-export") {
+        const family = target.dataset.family || state.ruleDetail.activeTab || "overview";
+        if (family === "detection") {
+          const select = document.getElementById("rule-detail-export-detection-target");
+          if (!(select instanceof HTMLSelectElement) || !select.value) {
+            showToast("detail.no_output_for_target", true);
+            return;
+          }
+          const row = (state.ruleDetail.detectionRows || [])
+            .find((item) => String(item.target || "").toLowerCase() === String(select.value || "").toLowerCase());
+          if (!row || !String(row.output || "").trim()) {
+            showToast("detail.no_output_for_target", true);
+            return;
+          }
+          state.detailDetectionExport = {
+            title: state.ruleDetail.entry?.name || "rule",
+            target: String(row.target || "").toLowerCase(),
+            output: row.output || "",
+          };
+          exportDetectionOutputFromDetail();
+        } else if (family === "emulation") {
+          const select = document.getElementById("rule-detail-export-emulation-target");
+          const entry = state.ruleDetail.entry;
+          if (!(select instanceof HTMLSelectElement) || !select.value || !entry?.ability_id) {
+            showToast("detail.copy_emulation_not_available", true);
+            return;
+          }
+          await downloadAbility(entry.ability_id, String(select.value || "").toLowerCase());
+          showToast("toast.export_ready");
+        }
+      } else if (action === "rule-preview-expand") {
+        event.preventDefault();
+        event.stopPropagation();
+        const details = target.closest("details");
+        if (details instanceof HTMLDetailsElement) {
+          details.open = true;
+        }
       } else if (action === "detail-copy") {
+        event.preventDefault();
+        event.stopPropagation();
         const encoded = target.dataset.copy || "";
         await navigator.clipboard.writeText(decodeURIComponent(encoded));
         showToast("toast.copied");
@@ -5154,6 +6302,20 @@ function installEventHandlers() {
     if (target.dataset.action === "rules-column-toggle") {
       const column = target.dataset.column || "";
       const checked = target instanceof HTMLInputElement ? target.checked : false;
+      if (column === "markings") {
+        if (checked) {
+          state.rules.visibleColumns.add("tlp");
+          state.rules.visibleColumns.add("pap");
+        } else {
+          state.rules.visibleColumns.delete("tlp");
+          state.rules.visibleColumns.delete("pap");
+          if (state.rules.visibleColumns.size === 0) {
+            state.rules.visibleColumns.add("name");
+          }
+        }
+        renderRulesTable();
+        return;
+      }
       const changed = setColumnVisibility(state.rules.visibleColumns, column, checked, RULE_COLUMN_KEYS);
       if (!changed && target instanceof HTMLInputElement) {
         target.checked = true;
@@ -5167,6 +6329,20 @@ function installEventHandlers() {
     if (target.dataset.action === "adversaries-column-toggle") {
       const column = target.dataset.column || "";
       const checked = target instanceof HTMLInputElement ? target.checked : false;
+      if (column === "markings") {
+        if (checked) {
+          state.adversaries.visibleColumns.add("tlp");
+          state.adversaries.visibleColumns.add("pap");
+        } else {
+          state.adversaries.visibleColumns.delete("tlp");
+          state.adversaries.visibleColumns.delete("pap");
+          if (state.adversaries.visibleColumns.size === 0) {
+            state.adversaries.visibleColumns.add("name");
+          }
+        }
+        renderAdversariesTable();
+        return;
+      }
       const changed = setColumnVisibility(state.adversaries.visibleColumns, column, checked, ADVERSARY_COLUMN_KEYS);
       if (!changed && target instanceof HTMLInputElement) {
         target.checked = true;

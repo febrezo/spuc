@@ -789,6 +789,50 @@ fn quoted_bold(text: &str) -> String {
     format!("{BOLD}\"{text}\"{UNBOLD}")
 }
 
+fn ability_value_to_string(value: &ir::IrValue) -> String {
+    match value {
+        ir::IrValue::String(v) => v.clone(),
+        ir::IrValue::Integer(v) => v.to_string(),
+        ir::IrValue::Boolean(v) => v.to_string(),
+        ir::IrValue::Timestamp(v) => v.clone(),
+        ir::IrValue::Hex(v) => format!("h'{}'", v),
+    }
+}
+
+fn ability_operator_label(op: &ir::IrOp) -> &'static str {
+    match op {
+        ir::IrOp::Eq => "EQ",
+        ir::IrOp::Ne => "NE",
+        ir::IrOp::Gt => "GT",
+        ir::IrOp::Ge => "GE",
+        ir::IrOp::Lt => "LT",
+        ir::IrOp::Le => "LE",
+        ir::IrOp::Matches => "MATCHES",
+        ir::IrOp::IsSubset => "ISSUBSET",
+    }
+}
+
+fn ability_hint_action(
+    idx: usize,
+    predicate: &ir::IrPredicate,
+    reason: &str,
+) -> emu_ability::AbilityAction {
+    emu_ability::AbilityAction {
+        id: format!("act-{:03}", idx + 1),
+        title: format!(
+            "Record unsupported observable hint ({}:{})",
+            predicate.target, predicate.field
+        ),
+        action_type: "emit_observable_hint".to_string(),
+        observable: format!("{}:{}", predicate.target, predicate.field),
+        operator: ability_operator_label(&predicate.op).to_string(),
+        value: ability_value_to_string(&predicate.value),
+        safe_instructions: format!(
+            "No concrete materialization in ability v1. Preserve this predicate as analyst context ({reason})."
+        ),
+    }
+}
+
 pub(crate) fn build_ability_from_rule(
     rule: &str,
     id: Option<&str>,
@@ -830,7 +874,17 @@ pub(crate) fn build_ability_from_rule(
     let mut has_network = false;
 
     for (idx, predicate) in predicates.iter().enumerate() {
-        let op = ability_operator(&predicate.op)?;
+        let op = match ability_operator(&predicate.op) {
+            Ok(op) => op,
+            Err(_) => {
+                actions.push(ability_hint_action(
+                    idx,
+                    predicate,
+                    "operator is not materializable in ability v1",
+                ));
+                continue;
+            }
+        };
         let observable = format!("{}:{}", predicate.target, predicate.field);
         match (predicate.target.as_str(), predicate.field.as_str()) {
             ("process", "command_line") => {
@@ -975,10 +1029,12 @@ pub(crate) fn build_ability_from_rule(
                 });
             }
             ("process", "pid" | "created_time" | "is_hidden") => {
-                return Err(anyhow!(
-                    "Process field '{}' is not fully materializable in ability v1.",
-                    predicate.field
+                actions.push(ability_hint_action(
+                    idx,
+                    predicate,
+                    "process field is not fully materializable in ability v1",
                 ));
+                continue;
             }
             ("file", "name") => {
                 let value = ability_string_value(&predicate.value)?;
@@ -1330,15 +1386,62 @@ pub(crate) fn build_ability_from_rule(
                 });
             }
             ("windows-registry-key", "modified_time") => {
-                return Err(anyhow!(
-                    "windows-registry-key:modified_time is not fully materializable in ability v1."
+                actions.push(ability_hint_action(
+                    idx,
+                    predicate,
+                    "registry modified_time is not fully materializable in ability v1",
                 ));
+                continue;
             }
             ("network-traffic", "src_ref.value" | "src_ref.type" | "src_port") => {
-                return Err(anyhow!(
-                    "network-traffic source-side fields are not materializable in ability v1 (found {}).",
-                    predicate.field
+                actions.push(ability_hint_action(
+                    idx,
+                    predicate,
+                    "network source-side fields are not materializable in ability v1",
                 ));
+                continue;
+            }
+            ("ipv4-addr", "value") | ("ipv6-addr", "value") => {
+                let value = ability_string_value(&predicate.value)?;
+                has_network = true;
+                insert_requirement(
+                    &mut requires,
+                    "cap.network.connect",
+                    "Host can generate benign outbound network connections for telemetry simulation.",
+                );
+                agent_capabilities.insert("cap.telemetry.network".to_string());
+                actions.push(emu_ability::AbilityAction {
+                    id: format!("act-{:03}", idx + 1),
+                    title: "Emit network destination-host observable".to_string(),
+                    action_type: "emit_network_dst_host".to_string(),
+                    observable,
+                    operator: op.to_string(),
+                    value,
+                    safe_instructions:
+                        "Generate a benign outbound connection to a destination aligned with this indicator."
+                            .to_string(),
+                });
+            }
+            ("url", "value") => {
+                let value = ability_string_value(&predicate.value)?;
+                has_network = true;
+                insert_requirement(
+                    &mut requires,
+                    "cap.network.connect",
+                    "Host can generate benign outbound network connections for telemetry simulation.",
+                );
+                agent_capabilities.insert("cap.telemetry.network".to_string());
+                actions.push(emu_ability::AbilityAction {
+                    id: format!("act-{:03}", idx + 1),
+                    title: "Record URL observable hint".to_string(),
+                    action_type: "emit_url_observable".to_string(),
+                    observable,
+                    operator: op.to_string(),
+                    value,
+                    safe_instructions:
+                        "Preserve URL observable for analyst review; concrete URL materialization remains conservative in ability v1."
+                            .to_string(),
+                });
             }
             ("network-traffic", "dst_ref.value") => {
                 let value = ability_string_value(&predicate.value)?;
@@ -1510,26 +1613,37 @@ pub(crate) fn build_ability_from_rule(
                 });
             }
             ("file", "ctime" | "mtime" | "atime") | ("directory", "ctime" | "mtime" | "atime") => {
-                return Err(anyhow!(
-                    "Temporal file/directory fields are not fully materializable in ability v1 (found {}:{}).",
-                    predicate.target,
-                    predicate.field
+                actions.push(ability_hint_action(
+                    idx,
+                    predicate,
+                    "temporal file/directory fields are not fully materializable in ability v1",
                 ));
+                continue;
             }
             ("file", field) if field.starts_with("hashes.") => {
-                return Err(anyhow!(
-                    "Hash-constrained file predicates are not materializable in ability v1 (found file:{}).",
-                    field
+                let _ = field;
+                actions.push(ability_hint_action(
+                    idx,
+                    predicate,
+                    "hash-constrained file predicates are not materializable in ability v1",
                 ));
+                continue;
             }
             _ => {
-                return Err(anyhow!(
-                    "Ability v1 supports process:command_line/name/cwd, file:name, file:size, artifact:payload_bin, directory:path, windows-registry-key subset, network destination subset and domain-name:value (found {}:{})",
-                    predicate.target,
-                    predicate.field
+                actions.push(ability_hint_action(
+                    idx,
+                    predicate,
+                    "observable path is outside concrete materialization scope in ability v1",
                 ));
+                continue;
             }
         }
+    }
+
+    if actions.is_empty() {
+        return Err(anyhow!(
+            "No materializable or hintable predicates found in pattern."
+        ));
     }
 
     let platforms = if windows_hint && !unix_hint {
@@ -1605,13 +1719,13 @@ fn collect_ability_predicates(expr: &ir::IrExpr) -> Result<Vec<ir::IrPredicate>>
                 }
                 Ok(())
             }
-            ir::IrExpr::Qualified(_, _) => Err(anyhow!(
-                "Ability v1 does not support qualifiers yet (WITHIN/REPEATS/START-STOP)."
-            )),
-            ir::IrExpr::Any(_) => Err(anyhow!("Ability v1 does not support OR branches yet.")),
-            ir::IrExpr::FollowedBy(_) => Err(anyhow!(
-                "Ability v1 does not support FOLLOWEDBY sequences yet."
-            )),
+            ir::IrExpr::Qualified(inner, _) => walk(inner, out),
+            ir::IrExpr::Any(items) | ir::IrExpr::FollowedBy(items) => {
+                for item in items {
+                    walk(item, out)?;
+                }
+                Ok(())
+            }
         }
     }
 

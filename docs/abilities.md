@@ -18,7 +18,7 @@ This feature does **not** implement offensive payloads or malware behavior.
 - Catalog integration: abilities are persisted automatically into local catalog
 - Export targets:
   - `spuc-agent` (JSON contract + `execution_plan` for materializable file/directory actions)
-  - `bash` (concrete materialization for file/directory/process/network probes where feasible)
+  - `bash` (concrete materialization for file/directory/process/network probes where feasible; emits a note when a rule includes Windows registry predicates)
   - `powershell` (concrete materialization for file/directory/process/network and Windows registry where feasible)
   - `atomic-red-team` (Atomic Red Team YAML with platform-aware safe commands)
   - `mitre-caldera` (MITRE Caldera ability JSON with platform-aware safe commands)
@@ -41,17 +41,24 @@ This feature does **not** implement offensive payloads or malware behavior.
   - `network-traffic:dst_port`
   - `network-traffic:protocols`
   - `domain-name:value`
-- Unsupported for now:
-  - `FOLLOWEDBY`
-  - `OR` (`ANY`)
-  - qualifiers (`WITHIN`, `REPEATS`, `START/STOP`)
-  - file hash predicates (`file:hashes.*`) for materialized execution
-  - binary-hex payload literals (`artifact:payload_bin = h'...'`) for materialized execution
+  - `ipv4-addr:value`
+  - `ipv6-addr:value`
+  - `url:value` (preserved as conservative observable hint)
+- Canonical aliases normalized during ability generation:
+  - `win-registry-key:*` -> `windows-registry-key:*`
+  - `file:created|modified|accessed` -> `file:ctime|mtime|atime`
+  - `file:parent_directory_ref.path` -> `directory:path`
+- Structural operators no longer hard-fail ability generation by themselves:
+  - `OR` (`ANY`), `FOLLOWEDBY`, and qualifiers (`WITHIN`, `REPEATS`, `START/STOP`) are flattened into predicate extraction.
+  - Predicates outside concrete materialization scope are preserved as explicit `emit_observable_hint` actions.
+- Unsupported for concrete materialization in v1 (kept as hints when possible):
+  - file hash predicates (`file:hashes.*`)
+  - binary-hex payload literals (`artifact:payload_bin = h'...'`)
   - process fields `process:pid`, `process:created_time`, `process:is_hidden`
   - network source-side fields (`network-traffic:src_ref.value`, `network-traffic:src_ref.type`, `network-traffic:src_port`)
   - `windows-registry-key:modified_time`
-  - file/directory temporal predicates (`file:ctime|mtime|atime`, `directory:ctime|mtime|atime`) for materialized execution
-  - observables outside the list above
+  - file/directory temporal predicates (`file:ctime|mtime|atime`, `directory:ctime|mtime|atime`)
+  - observables outside the concrete list above
 
 ## CLI Usage
 

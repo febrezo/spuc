@@ -68,6 +68,22 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Rules table shows TLP+PAP in a unified `Marking/Clasificación` column.
 - STIX rule column is constrained to 25% of the available rules-table width.
 - Rules table with per-target output/emulation status chips (`exact/lossy/unsupported`) and click-through detail popovers.
+- Rules explorer supports two compact modes (`cards` by default and `table`), selectable from left-side icon controls with tooltips.
+- Rule cards enumerate observable types, place copy-rule as an inline icon next to STIX content, and keep per-target detection/emulation chips clickable.
+- Clicking a target chip (from cards or table) opens a unified rule modal with dedicated tabs for `Detection rules` and `Emulation rules`, each listing target technologies, reliability context, output text, and an expandable `How to use this output` guide.
+- In rule detail tabs, each target technology block is rendered as an accordion card with status-colored borders (`exact`/`lossy`/`unsupported`) for quick scanning.
+- Rule detail technology accordions start collapsed by default and surface a compact summary preview (converter comments + first lines of output) directly in the collapsed header area.
+- Summary previews use a subtle fade and `Ver más` hint when comments/output exceed preview length.
+- Rule detail technology summaries include a compact confidence widget (0-100 style) for rule confidence and target reliability above converter comments.
+- Output previews keep copy action visible in the summary; when no output exists a compact inline notice is shown instead of an expanded block.
+- Rule technology accordions display converter comments as compact bullet lists and localize common converter notes/cause text to Spanish when UI locale is `es`.
+- Rule technology command and reference-link guidance is shown directly inside each opened accordion body (no extra nested toggle required).
+- Rule detail `Overview` includes direct `Edit rule` action that opens the selected STIX pattern in `Laboratory` prefilled fields (rule, metadata, TLP/PAP, confidence, TTP).
+- Rule detail `Detection rules` and `Emulation rules` tabs include a wider split export control (button + inline target dropdown) at the bottom of each tab to avoid cramped labels.
+- Rules workspace toolbar uses explicit Font Awesome icons for view mode, select all, bulk edit, column chooser, export selected, and delete selected actions.
+- Rules bulk export uses two direct actions (`CSV` in green and `STIX` in yellow) that download immediately without intermediate preview dialogs.
+- STIX Bundle export includes source STIX indicators, derived translated artifacts, `related-to` links to original patterns, and `indicates` links to related STIX entities when configured.
+- Rules and adversaries toolbars include `Duplicate selected` actions to clone similar objects quickly.
 - Rules catalog keeps focused filtering by rule type (SIEM/IDS/Content), confidence, TLP/PAP and observable type.
 - Rules catalog includes observable-type filtering and a dedicated observables column (e.g., `process`, `file`, `artifact`) persisted with rule metadata and reused for dashboard statistics.
 - Rule metadata includes TLP/PAP comboboxes with normative colors and supports multiple `indicates` relations (STIX ID + object name), validated server-side and visualized with non-intrusive badges/listing in catalog and detail flows.
@@ -91,16 +107,19 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Dynamic frontend labels (detail modal sections, rule counters, confirmations, advanced filter labels, and TLP/PAP/confidence tooltips) are localized through the same EN/ES i18n layer.
 - Abilities catalog with platform/classification filters and export actions.
 - Ability/adversary exports include `spuc-agent`, `bash`, `powershell`, `atomic-red-team`, and `mitre-caldera`.
-- Laboratory with inline STIX highlighting (single editor), realtime syntax+compatibility checks shown under the editor, stacked compatibility bars, operator colorization, auto-pair insertion, contextual autocomplete (click/Tab), metadata controls above the editor, inline error panel, and a save button enabled only when syntax is valid.
+- Laboratory with inline STIX highlighting (single editor), realtime syntax+compatibility checks shown under the editor, stacked compatibility bars, operator colorization, auto-pair insertion, contextual autocomplete (click/Tab), metadata controls above the editor, inline error panel, and autosave for valid rule states.
 - Rule laboratory analysis is fully reactive: syntax and compatibility are re-evaluated automatically on each input change (no explicit verify action required).
+- Rule Lab persists changes automatically when syntax is valid (manual save control hidden).
 - Rule Lab and rule detail modal include `Copy LLM prompt` actions that generate deterministic structured prompts from existing rule metadata (context, observables, indicators, conversion statuses, emulation capability, current STIX pattern, and task).
 - Rule laboratory target list is dynamic: at startup SPUC probes `sigma` once, discovers compatible backend plugins from `sigma plugin list`, and adds them as `sigma-to-<backend>` compatibility rows.
 - In Rule Lab compatibility rows, `Show output` is displayed only for non-`unsupported` entries that include generated output text.
 - Adversaries catalog supports clickable header sorting (name, emulability confidence, TLP, PAP, steps, platforms), row-click open for detail/edit, and colored exporter-availability tags per adversary.
 - Adversary confidence labels are presented as emulability confidence in catalog/planner contexts.
-- Adversary creation is launched from a planner-style modal dialog: compact plan metadata, catalog ability filters, and explicit ordered step selection.
-- Selecting an adversary from catalog opens the same planner widget in edit mode (name/description/confidence/steps), with `Save` visible but disabled until changes are detected, plus inline executor export selector/action.
-- In adversary edit mode, modal title is bound to adversary name with inline pencil-edit control, and export controls are shown in the top-right header area.
+- Adversary creation/editing uses a planner modal with autosave, ordered step selection, and a dedicated ability-picker modal instead of always-on catalog list.
+- The adversary ability picker includes direct creation for dummy abilities (`sleep_seconds` and `execution_label`) so synthetic pacing/label steps can be selected alongside cataloged abilities.
+- Adversary modal header shows emulable platforms and an export split control (button + target combobox).
+- Adversary export now includes an `Operacional` action that downloads a target-specific runner/config artifact (`*-operational.*`) to execute the full ordered ability chain per emulator.
+- Adversary modal includes a `Criterios de ejecucion` tab with per-exporter instructions and command examples.
 - Adversary catalog uses a dismissible non-intrusive safety toast (`How to use adversaries safely`) persisted locally once closed.
 - Adversary catalog uses auto-applied filters (search, single platform combobox, min emulability) and bulk operations consistent with rules: shift-range selection, select/deselect all, bulk edit for TLP/PAP/emulability confidence, and bulk delete.
 - Adversary bulk metadata updates persist TLP/PAP values with each adversary and expose them in catalog API responses.

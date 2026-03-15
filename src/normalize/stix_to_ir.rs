@@ -11,14 +11,15 @@ pub fn stix_to_ir(pattern: &Pattern) -> Result<IrExpr> {
 fn lower_expr(expr: &Expr) -> Result<IrExpr> {
     match expr {
         Expr::Comparison(cmp) => {
-            validate_stix21_path(&cmp.object_type, &cmp.field)?;
-            validate_value_type(&cmp.object_type, &cmp.field, &cmp.value)?;
+            let (object_type, field) = canonicalize_stix_path(&cmp.object_type, &cmp.field);
+            validate_stix21_path(&object_type, &field)?;
+            validate_value_type(&object_type, &field, &cmp.value)?;
             if matches!(cmp.op, CompareOp::IsSubset) {
-                if !matches_subset_scope(&cmp.object_type, &cmp.field) {
+                if !matches_subset_scope(&object_type, &field) {
                     bail!(
                         "ISSUBSET is not supported for {}:{} in STIX 2.1 network calibration scope",
-                        cmp.object_type,
-                        cmp.field
+                        object_type,
+                        field
                     );
                 }
                 match &cmp.value {
@@ -26,8 +27,8 @@ fn lower_expr(expr: &Expr) -> Result<IrExpr> {
                     _ => {
                         bail!(
                             "ISSUBSET for {}:{} requires a CIDR literal on the right-hand side",
-                            cmp.object_type,
-                            cmp.field
+                            object_type,
+                            field
                         );
                     }
                 }
@@ -42,8 +43,8 @@ fn lower_expr(expr: &Expr) -> Result<IrExpr> {
             };
 
             Ok(IrExpr::Predicate(IrPredicate {
-                target: cmp.object_type.clone(),
-                field: cmp.field.clone(),
+                target: object_type.clone(),
+                field: field.clone(),
                 op: match cmp.op {
                     CompareOp::Eq => IrOp::Eq,
                     CompareOp::Ne => IrOp::Ne,
@@ -56,7 +57,7 @@ fn lower_expr(expr: &Expr) -> Result<IrExpr> {
                     CompareOp::Matches => IrOp::Matches,
                     CompareOp::IsSubset => IrOp::IsSubset,
                 },
-                value: match (cmp.object_type.as_str(), cmp.field.as_str(), &cmp.op, value) {
+                value: match (object_type.as_str(), field.as_str(), &cmp.op, value) {
                     // artifact:payload_bin equality compares byte sequences.
                     // Plain string literals are byte strings, not base64/hex encodings.
                     (
@@ -149,6 +150,7 @@ fn validate_stix21_path(object_type: &str, field: &str) -> Result<()> {
         ("file", "name")
         | ("file", "mime_type")
         | ("file", "size")
+        | ("file", "magic_number_hex")
         | ("file", "ctime")
         | ("file", "mtime")
         | ("file", "atime") => true,
@@ -199,6 +201,19 @@ fn validate_stix21_path(object_type: &str, field: &str) -> Result<()> {
             object_type,
             field
         )
+    }
+}
+
+fn canonicalize_stix_path(object_type: &str, field: &str) -> (String, String) {
+    match (object_type, field) {
+        ("win-registry-key", f) => ("windows-registry-key".to_string(), f.to_string()),
+        ("file", "created") => ("file".to_string(), "ctime".to_string()),
+        ("file", "modified") => ("file".to_string(), "mtime".to_string()),
+        ("file", "accessed") => ("file".to_string(), "atime".to_string()),
+        ("file", "parent_directory_ref.path") => {
+            ("directory".to_string(), "path".to_string())
+        }
+        (o, f) => (o.to_string(), f.to_string()),
     }
 }
 

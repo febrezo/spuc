@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 
 use crate::emulation::ability::Ability;
 use crate::emulation::agents::AbilityExporter;
@@ -99,9 +99,9 @@ impl AbilityExporter for BashExporter {
         }
 
         if !plan.registry.is_empty() {
-            return Err(anyhow!(
-                "bash exporter does not support windows registry materialization yet"
-            ));
+            out.push_str(
+                "echo \"[spuc] note: bash exporter skips windows registry materialization; use powershell for concrete registry actions\"\n",
+            );
         }
 
         for net in plan.network {

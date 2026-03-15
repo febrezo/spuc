@@ -2,10 +2,14 @@ use anyhow::{Result, anyhow};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{Datelike, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use serde_json::json;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::hash_map::DefaultHasher;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -706,6 +710,20 @@ struct RuleCompatibilityRequest {
     sigma_targets: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct RuleBundleExportRequest {
+    #[serde(default)]
+    rule_ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DummyAbilityCreateRequest {
+    kind: String,
+    seconds: Option<u64>,
+    label: Option<String>,
+    platform: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 struct RuleView {
     id: String,
@@ -824,6 +842,7 @@ struct RuleCompatibilityRow {
     rule_confidence: Option<u8>,
     cause: Option<String>,
     summary: String,
+    notes: Vec<String>,
     output: Option<String>,
 }
 
@@ -974,7 +993,11 @@ pub(crate) fn route(request: HttpRequest, state: &WebState) -> Result<HttpRespon
         ("POST", ["api", "rules", "save"]) => save_rule(&request),
         ("POST", ["api", "rules", selector, "indicates"]) => set_rule_indicates(selector, &request),
         ("POST", ["api", "rules", "compatibility"]) => rule_compatibility(&request),
+        ("POST", ["api", "rules", "export", "bundle"]) => {
+            export_rules_bundle(&request)
+        }
         ("GET", ["api", "abilities"]) => list_abilities(&request),
+        ("POST", ["api", "abilities", "dummy"]) => create_dummy_ability(&request),
         ("GET", ["api", "abilities", ability_id]) => show_ability(ability_id),
         ("GET", ["api", "abilities", ability_id, "export"]) => {
             export_ability(ability_id, request.query.get("to").map(String::as_str))
@@ -1811,11 +1834,205 @@ fn rule_compatibility(request: &HttpRequest) -> Result<HttpResponse> {
         rule_confidence: row.rule_confidence,
         cause: row.cause,
         summary: row.summary,
+        notes: row.notes,
         output: row.output,
     })
     .collect::<Vec<_>>();
 
     HttpResponse::json(200, &serde_json::json!({ "entries": rows }))
+}
+
+fn export_rules_bundle(request: &HttpRequest) -> Result<HttpResponse> {
+    let payload: RuleBundleExportRequest = request.json()?;
+    if payload.rule_ids.is_empty() {
+        return HttpResponse::json(400, &json!({ "error": "rule_ids_required" }));
+    }
+    let (_, _, rules, _) = load_catalog_data()?;
+    let mut selected = Vec::new();
+    for selector in &payload.rule_ids {
+        selected.push(resolve_rule_selector(selector, &rules, None)?);
+    }
+    let bundle = build_stix_bundle_from_rules(&selected)?;
+    let pretty = serde_json::to_vec_pretty(&bundle)?;
+    Ok(HttpResponse::text(200, "application/json; charset=utf-8", pretty).with_header(
+        "Content-Disposition",
+        "attachment; filename=\"spuc-rules-bundle.json\"",
+    ))
+}
+
+fn build_stix_bundle_from_rules(selected: &[CatalogRuleEntry]) -> Result<serde_json::Value> {
+    let now = Utc::now().to_rfc3339();
+    let mut objects = Vec::new();
+    let mut included_object_ids = HashSet::new();
+    let targets = available_detection_target_labels();
+
+    for entry in selected {
+        let rule = rule_view(entry.clone());
+        let source_indicator_id = new_stix_id("indicator");
+        objects.push(json!({
+            "type": "indicator",
+            "spec_version": "2.1",
+            "id": source_indicator_id.clone(),
+            "created": now,
+            "modified": now,
+            "name": rule.name,
+            "description": rule.description,
+            "pattern": rule.rule,
+            "pattern_type": "stix",
+            "valid_from": now,
+            "confidence": rule.confidence,
+            "labels": ["spuc", "source-rule"],
+            "x_spuc_rule_id": rule.id,
+        }));
+
+        let evaluations = evaluate_rule(TranslationRequest {
+            rule: &rule.rule,
+            targets: &targets,
+            description: rule.description.as_deref(),
+            sigma_targets: &[],
+            mode: ConversionMode::Strict,
+            rule_confidence: Some(rule.confidence),
+        })?;
+
+        for row in evaluations {
+            if row.runtime_status.eq_ignore_ascii_case("unsupported") {
+                continue;
+            }
+            let Some(output) = row.output.as_deref().map(str::trim).filter(|value| !value.is_empty()) else {
+                continue;
+            };
+            let coefficient = (row.conversion_confidence as f64 / 100.0).clamp(0.0, 1.0);
+            let derived_confidence = ((rule.confidence as f64) * coefficient).round() as u8;
+            let derived_id = new_stix_id("x-spuc-derived-rule");
+            objects.push(json!({
+                "type": "x-spuc-derived-rule",
+                "spec_version": "2.1",
+                "id": derived_id,
+                "created": now,
+                "modified": now,
+                "name": format!("{} [{}]", rule.name, row.target),
+                "confidence": derived_confidence,
+                "x_spuc_target": row.target,
+                "x_spuc_runtime_status": row.runtime_status,
+                "x_spuc_conversion_confidence": row.conversion_confidence,
+                "x_spuc_rule_text": output,
+                "x_spuc_source_rule_id": rule.id,
+            }));
+            objects.push(json!({
+                "type": "relationship",
+                "spec_version": "2.1",
+                "id": new_stix_id("relationship"),
+                "created": now,
+                "modified": now,
+                "relationship_type": "related-to",
+                "source_ref": derived_id,
+                "target_ref": source_indicator_id.clone(),
+                "confidence": derived_confidence,
+            }));
+        }
+
+        let mut indicates = rule.indicates_list.clone();
+        if let Some(single) = rule.indicates.clone() {
+            push_unique_indicates(&mut indicates, single);
+        }
+        for relation in indicates {
+            let stix_id = relation.stix_id.trim().to_string();
+            if stix_id.is_empty() {
+                continue;
+            }
+            let key = stix_id.to_ascii_lowercase();
+            if !included_object_ids.contains(&key) {
+                if let Some(stub) = build_stix_stub_object(&stix_id, &relation.object_name, &now) {
+                    objects.push(stub);
+                    included_object_ids.insert(key.clone());
+                }
+            }
+            objects.push(json!({
+                "type": "relationship",
+                "spec_version": "2.1",
+                "id": new_stix_id("relationship"),
+                "created": now,
+                "modified": now,
+                "relationship_type": "indicates",
+                "source_ref": source_indicator_id.clone(),
+                "target_ref": stix_id,
+                "confidence": rule.confidence,
+            }));
+        }
+    }
+
+    Ok(json!({
+        "type": "bundle",
+        "id": new_stix_id("bundle"),
+        "objects": objects,
+    }))
+}
+
+fn build_stix_stub_object(stix_id: &str, object_name: &str, now: &str) -> Option<serde_json::Value> {
+    let stix_type = stix_id.split_once("--")?.0.trim().to_ascii_lowercase();
+    if stix_type.is_empty() {
+        return None;
+    }
+    let mut base = json!({
+        "type": stix_type,
+        "spec_version": "2.1",
+        "id": stix_id,
+        "created": now,
+        "modified": now,
+        "name": if object_name.trim().is_empty() { "unknown" } else { object_name.trim() },
+    });
+    if stix_type == "malware" {
+        base["is_family"] = json!(false);
+    }
+    Some(base)
+}
+
+fn new_stix_id(object_type: &str) -> String {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_nanos())
+        .unwrap_or(0);
+
+    let mut left = DefaultHasher::new();
+    object_type.hash(&mut left);
+    nanos.hash(&mut left);
+    seq.hash(&mut left);
+    let left = left.finish();
+
+    let mut right = DefaultHasher::new();
+    seq.hash(&mut right);
+    object_type.hash(&mut right);
+    (nanos as u64).hash(&mut right);
+    let right = right.finish();
+
+    let mut bytes = [0u8; 16];
+    bytes[..8].copy_from_slice(&left.to_be_bytes());
+    bytes[8..].copy_from_slice(&right.to_be_bytes());
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    format!(
+        "{}--{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        object_type,
+        bytes[0],
+        bytes[1],
+        bytes[2],
+        bytes[3],
+        bytes[4],
+        bytes[5],
+        bytes[6],
+        bytes[7],
+        bytes[8],
+        bytes[9],
+        bytes[10],
+        bytes[11],
+        bytes[12],
+        bytes[13],
+        bytes[14],
+        bytes[15]
+    )
 }
 
 fn list_abilities(request: &HttpRequest) -> Result<HttpResponse> {
@@ -1856,6 +2073,149 @@ fn list_abilities(request: &HttpRequest) -> Result<HttpResponse> {
 
     let rows = abilities.into_iter().map(ability_view).collect::<Vec<_>>();
     HttpResponse::json(200, &rows)
+}
+
+fn create_dummy_ability(request: &HttpRequest) -> Result<HttpResponse> {
+    let payload: DummyAbilityCreateRequest = request.json()?;
+    let platform = normalize_dummy_platform(payload.platform.as_deref());
+    let kind = payload.kind.trim().to_ascii_lowercase();
+    let ability = match kind.as_str() {
+        "sleep" => {
+            let seconds = payload.seconds.unwrap_or(5);
+            if seconds == 0 {
+                return HttpResponse::json(400, &json!({ "error": "dummy_seconds_invalid" }));
+            }
+            build_dummy_sleep_ability(seconds, &platform)
+        }
+        "label" => {
+            let Some(label) = payload
+                .label
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()) else {
+                return HttpResponse::json(400, &json!({ "error": "dummy_label_required" }));
+            };
+            build_dummy_label_ability(label, &platform)
+        }
+        _ => {
+            return HttpResponse::json(400, &json!({ "error": "dummy_kind_invalid" }));
+        }
+    };
+
+    let catalog = AbilityCatalog::from_default_root()?;
+    let (path, _) = catalog.upsert_by_source_pattern(&ability)?;
+    let ability_id = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or(&ability.id)
+        .to_string();
+    let created = catalog
+        .get_by_id(&ability_id)?
+        .ok_or_else(|| anyhow!("dummy_ability_persist_failed"))?;
+    HttpResponse::json(200, &ability_view(created))
+}
+
+fn normalize_dummy_platform(raw: Option<&str>) -> String {
+    let normalized = raw.unwrap_or("any").trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "linux" | "windows" | "macos" | "any" => normalized,
+        _ => "any".to_string(),
+    }
+}
+
+fn dummy_slug(raw: &str) -> String {
+    let mut out = String::new();
+    let mut prev_sep = false;
+    for ch in raw.chars() {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch.to_ascii_lowercase());
+            prev_sep = false;
+        } else if !prev_sep {
+            out.push('_');
+            prev_sep = true;
+        }
+    }
+    let trimmed = out.trim_matches('_').to_string();
+    if trimmed.is_empty() {
+        "unnamed".to_string()
+    } else {
+        trimmed
+    }
+}
+
+fn build_dummy_sleep_ability(seconds: u64, platform: &str) -> emu_ability::Ability {
+    emu_ability::Ability {
+        schema_version: emu_ability::ABILITY_SCHEMA_VERSION.to_string(),
+        id: format!("abl-dummy-sleep-{platform}-{seconds}s"),
+        name: format!("SPUC dummy sleep {}s", seconds),
+        description: format!(
+            "Dummy ability to delay execution flow by {} second(s) in a defensive simulation.",
+            seconds
+        ),
+        ttp: None,
+        supported_platforms: vec![platform.to_string()],
+        requires: vec![],
+        optional: vec![],
+        agent_capabilities: vec![],
+        actions: vec![emu_ability::AbilityAction {
+            id: "act-dummy-sleep-001".to_string(),
+            title: "Delay execution".to_string(),
+            action_type: "sleep_seconds".to_string(),
+            observable: "x-spuc-dummy:sleep_seconds".to_string(),
+            operator: "EQUALS".to_string(),
+            value: seconds.to_string(),
+            safe_instructions: format!(
+                "Wait {} second(s) before the next ability to simulate paced execution.",
+                seconds
+            ),
+        }],
+        source_pattern: format!(
+            "[x-spuc-dummy:type = 'sleep' AND x-spuc-dummy:seconds = '{}' AND x-spuc-dummy:platform = '{}']",
+            seconds, platform
+        ),
+        classification: emu_ability::AbilityClassification::CommandLineTrace,
+        emulation_level: emu_ability::EmulationLevel::TraceSimulation,
+        confidence: 100,
+    }
+}
+
+fn build_dummy_label_ability(label: &str, platform: &str) -> emu_ability::Ability {
+    let trimmed = label.trim();
+    let tag = dummy_slug(trimmed);
+    let label_literal = trimmed.replace('\'', "\\'");
+    emu_ability::Ability {
+        schema_version: emu_ability::ABILITY_SCHEMA_VERSION.to_string(),
+        id: format!("abl-dummy-label-{platform}-{tag}"),
+        name: format!("SPUC dummy label {}", trimmed),
+        description: format!(
+            "Dummy ability to inject a controlled execution label: {}.",
+            trimmed
+        ),
+        ttp: None,
+        supported_platforms: vec![platform.to_string()],
+        requires: vec![],
+        optional: vec![],
+        agent_capabilities: vec![],
+        actions: vec![emu_ability::AbilityAction {
+            id: "act-dummy-label-001".to_string(),
+            title: "Emit execution label".to_string(),
+            action_type: "execution_label".to_string(),
+            observable: "x-spuc-dummy:label".to_string(),
+            operator: "EQUALS".to_string(),
+            value: trimmed.to_string(),
+            safe_instructions: format!(
+                "Emit label '{}' in logs/telemetry to delimit execution phases.",
+                trimmed
+            ),
+        }],
+        source_pattern: format!(
+            "[x-spuc-dummy:type = 'label' AND x-spuc-dummy:label = '{}' AND x-spuc-dummy:platform = '{}']",
+            label_literal, platform
+        ),
+        classification: emu_ability::AbilityClassification::CommandLineTrace,
+        emulation_level: emu_ability::EmulationLevel::TraceSimulation,
+        confidence: 100,
+    }
 }
 
 fn show_ability(ability_id: &str) -> Result<HttpResponse> {
@@ -2215,6 +2575,7 @@ fn export_adversary(
         )
         .is_ok()
         {
+            let _ = generate_operational_runner_artifacts(*executor, &target_root);
             exported_any = true;
         }
     }
@@ -2594,12 +2955,17 @@ fn extract_rule_observable_types(rule: &str) -> Vec<String> {
 }
 
 fn is_valid_stix_object_name(value: &str) -> bool {
-    !value.is_empty()
-        && !value.starts_with('-')
-        && !value.ends_with('-')
-        && value
-            .chars()
-            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-')
+    if value.is_empty() || value.starts_with('-') || value.ends_with('-') {
+        return false;
+    }
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !first.is_ascii_lowercase() {
+        return false;
+    }
+    chars.all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-')
 }
 
 fn rule_observables(entry: &CatalogRuleEntry) -> Vec<String> {
@@ -3112,6 +3478,161 @@ fn slugify(value: &str) -> String {
     }
 }
 
+fn slugify_token(value: &str) -> String {
+    let mut out = String::new();
+    let mut prev_sep = false;
+    for ch in value.chars() {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch.to_ascii_lowercase());
+            prev_sep = false;
+        } else if !prev_sep {
+            out.push('_');
+            prev_sep = true;
+        }
+    }
+    let trimmed = out.trim_matches('_');
+    if trimmed.is_empty() {
+        "item".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn operational_extension(executor: AbilityTarget) -> &'static str {
+    match executor {
+        AbilityTarget::Bash => "sh",
+        AbilityTarget::Powershell => "ps1",
+        AbilityTarget::AtomicRedTeam => "yaml",
+        AbilityTarget::SpucAgent | AbilityTarget::MitreCaldera => "json",
+    }
+}
+
+fn render_operational_runner_content(
+    executor: AbilityTarget,
+    manifest_name: &str,
+    artifact_names: &[String],
+) -> String {
+    match executor {
+        AbilityTarget::Bash => {
+            let mut lines = vec![
+                "#!/usr/bin/env bash".to_string(),
+                "set -euo pipefail".to_string(),
+                "SCRIPT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"".to_string(),
+                format!("echo \"[spuc] operational adversary runner: {manifest_name}\""),
+            ];
+            for name in artifact_names {
+                lines.push(format!("bash \"$SCRIPT_DIR/{name}\""));
+            }
+            lines.push("echo \"[spuc] operational run completed\"".to_string());
+            lines.join("\n") + "\n"
+        }
+        AbilityTarget::Powershell => {
+            let mut lines = vec![
+                "$ErrorActionPreference = \"Stop\"".to_string(),
+                "$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path".to_string(),
+                format!("Write-Host \"[spuc] operational adversary runner: {manifest_name}\""),
+            ];
+            for name in artifact_names {
+                lines.push(format!("& \"$scriptDir\\{name}\""));
+            }
+            lines.push("Write-Host \"[spuc] operational run completed\"".to_string());
+            lines.join("\n") + "\n"
+        }
+        AbilityTarget::AtomicRedTeam => {
+            #[derive(Serialize)]
+            struct OperationalYaml<'a> {
+                schema_version: &'a str,
+                executor: &'a str,
+                manifest: &'a str,
+                artifacts: &'a [String],
+            }
+            serde_yaml::to_string(&OperationalYaml {
+                schema_version: "1.0",
+                executor: "atomic-red-team",
+                manifest: manifest_name,
+                artifacts: artifact_names,
+            })
+            .unwrap_or_else(|_| "schema_version: \"1.0\"\n".to_string())
+        }
+        AbilityTarget::SpucAgent => json!({
+            "schema_version": "1.0",
+            "executor": "spuc-agent",
+            "manifest": manifest_name,
+            "artifacts": artifact_names,
+            "run_hint": "spuc-agent validate/run using this ordered artifact list and manifest"
+        })
+        .to_string(),
+        AbilityTarget::MitreCaldera => json!({
+            "schema_version": "1.0",
+            "executor": "mitre-caldera",
+            "manifest": manifest_name,
+            "artifacts": artifact_names,
+            "run_hint": "import artifacts in order and execute operation with linked abilities"
+        })
+        .to_string(),
+    }
+}
+
+fn generate_operational_runner_artifacts(executor: AbilityTarget, target_root: &Path) -> Result<()> {
+    let manifest_files = list_files(target_root)?
+        .into_iter()
+        .filter(|path| path.extension().and_then(|v| v.to_str()) == Some("yaml"))
+        .collect::<Vec<_>>();
+    if manifest_files.is_empty() {
+        return Ok(());
+    }
+
+    let artifact_ext = crate::commands::common::ability_target_extension(executor);
+    let op_ext = operational_extension(executor);
+
+    for manifest in manifest_files {
+        let stem = manifest
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or("spuc-intrusion-set")
+            .to_string();
+        let manifest_name = manifest
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("campaign.yaml")
+            .to_string();
+
+        let campaign = emu_campaign::load_campaign_yaml(&manifest)?;
+        let mut ordered_names = Vec::new();
+        for step in &campaign.steps {
+            let candidate = format!("{stem}-{}.{}", slugify_token(&step.ability_ref), artifact_ext);
+            if target_root.join(&candidate).is_file() {
+                ordered_names.push(candidate);
+            }
+        }
+        if ordered_names.is_empty() {
+            ordered_names = list_files(target_root)?
+                .into_iter()
+                .filter_map(|path| {
+                    let name = path.file_name()?.to_str()?.to_string();
+                    if name.starts_with(&(stem.clone() + "-")) && name.ends_with(&format!(".{artifact_ext}")) {
+                        Some(name)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+        }
+        let mut dedup = BTreeSet::new();
+        ordered_names.retain(|name| dedup.insert(name.clone()));
+        if ordered_names.is_empty() {
+            continue;
+        }
+
+        let runner_name = format!("{stem}-operational.{op_ext}");
+        let runner_path = target_root.join(runner_name);
+        let content = render_operational_runner_content(executor, &manifest_name, &ordered_names);
+        fs::write(runner_path, content)?;
+    }
+
+    Ok(())
+}
+
 fn catalog_adversary_id(intrusion_set_id: &str) -> String {
     if intrusion_set_id.starts_with("adversary-") {
         intrusion_set_id.to_string()
@@ -3375,6 +3896,14 @@ mod tests {
     }
 
     #[test]
+    fn extract_rule_observables_ignores_start_stop_timestamps() {
+        let observables = extract_rule_observable_types(
+            "[file:name = 'foo.dll'] START t'2016-06-01T00:00:00Z' STOP t'2016-07-01T00:00:00Z'",
+        );
+        assert_eq!(observables, vec!["file".to_string()]);
+    }
+
+    #[test]
     fn normalize_observables_deduplicates_and_rejects_invalid() {
         let values = vec![
             "Process".to_string(),
@@ -3490,5 +4019,103 @@ mod tests {
         assert_eq!(principal_unknown.role, Role::Analyst);
         assert!(principal_unknown.user_id.starts_with("oauth-github-"));
         assert_eq!(principal_unknown.username, "gh-user");
+    }
+
+    #[test]
+    fn new_stix_id_generates_valid_v4_shape() {
+        let id = new_stix_id("indicator");
+        assert!(id.starts_with("indicator--"));
+        assert!(is_valid_stix_id(&id));
+    }
+
+    #[test]
+    fn bundle_builder_adds_related_and_indicates_relationships() {
+        let description = encode_rule_metadata_description(
+            Some("desc"),
+            Some("TLP:GREEN"),
+            Some("PAP:GREEN"),
+            None,
+            None,
+            Some(&[RuleIndicatesRelation {
+                stix_id: "malware--01234567-89ab-4def-8abc-0123456789ab".to_string(),
+                object_name: "Test malware".to_string(),
+            }]),
+        );
+        let entry = CatalogRuleEntry {
+            rule_id: "rule-1".to_string(),
+            ability_id: None,
+            name: "Rule 1".to_string(),
+            description,
+            ttp: None,
+            confidence: 80,
+            emulable: false,
+            rule: "[process:name = 'cmd.exe']".to_string(),
+            last_seen_utc: "2026-01-01T00:00:00Z".to_string(),
+            commands: vec![],
+            targets: vec![],
+            statuses: vec![],
+            target_statuses: BTreeMap::new(),
+            emulation_statuses: BTreeMap::new(),
+            activity_count: 0,
+        };
+        let bundle = build_stix_bundle_from_rules(&[entry]).expect("bundle should build");
+        let objects = bundle["objects"].as_array().expect("objects array");
+        assert!(objects.iter().any(|obj| {
+            obj["type"] == "relationship" && obj["relationship_type"] == "related-to"
+        }));
+        assert!(objects.iter().any(|obj| {
+            obj["type"] == "relationship" && obj["relationship_type"] == "indicates"
+        }));
+    }
+
+    #[test]
+    fn dummy_sleep_builder_creates_expected_shape() {
+        let ability = build_dummy_sleep_ability(7, "linux");
+        assert_eq!(ability.id, "abl-dummy-sleep-linux-7s");
+        assert_eq!(ability.actions.len(), 1);
+        assert_eq!(ability.actions[0].action_type, "sleep_seconds");
+        assert_eq!(ability.supported_platforms, vec!["linux".to_string()]);
+    }
+
+    #[test]
+    fn dummy_label_builder_slugifies_and_escapes() {
+        let ability = build_dummy_label_ability("Phase A's", "windows");
+        assert_eq!(ability.id, "abl-dummy-label-windows-phase_a_s");
+        assert!(ability.source_pattern.contains("Phase A\\'s"));
+        assert_eq!(ability.actions[0].action_type, "execution_label");
+    }
+
+    #[test]
+    fn normalize_dummy_platform_only_accepts_known_values() {
+        assert_eq!(normalize_dummy_platform(Some("linux")), "linux");
+        assert_eq!(normalize_dummy_platform(Some("windows")), "windows");
+        assert_eq!(normalize_dummy_platform(Some("macos")), "macos");
+        assert_eq!(normalize_dummy_platform(Some("bad-os")), "any");
+        assert_eq!(normalize_dummy_platform(None), "any");
+    }
+
+    #[test]
+    fn operational_runner_content_for_bash_sequences_artifacts() {
+        let content = render_operational_runner_content(
+            AbilityTarget::Bash,
+            "campaign.yaml",
+            &["one.sh".to_string(), "two.sh".to_string()],
+        );
+        assert!(content.contains("#!/usr/bin/env bash"));
+        assert!(content.contains("bash \"$SCRIPT_DIR/one.sh\""));
+        assert!(content.contains("bash \"$SCRIPT_DIR/two.sh\""));
+    }
+
+    #[test]
+    fn operational_runner_content_for_spuc_agent_is_json() {
+        let content = render_operational_runner_content(
+            AbilityTarget::SpucAgent,
+            "campaign.yaml",
+            &["a.json".to_string()],
+        );
+        let value: serde_json::Value = serde_json::from_str(&content).expect("json");
+        assert_eq!(value["executor"], "spuc-agent");
+        assert_eq!(value["manifest"], "campaign.yaml");
+        assert!(value["artifacts"].is_array());
     }
 }

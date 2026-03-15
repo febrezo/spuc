@@ -136,8 +136,9 @@ fn emulate_always_saves_ability_into_catalog() {
 }
 
 #[test]
-fn emulate_strict_rejects_unsupported_observable_scope() {
+fn emulate_supports_ipv4_indicator_with_network_artifacts() {
     let root = temp_config_root();
+    let out_dir = root.join("exports");
     let out = Command::new(spuc_bin())
         .env("SPUC_CONFIG_DIR", &root)
         .args([
@@ -146,23 +147,44 @@ fn emulate_strict_rejects_unsupported_observable_scope() {
             "[ipv4-addr:value = '1.1.1.1']",
             "--to",
             "spuc-agent",
+            "--to",
+            "powershell",
+            "--to",
+            "bash",
+            "--output",
         ])
+        .arg(&out_dir)
         .output()
         .expect("failed to run emulate command");
     assert!(
-        !out.status.success(),
-        "expected failure, got success with stdout: {}",
-        String::from_utf8_lossy(&out.stdout)
+        out.status.success(),
+        "expected success, stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
     );
-    let stderr = String::from_utf8_lossy(&out.stderr);
+
+    let exported: Vec<_> = fs::read_dir(&out_dir)
+        .expect("exports dir missing")
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .collect();
     assert!(
-        stderr.contains("process:command_line/name/cwd"),
-        "unexpected stderr: {stderr}"
+        exported
+            .iter()
+            .any(|p| p.extension().and_then(|e| e.to_str()) == Some("json"))
+    );
+    assert!(
+        exported
+            .iter()
+            .any(|p| p.extension().and_then(|e| e.to_str()) == Some("ps1"))
+    );
+    assert!(
+        exported
+            .iter()
+            .any(|p| p.extension().and_then(|e| e.to_str()) == Some("sh"))
     );
 }
 
 #[test]
-fn emulate_partial_mode_skips_unsupported_rules_when_possible() {
+fn emulate_partial_mode_handles_previously_unsupported_rule_without_skip() {
     let root = temp_config_root();
     let rules_file = root.join("rules.stix");
     fs::create_dir_all(&root).expect("config root");
@@ -185,8 +207,8 @@ fn emulate_partial_mode_skips_unsupported_rules_when_possible() {
         String::from_utf8_lossy(&out.stderr)
     );
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("Skipping rule (partial mode)"));
     assert!(stdout.contains("Emulation Artifact (bash)"));
+    assert!(!stdout.contains("Skipping rule (partial mode)"));
 }
 
 #[test]
@@ -245,8 +267,9 @@ fn emulate_file_size_generates_materialized_plan_and_powershell_size() {
 }
 
 #[test]
-fn emulate_file_hash_rule_fails_and_does_not_create_ability() {
+fn emulate_file_hash_rule_generates_hint_based_ability() {
     let root = temp_config_root();
+    let out_dir = root.join("exports");
     let out = Command::new(spuc_bin())
         .env("SPUC_CONFIG_DIR", &root)
         .args([
@@ -255,25 +278,29 @@ fn emulate_file_hash_rule_fails_and_does_not_create_ability() {
             "[file:hashes.MD5 = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa']",
             "--to",
             "spuc-agent",
+            "--output",
         ])
+        .arg(&out_dir)
         .output()
         .expect("failed to run emulate command");
     assert!(
-        !out.status.success(),
-        "expected strict emulate failure for hash file predicate"
+        out.status.success(),
+        "expected success with hint action, stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
     );
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stderr.contains("Hash-constrained file predicates are not materializable"));
 
-    let abilities_dir = root.join("abilities");
-    if abilities_dir.exists() {
-        let count = fs::read_dir(abilities_dir)
-            .expect("read abilities dir")
-            .filter_map(|entry| entry.ok().map(|e| e.path()))
-            .filter(|path| path.extension().and_then(|e| e.to_str()) == Some("json"))
-            .count();
-        assert_eq!(count, 0, "no ability should be created for hash-only rules");
-    }
+    let json_path = fs::read_dir(&out_dir)
+        .expect("exports dir missing")
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .find(|path| path.extension().and_then(|e| e.to_str()) == Some("json"))
+        .expect("spuc-agent json export missing");
+    let raw_json = fs::read_to_string(json_path).expect("read json export");
+    let parsed: Value = serde_json::from_str(&raw_json).expect("valid json export");
+    assert_eq!(parsed["actions"][0]["action_type"], "emit_observable_hint");
+    assert!(parsed["actions"][0]["safe_instructions"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("hash-constrained file predicates"));
 }
 
 #[test]
@@ -410,8 +437,9 @@ fn emulate_registry_rule_generates_registry_artifacts() {
 }
 
 #[test]
-fn emulate_network_source_ip_rule_fails_and_does_not_create_ability() {
+fn emulate_network_source_ip_rule_generates_hint_based_ability() {
     let root = temp_config_root();
+    let out_dir = root.join("exports");
     let out = Command::new(spuc_bin())
         .env("SPUC_CONFIG_DIR", &root)
         .args([
@@ -420,28 +448,24 @@ fn emulate_network_source_ip_rule_fails_and_does_not_create_ability() {
             "[network-traffic:src_ref.value = '10.0.0.5']",
             "--to",
             "bash",
+            "--output",
         ])
+        .arg(&out_dir)
         .output()
         .expect("failed to run emulate command");
     assert!(
-        !out.status.success(),
-        "expected strict emulate failure for source-side network predicate"
+        out.status.success(),
+        "expected success with hint action, stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
     );
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stderr.contains("source-side fields are not materializable"));
 
-    let abilities_dir = root.join("abilities");
-    if abilities_dir.exists() {
-        let count = fs::read_dir(abilities_dir)
-            .expect("read abilities dir")
-            .filter_map(|entry| entry.ok().map(|e| e.path()))
-            .filter(|path| path.extension().and_then(|e| e.to_str()) == Some("json"))
-            .count();
-        assert_eq!(
-            count, 0,
-            "no ability should be created for unsupported source-side network rules"
-        );
-    }
+    let bash_path = fs::read_dir(&out_dir)
+        .expect("exports dir missing")
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .find(|path| path.extension().and_then(|e| e.to_str()) == Some("sh"))
+        .expect("bash export missing");
+    let bash = fs::read_to_string(bash_path).expect("missing bash file");
+    assert!(bash.contains("action act-001: network-traffic:src_ref.value"));
 }
 
 #[test]
@@ -542,4 +566,36 @@ fn emulate_exports_atomic_and_caldera_for_registry_parseables() {
     assert!(parsed["platforms"].is_object());
     assert!(parsed["metadata"]["actions"].is_array());
     assert!(raw_json.contains("[spuc] caldera action trace"));
+}
+
+#[test]
+fn emulate_bash_export_does_not_fail_when_registry_present() {
+    let root = temp_config_root();
+    let out_dir = root.join("exports");
+    let out = Command::new(spuc_bin())
+        .env("SPUC_CONFIG_DIR", &root)
+        .args([
+            "emulate",
+            "--rule",
+            "[windows-registry-key:key = 'HKEY_CURRENT_USER\\\\Software\\\\SPUC\\\\BashOnly' AND windows-registry-key:values[*].name = 'Mode' AND windows-registry-key:values[*].data = 'Safe']",
+            "--to",
+            "bash",
+            "--output",
+        ])
+        .arg(&out_dir)
+        .output()
+        .expect("failed to run emulate command");
+    assert!(
+        out.status.success(),
+        "emulate command failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let bash_path = fs::read_dir(&out_dir)
+        .expect("exports dir missing")
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .find(|path| path.extension().and_then(|e| e.to_str()) == Some("sh"))
+        .expect("bash export missing");
+    let bash = fs::read_to_string(bash_path).expect("missing bash file");
+    assert!(bash.contains("bash exporter skips windows registry materialization"));
 }
