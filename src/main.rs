@@ -64,6 +64,7 @@ mod tests {
             id: id.to_string(),
             name: format!("ability-{id}"),
             description: "sample".to_string(),
+            ttp: None,
             supported_platforms: vec!["linux".to_string()],
             requires: vec![emu_ability::AbilityRequirement {
                 id: "cap.process.spawn".to_string(),

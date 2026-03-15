@@ -14,6 +14,7 @@ pub(crate) fn options<'a>(
     rule_file: Option<&'a Path>,
     output_dir: Option<&'a Path>,
     description: Option<&'a str>,
+    ttp: Option<&'a str>,
     confidence: Option<u8>,
     mode: ConversionMode,
     export_formats: &'a [ExportFormat],
@@ -27,6 +28,7 @@ pub(crate) fn options<'a>(
         },
         output_dir,
         description,
+        ttp,
         confidence,
         mode,
         export_formats,
@@ -52,6 +54,7 @@ mod tests {
             Some(rule_file),
             Some(output_dir),
             Some("demo"),
+            Some("T1059"),
             Some(70),
             ConversionMode::Strict,
             &export_formats,
@@ -63,6 +66,7 @@ mod tests {
         assert_eq!(options.input.rule_file, Some(rule_file));
         assert_eq!(options.output_dir, Some(output_dir));
         assert_eq!(options.description, Some("demo"));
+        assert_eq!(options.ttp, Some("T1059"));
         assert_eq!(options.confidence, Some(70));
         assert_eq!(options.mode, ConversionMode::Strict);
         assert_eq!(options.export_formats, &export_formats);

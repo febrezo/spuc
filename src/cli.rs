@@ -45,6 +45,10 @@ pub enum Commands {
         #[arg(short = 'd', long = "description")]
         description: Option<String>,
 
+        /// Optional ATT&CK technique id to attach to generated emulation artifacts
+        #[arg(long = "ttp")]
+        ttp: Option<String>,
+
         /// Optional analyst/indicator confidence (0..100), mapped to ability confidence
         #[arg(
             short = 'c',
@@ -105,6 +109,10 @@ pub enum Commands {
         /// Optional human readable description to embed in supported outputs
         #[arg(short = 'd', long = "description")]
         description: Option<String>,
+
+        /// Optional ATT&CK technique id to attach to generated emulation artifacts
+        #[arg(long = "ttp")]
+        ttp: Option<String>,
 
         /// Optional analyst/indicator confidence (0..100), preserved as emitter metadata when possible
         #[arg(
@@ -172,6 +180,9 @@ pub enum SigmaCommands {
     /// List only dynamic sigma targets exposed by SPUC.
     #[command(name = "list-targets", display_order = 2)]
     ListTargets,
+    /// Re-detect sigma runtime and overwrite cached sigma configuration.
+    #[command(name = "update-config", display_order = 3)]
+    UpdateConfig,
 }
 
 #[derive(Debug, Subcommand)]
@@ -386,6 +397,13 @@ mod tests {
     #[test]
     fn sigma_subcommands_parse() {
         let cli = Cli::try_parse_from(["spuc", "sigma", "status"]).expect("parse sigma status");
+        match cli.command {
+            Some(Commands::Sigma { .. }) => {}
+            _ => panic!("expected sigma command"),
+        }
+
+        let cli = Cli::try_parse_from(["spuc", "sigma", "update-config"])
+            .expect("parse sigma update-config");
         match cli.command {
             Some(Commands::Sigma { .. }) => {}
             _ => panic!("expected sigma command"),

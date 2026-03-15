@@ -208,19 +208,63 @@ fn log_error(message: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Read, Write};
+    use std::io::{ErrorKind, Read, Write};
     use std::net::TcpStream;
     use std::time::Duration;
 
     fn send_raw(port: u16, request: &str) -> String {
         let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
         stream
-            .set_read_timeout(Some(Duration::from_secs(3)))
+            .set_read_timeout(Some(Duration::from_secs(2)))
             .expect("timeout");
         stream.write_all(request.as_bytes()).expect("write");
-        let mut buffer = String::new();
-        stream.read_to_string(&mut buffer).expect("read");
+        let mut buffer = Vec::new();
+        let mut chunk = [0u8; 1024];
+        let mut idle_reads = 0u8;
+        loop {
+            match stream.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(n) => {
+                    idle_reads = 0;
+                    buffer.extend_from_slice(&chunk[..n]);
+                    if response_complete(&buffer) {
+                        break;
+                    }
+                }
+                Err(err)
+                    if err.kind() == ErrorKind::WouldBlock
+                        || err.kind() == ErrorKind::TimedOut =>
+                {
+                    idle_reads = idle_reads.saturating_add(1);
+                    if idle_reads >= 3 {
+                        break;
+                    }
+                }
+                Err(err) => panic!("read: {err}"),
+            }
+        }
+        let buffer = String::from_utf8_lossy(&buffer).into_owned();
         buffer
+    }
+
+    fn response_complete(raw: &[u8]) -> bool {
+        let marker = b"\r\n\r\n";
+        let Some(header_end) = raw.windows(marker.len()).position(|w| w == marker) else {
+            return false;
+        };
+        let header_len = header_end + marker.len();
+        let headers = String::from_utf8_lossy(&raw[..header_end]);
+        let content_length = headers
+            .lines()
+            .find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                if !name.trim().eq_ignore_ascii_case("Content-Length") {
+                    return None;
+                }
+                value.trim().parse::<usize>().ok()
+            })
+            .unwrap_or(0);
+        raw.len() >= header_len + content_length
     }
 
     #[test]

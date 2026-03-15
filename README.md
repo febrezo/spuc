@@ -61,6 +61,7 @@ spuc emulate --rule "[process:command_line MATCHES '^.*echo.*$']" --to atomic-re
 spuc emulate --rule "[process:command_line MATCHES '^.*echo.*$']" --to spuc-agent --refresh
 spuc sigma status
 spuc sigma list-targets
+spuc sigma update-config
 spuc --version
 spuc version
 ```
@@ -105,7 +106,8 @@ The provided `Dockerfile` installs SPUC plus `sigma` and example backend plugins
 - `pysigma-backend-crowdstrike` (LogScale)
 - `pysigma-backend-secops` (Chronicle / Google SecOps)
 
-SPUC probes `sigma` once at process startup and only enables dynamic `sigma-to-*` targets that are actually compatible in that runtime.
+SPUC probes `sigma` once on first run, persists runtime results to config cache and then reuses that cache on subsequent starts.
+Use `spuc sigma update-config` to force a fresh runtime discovery and overwrite cached Sigma configuration.
 
 ## Web Interface
 

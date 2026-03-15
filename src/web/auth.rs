@@ -225,8 +225,24 @@ fn provider_with_policy(
 pub(crate) fn load_or_init_users(
     admin_username: &str,
     admin_password: &str,
+    enforce_admin_password: bool,
 ) -> Result<(PathBuf, UserStore)> {
     let path = users_store_path()?;
+    let store = load_or_init_users_from_path(
+        &path,
+        admin_username,
+        admin_password,
+        enforce_admin_password,
+    )?;
+    Ok((path, store))
+}
+
+fn load_or_init_users_from_path(
+    path: &PathBuf,
+    admin_username: &str,
+    admin_password: &str,
+    enforce_admin_password: bool,
+) -> Result<UserStore> {
     if !path.exists() {
         let admin = new_user(admin_username, admin_password, Role::Admin)?;
         let store = UserStore {
@@ -234,13 +250,43 @@ pub(crate) fn load_or_init_users(
             users: vec![admin],
         };
         save_users(&path, &store)?;
-        return Ok((path, store));
+        return Ok(store);
     }
 
     let raw = fs::read_to_string(&path)?;
     let mut store: UserStore = serde_json::from_str(&raw)?;
+    let mut changed = false;
     if store.schema_version.trim().is_empty() {
         store.schema_version = USERS_SCHEMA_VERSION.to_string();
+        changed = true;
+    }
+
+    if let Some(user) = store
+        .users
+        .iter_mut()
+        .find(|user| user.username.eq_ignore_ascii_case(admin_username))
+    {
+        if user.role != Role::Admin {
+            user.role = Role::Admin;
+            changed = true;
+        }
+        if !user.enabled {
+            user.enabled = true;
+            changed = true;
+        }
+        if enforce_admin_password
+            && !verify_password(admin_password, &user.password_salt, &user.password_hash)
+        {
+            let (salt, hash) = hash_password(admin_password)?;
+            user.password_salt = salt;
+            user.password_hash = hash;
+            changed = true;
+        }
+    } else {
+        store
+            .users
+            .push(new_user(admin_username, admin_password, Role::Admin)?);
+        changed = true;
     }
 
     let has_admin = store
@@ -251,10 +297,14 @@ pub(crate) fn load_or_init_users(
         store
             .users
             .push(new_user(admin_username, admin_password, Role::Admin)?);
+        changed = true;
+    }
+
+    if changed {
         save_users(&path, &store)?;
     }
 
-    Ok((path, store))
+    Ok(store)
 }
 
 pub(crate) fn save_users(path: &PathBuf, store: &UserStore) -> Result<()> {
@@ -802,6 +852,7 @@ fn decode_response<T: DeserializeOwned>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn sample_store() -> UserStore {
         UserStore {
@@ -936,5 +987,43 @@ mod tests {
         let url = build_oauth_authorize_url(&provider, "state-token").expect("auth url");
         assert!(url.contains("state=state-token"));
         assert!(url.contains("client_id=abc"));
+    }
+
+    #[test]
+    fn load_or_init_users_enforces_explicit_admin_password() {
+        let path = temp_users_store_path("enforce_admin_password");
+        let first = load_or_init_users_from_path(&path, "admin", "old-secret", true)
+            .expect("initialize users");
+        assert!(verify_credentials(&first, "admin", "old-secret").is_some());
+
+        let second = load_or_init_users_from_path(&path, "admin", "new-secret", true)
+            .expect("refresh users");
+        assert!(verify_credentials(&second, "admin", "old-secret").is_none());
+        assert!(verify_credentials(&second, "admin", "new-secret").is_some());
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn load_or_init_users_keeps_existing_password_when_not_enforced() {
+        let path = temp_users_store_path("skip_enforce_admin_password");
+        let first = load_or_init_users_from_path(&path, "admin", "old-secret", true)
+            .expect("initialize users");
+        assert!(verify_credentials(&first, "admin", "old-secret").is_some());
+
+        let second = load_or_init_users_from_path(&path, "admin", "new-secret", false)
+            .expect("reload users");
+        assert!(verify_credentials(&second, "admin", "old-secret").is_some());
+        assert!(verify_credentials(&second, "admin", "new-secret").is_none());
+
+        let _ = fs::remove_file(path);
+    }
+
+    fn temp_users_store_path(tag: &str) -> PathBuf {
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        std::env::temp_dir().join(format!("spuc_web_users_{tag}_{ts}.json"))
     }
 }

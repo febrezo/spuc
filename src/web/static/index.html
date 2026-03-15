@@ -326,6 +326,18 @@
               </div>
               <input id="rules-new-description" value="Rule created from SPUC Web Rules">
             </label>
+            <label>
+              <div class="meta-head">
+                <span>TTP (ATT&CK)</span>
+                <span class="help-tip" tabindex="0" aria-label="Info about TTP">
+                  <span class="help-tip-icon">?</span>
+                  <span class="help-tip-content">
+                    <span>Optional technique id such as T1059 or T1047 to attach to generated emulations.</span>
+                  </span>
+                </span>
+              </div>
+              <input id="rules-new-ttp" list="ttp-options" placeholder="T1059">
+            </label>
             <button id="rules-new-save" class="btn btn-success" data-i18n="rules.save_many">Save rule(s)</button>
           </div>
         </article>
@@ -570,6 +582,18 @@
                     </div>
                     <input id="rulelab-confidence" type="number" min="0" max="100" value="70">
                   </label>
+                  <label class="trust-item">
+                    <div class="meta-head">
+                      <span>TTP (ATT&CK)</span>
+                      <span class="help-tip" tabindex="0" aria-label="Info about TTP">
+                        <span class="help-tip-icon">?</span>
+                        <span class="help-tip-content">
+                          <span>Optional technique id such as T1059 or T1047, saved with the rule and reused in emulation exports.</span>
+                        </span>
+                      </span>
+                    </div>
+                    <input id="rulelab-ttp" list="ttp-options" placeholder="T1059">
+                  </label>
                 </div>
               </div>
             </div>
@@ -584,6 +608,7 @@
             </div>
             <div class="editor-actions rulelab-save-row">
               <button id="rulelab-save" class="btn btn-success" data-i18n="rulelab.save" disabled>Save Rule</button>
+              <button id="rulelab-copy-prompt" class="btn btn-ghost" data-i18n="rulelab.copy_prompt">Copy LLM prompt</button>
             </div>
             <div class="compatibility-inline">
               <header class="compatibility-header">
@@ -603,6 +628,14 @@
           </article>
         </div>
       </section>
+
+      <datalist id="ttp-options">
+        <option value="T1059"></option>
+        <option value="T1047"></option>
+        <option value="T1053"></option>
+        <option value="T1105"></option>
+        <option value="T1027"></option>
+      </datalist>
 
       <section id="panel-adversaries" class="panel">
         <article id="adversaries-welcome-card" class="glass rules-welcome-card workspace-chooser-card">
@@ -875,8 +908,7 @@
             <input id="adversary-title-inline" class="hidden" data-i18n-placeholder="adversaries.create.name" placeholder="Name">
           </div>
           <div id="adversary-export-inline" class="detail-copy-emulation hidden">
-            <select id="adversary-export-target-inline"></select>
-            <button type="button" class="btn btn-primary icon-only" id="adversary-export-inline-button" title="Export adversary" aria-label="Export adversary">⬇</button>
+            <button type="button" class="btn btn-primary" id="adversary-export-inline-button" title="Export full adversary" aria-label="Export full adversary" data-i18n="adversaries.detail.export_full">Export full adversary</button>
           </div>
         </header>
         <p class="muted" data-i18n="adversaries.create.flow_hint">Plan your adversary flow: filter catalog abilities, add ordered steps, and compile outputs.</p>

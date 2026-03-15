@@ -41,6 +41,7 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             file,
             output,
             description,
+            ttp,
             rule_confidence,
             mode,
             export,
@@ -51,6 +52,7 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             file.as_deref(),
             output.as_deref(),
             description.as_deref(),
+            ttp.as_deref(),
             *rule_confidence,
             sigma_targets,
             *mode,
@@ -64,6 +66,7 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             file,
             output,
             description,
+            ttp,
             rule_confidence,
             mode,
             export,
@@ -74,6 +77,7 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             file.as_deref(),
             output.as_deref(),
             description.as_deref(),
+            ttp.as_deref(),
             *rule_confidence,
             *mode,
             export,
@@ -90,6 +94,7 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
         Commands::Sigma { command } => match command {
             SigmaCommands::Status => commands::sigma::status()?,
             SigmaCommands::ListTargets => commands::sigma::list_targets()?,
+            SigmaCommands::UpdateConfig => commands::sigma::update_config()?,
         },
     }
 

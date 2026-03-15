@@ -57,7 +57,7 @@ pub(crate) fn evaluate_rule_from_labels(
 }
 
 pub(crate) fn evaluate_rule(request: TranslationRequest<'_>) -> Result<Vec<TranslationEvaluation>> {
-    let targets = resolve_translation_targets(request.targets);
+    let targets = resolve_translation_targets(request.targets, request.sigma_targets);
     if targets.is_empty() {
         return Err(anyhow!("no valid target selected"));
     }

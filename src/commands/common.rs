@@ -13,7 +13,7 @@ use std::process::Command;
 use crate::cli::{AbilityTarget, BuildOutput, ConversionMode, ExportFormat, OutputTarget};
 use crate::commands::sigma_runtime::sigma_runtime_info;
 use crate::commands::sigma_targets::{
-    dynamic_sigma_targets, is_dynamic_target_available, target_to_backend,
+    dynamic_sigma_targets, dynamic_target_label, target_to_backend,
 };
 use crate::emitters::{self, EmitResult, FailureCause, FidelityStatus};
 use crate::ui::ansi::{BLUE, BOLD, GREEN, GREEN_SOFT, ORANGE, PURPLE, RED, RESET, UNBOLD, YELLOW};
@@ -89,6 +89,7 @@ pub(crate) struct TranslateOptions<'a> {
     pub(crate) input: RuleInput<'a>,
     pub(crate) output_dir: Option<&'a Path>,
     pub(crate) description: Option<&'a str>,
+    pub(crate) ttp: Option<&'a str>,
     pub(crate) confidence: Option<u8>,
     pub(crate) sigma_targets: &'a [String],
     pub(crate) mode: ConversionMode,
@@ -101,6 +102,7 @@ pub(crate) struct EmulateOptions<'a> {
     pub(crate) input: RuleInput<'a>,
     pub(crate) output_dir: Option<&'a Path>,
     pub(crate) description: Option<&'a str>,
+    pub(crate) ttp: Option<&'a str>,
     pub(crate) confidence: Option<u8>,
     pub(crate) mode: ConversionMode,
     pub(crate) export_formats: &'a [ExportFormat],
@@ -138,7 +140,7 @@ pub(crate) fn translate_rules(options: TranslateOptions<'_>) -> Result<()> {
         return Err(anyhow!("No rules provided. Use --rule or --file."));
     }
 
-    let targets = resolve_translation_targets(options.targets);
+    let targets = resolve_translation_targets(options.targets, options.sigma_targets);
     if targets.is_empty() {
         return Err(anyhow!("No valid detection target selected."));
     }
@@ -206,6 +208,7 @@ pub(crate) fn translate_rules(options: TranslateOptions<'_>) -> Result<()> {
                 catalog_ref,
                 rule_str,
                 options.description,
+                options.ttp,
                 options.confidence.unwrap_or(70),
                 &parsed,
                 &rule_hash,
@@ -237,8 +240,14 @@ pub(crate) fn emulate_rules(options: EmulateOptions<'_>) -> Result<()> {
         render_rule_header(idx, rules.len(), rule_str);
         let parsed = parse_and_normalize(rule_str);
         let rule_hash = compute_rule_hash(rule_str, &parsed);
-        let ability =
-            match build_ability_from_rule(rule_str, None, None, options.description, confidence) {
+        let ability = match build_ability_from_rule(
+            rule_str,
+            None,
+            None,
+            options.description,
+            options.ttp,
+            confidence,
+        ) {
                 Ok(ability) => ability,
                 Err(err) => {
                     if matches!(options.mode, ConversionMode::Strict) {
@@ -280,6 +289,7 @@ pub(crate) fn emulate_rules(options: EmulateOptions<'_>) -> Result<()> {
                         &catalog,
                         rule_str,
                         options.description,
+                        options.ttp,
                         options.confidence,
                         options.mode,
                         &empty_sigma_targets,
@@ -368,6 +378,7 @@ pub(crate) fn emulate_rules(options: EmulateOptions<'_>) -> Result<()> {
             &catalog,
             rule_str,
             options.description,
+            options.ttp,
             options.confidence,
             options.mode,
             &empty_sigma_targets,
@@ -430,7 +441,10 @@ pub(crate) fn ability_target_extension(target: AbilityTarget) -> &'static str {
     }
 }
 
-pub(crate) fn resolve_translation_targets(targets: &[String]) -> Vec<ResolvedOutputTarget> {
+pub(crate) fn resolve_translation_targets(
+    targets: &[String],
+    sigma_targets: &[String],
+) -> Vec<ResolvedOutputTarget> {
     let requested = if targets.is_empty() {
         available_detection_target_labels()
     } else {
@@ -441,16 +455,49 @@ pub(crate) fn resolve_translation_targets(targets: &[String]) -> Vec<ResolvedOut
             .collect::<Vec<_>>()
     };
 
+    let explicit_sigma_backend_labels = sigma_targets
+        .iter()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())
+        .filter_map(|value| {
+            target_to_backend(&value).or_else(|| {
+                if value.starts_with("sigma-to-") {
+                    None
+                } else {
+                    Some(value)
+                }
+            })
+        })
+        .map(|backend| dynamic_target_label(&backend))
+        .collect::<Vec<_>>();
+
+    let mut expanded = requested.clone();
+    let has_native_sigma = requested.iter().any(|label| label == "sigma");
+    let has_dynamic_sigma = requested
+        .iter()
+        .any(|label| target_to_backend(label).is_some());
+
+    if has_native_sigma && explicit_sigma_backend_labels.is_empty() {
+        expanded.extend(dynamic_sigma_targets());
+    }
+    if has_native_sigma || has_dynamic_sigma || !explicit_sigma_backend_labels.is_empty() {
+        expanded.push("sigma".to_string());
+    }
+    expanded.extend(explicit_sigma_backend_labels);
+
     let mut resolved = Vec::new();
-    for label in requested {
+    let mut seen = Vec::new();
+    for label in expanded {
+        if seen.contains(&label) {
+            continue;
+        }
+        seen.push(label.clone());
         if let Some(native) = parse_target(&label) {
             resolved.push(ResolvedOutputTarget::Native(native));
             continue;
         }
         if let Some(backend) = target_to_backend(&label) {
-            if is_dynamic_target_available(&label) {
-                resolved.push(ResolvedOutputTarget::SigmaDynamic { label, backend });
-            }
+            resolved.push(ResolvedOutputTarget::SigmaDynamic { label, backend });
         }
     }
     resolved
@@ -499,13 +546,14 @@ fn sync_hidden_emulation_from_translate(
     catalog: &AbilityCatalog,
     rule: &str,
     description: Option<&str>,
+    ttp: Option<&str>,
     confidence: u8,
     parsed: &Result<ir::IrExpr, EmitResult>,
     rule_hash: &str,
     refresh: bool,
 ) -> Result<()> {
     let ability_opt = if parsed.is_ok() {
-        match build_ability_from_rule(rule, None, None, description, confidence) {
+        match build_ability_from_rule(rule, None, None, description, ttp, confidence) {
             Ok(ability) => {
                 let _ = catalog.upsert_by_source_pattern(&ability)?;
                 Some(ability)
@@ -551,6 +599,7 @@ fn sync_hidden_translation_from_emulate(
     catalog: &AbilityCatalog,
     rule: &str,
     description: Option<&str>,
+    _ttp: Option<&str>,
     rule_confidence: Option<u8>,
     mode: ConversionMode,
     sigma_targets: &[String],
@@ -571,7 +620,7 @@ fn sync_hidden_translation_from_emulate(
             continue;
         }
 
-        let Some(target) = resolve_translation_targets(std::slice::from_ref(&label))
+        let Some(target) = resolve_translation_targets(std::slice::from_ref(&label), sigma_targets)
             .into_iter()
             .next()
         else {
@@ -745,6 +794,7 @@ pub(crate) fn build_ability_from_rule(
     id: Option<&str>,
     name: Option<&str>,
     description: Option<&str>,
+    ttp: Option<&str>,
     confidence: u8,
 ) -> Result<emu_ability::Ability> {
     let ir = parse_and_normalize(rule).map_err(|e| {
@@ -1515,6 +1565,7 @@ pub(crate) fn build_ability_from_rule(
                 actions.len()
             )
         }),
+        ttp: normalize_ttp(ttp),
         supported_platforms: platforms,
         requires: requires.into_values().collect(),
         optional: optional.into_values().collect(),
@@ -1533,6 +1584,12 @@ pub(crate) fn build_ability_from_rule(
         )
     })?;
     Ok(generated)
+}
+
+fn normalize_ttp(raw: Option<&str>) -> Option<String> {
+    raw.map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_ascii_uppercase())
 }
 
 fn collect_ability_predicates(expr: &ir::IrExpr) -> Result<Vec<ir::IrPredicate>> {
@@ -2829,54 +2886,9 @@ fn coverage_info() -> HashMap<
 fn emit_sigma(
     ir: &ir::IrExpr,
     description: Option<&str>,
-    sigma_targets: &[String],
+    _sigma_targets: &[String],
 ) -> Result<EmitResult> {
-    if sigma_targets.is_empty() {
-        return emitters::sigma::emit(ir, description);
-    }
-
-    let runtime = sigma_runtime_info();
-    if !runtime.operational {
-        return Ok(EmitResult::unsupported(
-            "sigma command not available. Install sigma and backend plugins to use Sigma conversion targets",
-        ));
-    }
-
-    let mut sigma_result = emitters::sigma::emit(ir, description)?;
-    let Some(yaml) = sigma_result.rule.clone() else {
-        return Ok(sigma_result);
-    };
-
-    let mut outputs = Vec::new();
-    let mut skipped = Vec::new();
-    for target in sigma_targets {
-        let normalized = target.trim().to_ascii_lowercase();
-        if normalized.is_empty() {
-            continue;
-        }
-        let backend = target_to_backend(normalized.as_str()).unwrap_or(normalized.clone());
-        if !runtime.compatible_backends.contains(&backend) {
-            skipped.push(normalized);
-            continue;
-        }
-        let res = run_sigma_convert(&yaml, &backend)?;
-        outputs.push(format!("== {normalized} ==\n{res}"));
-    }
-
-    if outputs.is_empty() {
-        return Ok(EmitResult::unsupported(
-            "none of the requested Sigma backends are available in current sigma installation",
-        ));
-    }
-
-    if !skipped.is_empty() {
-        sigma_result.notes.push(format!(
-            "requested sigma backends not available and skipped: {}",
-            skipped.join(", ")
-        ));
-    }
-    sigma_result.rule = Some(outputs.join("\n\n"));
-    Ok(sigma_result)
+    emitters::sigma::emit(ir, description)
 }
 
 fn write_sigma_temp_rule(yaml: &str) -> Result<PathBuf> {
@@ -2892,7 +2904,8 @@ fn write_sigma_temp_rule(yaml: &str) -> Result<PathBuf> {
 }
 
 fn run_sigma_convert(yaml: &str, backend: &str) -> Result<String> {
-    let path = write_sigma_temp_rule(yaml)?;
+    let prepared_yaml = ensure_sigma_title(yaml);
+    let path = write_sigma_temp_rule(&prepared_yaml)?;
     let sigma_bin = sigma_runtime_info().binary.clone();
     let out = Command::new(&sigma_bin)
         .args(["convert", "-t", backend, path.to_string_lossy().as_ref()])
@@ -2907,6 +2920,31 @@ fn run_sigma_convert(yaml: &str, backend: &str) -> Result<String> {
             String::from_utf8_lossy(&out.stderr)
         ))
     }
+}
+
+fn ensure_sigma_title(yaml: &str) -> String {
+    yaml.split("---\n")
+        .map(ensure_sigma_title_doc)
+        .collect::<Vec<_>>()
+        .join("---\n")
+}
+
+fn ensure_sigma_title_doc(doc: &str) -> String {
+    if sigma_doc_has_non_empty_title(doc) {
+        return doc.to_string();
+    }
+    format!("title: '[SPUC Generated Sigma Rule] auto'\n{doc}")
+}
+
+fn sigma_doc_has_non_empty_title(doc: &str) -> bool {
+    doc.lines()
+        .map(str::trim)
+        .find_map(|line| line.strip_prefix("title:"))
+        .map(|value| {
+            let title = value.trim().trim_matches('"').trim_matches('\'');
+            !title.is_empty()
+        })
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -2942,5 +2980,64 @@ mod tests {
         let rendered = format!("{cleaned:?}");
         assert!(rendered.contains("dst_ref.value"));
         assert!(!rendered.contains("dst_ref.type"));
+    }
+
+    #[test]
+    fn ensure_sigma_title_adds_missing_title() {
+        let yaml = "logsource:\n  category: generic\ndetection:\n  condition: selection1\n";
+        let prepared = ensure_sigma_title(yaml);
+        assert!(prepared.starts_with("title: '[SPUC Generated Sigma Rule] auto'\n"));
+    }
+
+    #[test]
+    fn ensure_sigma_title_keeps_existing_title() {
+        let yaml = "title: Existing\nlogsource:\n  category: generic\ndetection:\n  condition: selection1\n";
+        let prepared = ensure_sigma_title(yaml);
+        assert!(prepared.starts_with("title: Existing\n"));
+    }
+
+    #[test]
+    fn sigma_backend_fallback_notes_keep_native_output_contract() {
+        let mut result = EmitResult::exact("title: native\n".to_string());
+        result.notes.push(
+            "sigma backend conversion unavailable; returning native Sigma output".to_string(),
+        );
+        result.notes.push(
+            "requested sigma backends skipped because sigma command/plugin runtime is unavailable"
+                .to_string(),
+        );
+        assert_eq!(result.rule.as_deref(), Some("title: native\n"));
+        assert_eq!(result.status, FidelityStatus::Exact);
+        assert_eq!(result.notes.len(), 2);
+    }
+
+    #[test]
+    fn sigma_backend_requests_also_include_native_sigma_target() {
+        let resolved = resolve_translation_targets(&["kql".to_string()], &["splunk".to_string()]);
+        let labels = resolved
+            .into_iter()
+            .map(|target| target.label())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            labels,
+            vec![
+                "kql".to_string(),
+                "sigma".to_string(),
+                "sigma-to-splunk".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn explicit_sigma_dynamic_target_keeps_native_sigma_target() {
+        let resolved = resolve_translation_targets(&["sigma-to-splunk".to_string()], &[]);
+        let labels = resolved
+            .into_iter()
+            .map(|target| target.label())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            labels,
+            vec!["sigma-to-splunk".to_string(), "sigma".to_string()]
+        );
     }
 }

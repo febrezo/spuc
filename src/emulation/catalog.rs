@@ -358,6 +358,7 @@ mod tests {
             id: id.to_string(),
             name: name.to_string(),
             description: "sample".to_string(),
+            ttp: None,
             supported_platforms: vec![platform.to_string()],
             requires: vec![AbilityRequirement {
                 id: "cap.process.spawn".to_string(),

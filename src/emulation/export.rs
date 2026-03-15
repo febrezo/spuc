@@ -39,6 +39,7 @@ mod tests {
             id: "abl-test-001".to_string(),
             name: "Sample".to_string(),
             description: "Sample description".to_string(),
+            ttp: Some("T1059".to_string()),
             supported_platforms: vec!["linux".to_string()],
             requires: vec![AbilityRequirement {
                 id: "cap.process.spawn".to_string(),
@@ -92,7 +93,7 @@ mod tests {
         let ability = sample_ability();
         let out =
             export_ability(AbilityExportTarget::AtomicRedTeam, &ability).expect("export failed");
-        assert!(out.contains("attack_technique: T0000"));
+        assert!(out.contains("attack_technique: T1059"));
         assert!(out.contains("atomic_tests:"));
     }
 
@@ -103,5 +104,6 @@ mod tests {
             export_ability(AbilityExportTarget::MitreCaldera, &ability).expect("export failed");
         assert!(out.contains("\"platforms\""));
         assert!(out.contains("\"technique\""));
+        assert!(out.contains("\"attack_id\": \"T1059\""));
     }
 }

@@ -2485,7 +2485,8 @@ tr:hover td {
 
 .detail-kv {
   display: grid;
-  gap: 2px;
+  align-content: start;
+  gap: 6px;
 }
 
 .detail-kv .label {
@@ -2496,25 +2497,53 @@ tr:hover td {
 }
 
 .detail-kv .label-with-help {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 6px;
+  column-gap: 8px;
+  width: 100%;
+}
+
+.detail-help-tip {
+  align-self: center;
 }
 
 .detail-help-tip .help-tip-icon {
-  width: 14px;
-  height: 14px;
-  font-size: 0.64rem;
+  width: 18px;
+  height: 18px;
+  border-color: rgba(141, 187, 255, 0.36);
+  background: rgba(77, 141, 255, 0.12);
+  color: #d9ecff;
+  font-size: 0.72rem;
+  line-height: 1;
+  box-shadow: 0 0 0 1px rgba(5, 9, 16, 0.3) inset;
 }
 
 .detail-help-tip .help-tip-content {
-  left: auto;
-  right: 0;
-  width: min(360px, 74vw);
+  left: 50%;
+  right: auto;
+  top: calc(100% + 10px);
+  width: min(320px, calc(100vw - 56px));
+  transform: translate(-50%, 4px);
+  text-align: left;
+  z-index: 8;
+}
+
+.detail-help-tip:hover .help-tip-content,
+.detail-help-tip:focus-within .help-tip-content {
+  transform: translate(-50%, 0);
 }
 
 .detail-kv code {
-  font-size: 0.86rem;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 10px;
+  width: fit-content;
+  border: 1px solid rgba(141, 187, 255, 0.18);
+  border-radius: 10px;
+  background: rgba(5, 9, 16, 0.58);
+  font-size: 0.92rem;
   font-family: var(--font-mono);
 }
 

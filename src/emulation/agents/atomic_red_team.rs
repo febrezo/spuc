@@ -100,8 +100,9 @@ fn yaml_quote(value: &str) -> String {
 impl AbilityExporter for AtomicRedTeamExporter {
     fn export(&self, ability: &Ability) -> Result<String> {
         let platforms = normalize_platforms(&ability.supported_platforms);
+        let attack_technique = ability.ttp.as_deref().unwrap_or("T0000");
         let mut out = String::new();
-        out.push_str("attack_technique: T0000\n");
+        out.push_str(&format!("attack_technique: {}\n", attack_technique));
         out.push_str(&format!("display_name: '{}'\n", yaml_quote(&ability.name)));
         out.push_str("atomic_tests:\n");
 

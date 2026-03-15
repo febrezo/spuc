@@ -24,6 +24,7 @@ pub(crate) struct CatalogRuleEntry {
     pub(crate) ability_id: Option<String>,
     pub(crate) name: String,
     pub(crate) description: Option<String>,
+    pub(crate) ttp: Option<String>,
     pub(crate) confidence: u8,
     pub(crate) emulable: bool,
     pub(crate) rule: String,
@@ -232,6 +233,7 @@ fn build_catalog_rule_entries(
                     .map(|item| item.name.clone())
                     .unwrap_or_else(|| format!("Rule {}", short_catalog_token(&stable_token))),
                 description: ability.map(|item| item.description.clone()),
+                ttp: ability.and_then(|item| item.ttp.clone()),
                 confidence,
                 emulable: ability.map(ability_is_emulable).unwrap_or(false),
                 rule,
@@ -620,6 +622,7 @@ fn load_or_rebuild_rule_ability(
         None,
         Some(&rule.name),
         rule.description.as_deref(),
+        rule.ttp.as_deref(),
         rule.confidence,
     )
 }

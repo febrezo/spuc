@@ -330,6 +330,7 @@ fn build_dummy_sleep_ability(seconds: u64, platform: Option<&str>) -> emu_abilit
             "Dummy ability to delay execution flow by {} second(s) in a defensive simulation.",
             seconds
         ),
+        ttp: None,
         supported_platforms: vec![platform.clone()],
         requires: vec![],
         optional: vec![],
@@ -369,6 +370,7 @@ fn build_dummy_label_ability(label: &str, platform: Option<&str>) -> emu_ability
             "Dummy ability to inject a controlled execution label: {}.",
             label_trimmed
         ),
+        ttp: None,
         supported_platforms: vec![platform.clone()],
         requires: vec![],
         optional: vec![],
@@ -456,6 +458,7 @@ struct CatalogRuleEntry {
     ability_id: Option<String>,
     name: String,
     description: Option<String>,
+    ttp: Option<String>,
     confidence: u8,
     emulable: bool,
     rule: String,
@@ -627,6 +630,7 @@ fn build_catalog_rule_entries(
                     .map(|item| item.name.clone())
                     .unwrap_or_else(|| format!("Rule {}", short_catalog_token(&stable_token))),
                 description: ability.map(|item| item.description.clone()),
+                ttp: ability.and_then(|item| item.ttp.clone()),
                 confidence,
                 emulable: ability.map(ability_is_emulable).unwrap_or(false),
                 rule,
@@ -976,6 +980,7 @@ fn load_or_rebuild_rule_ability(
         None,
         Some(&rule.name),
         rule.description.as_deref(),
+        rule.ttp.as_deref(),
         rule.confidence,
     )
 }

@@ -510,6 +510,7 @@ fn map_sigma_field(p: &IrPredicate) -> Result<String> {
             "attachment.hash.tlsh".to_string()
         }
         ("file", "name") => "file.name".to_string(),
+        ("file", "mime_type") => "file.mime_type".to_string(),
         ("directory", "path") => "file.directory".to_string(),
         ("directory", "atime") => "file.atime".to_string(),
         ("directory", "ctime") => "file.ctime".to_string(),

@@ -127,7 +127,9 @@ Last updated: 2026-03-15
   - `all`
 - Blocks are color-separated and can be shown together in one run.
 - Sigma OR branches are emitted as a single Sigma rule with multiple selections and one combined detection condition (no multi-document `---` split for the same input indicator).
-- `sigma` availability is probed once at process startup; dynamic detection targets are discovered from `sigma plugin list` and exposed as `sigma-to-<backend>` only for compatible backend plugins.
+- `sigma` availability/dynamic backend discovery is persisted in local config cache (`<config_root>/sigma/runtime.json`).
+- First execution performs discovery and stores cache; subsequent runs reuse cache to avoid repeated startup latency.
+- Manual refresh is explicit through `spuc sigma update-config`.
 
 ## Known Limitations
 

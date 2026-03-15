@@ -17,6 +17,7 @@ spuc web --port 8090 --no-login
 - Linux desktop prerequisites: WebKitGTK and JavaScriptCoreGTK development packages (`webkit2gtk-4.1` and `javascriptcoregtk-4.1` headers, or distro equivalent).
 
 If `--admin-password` is omitted, SPUC generates a random 25-character administrator password and prints it in startup logs.
+When `--admin-password` is provided explicitly, SPUC keeps that credential synchronized for the configured admin user at startup.
 
 ## Authentication modes
 
@@ -76,6 +77,13 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - The relation modal includes a `+` shortcut in the top-right corner to open `Create new object` and then return to the same relation flow.
 - Rules table includes an explicit STIX objects column that shows related `indicates` objects (e.g., `malware`) and a `+` action to append new relations.
 - Emulable rules centralize export and detonation guidance directly inside the emulation detail modal (no separate export modal/button in the table column).
+- Emulation detail modal always keeps the export action visible for layout consistency; when no artifact can be produced the button is rendered disabled.
+- Emulation detail modal shows runtime status only in the top-right header badge (not duplicated in the summary grid), matching detection detail behavior.
+- Emulation detonation commands include the exact exported artifact filename so analysts can copy/paste them directly after download.
+- Emulation detail hides detonation/docs/command guidance completely when no executable command applies to the selected export.
+- Emulation detail lists `other available emulations` separately from the currently selected export target.
+- Detection detail command snippets use the same exact exported filename that the modal download action will generate.
+- Clicking a STIX rule row opens a structured detail modal that follows the same presentation style as target-conversion detail views.
 - Markdown-enabled textareas (rule lab metadata and adversary description) provide dual mode: `Edit` and `Preview`, defaulting to `Preview` when opened.
 - Rules/emulation detail popovers default to a human-readable view, include copy/export actions for STIX/output snippets, and expose raw JSON in a dedicated tab.
 - Rule and ability detail modals show conversion status in the top-right header, directly below the detection/emulation type badge.
@@ -85,6 +93,7 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Ability/adversary exports include `spuc-agent`, `bash`, `powershell`, `atomic-red-team`, and `mitre-caldera`.
 - Laboratory with inline STIX highlighting (single editor), realtime syntax+compatibility checks shown under the editor, stacked compatibility bars, operator colorization, auto-pair insertion, contextual autocomplete (click/Tab), metadata controls above the editor, inline error panel, and a save button enabled only when syntax is valid.
 - Rule laboratory analysis is fully reactive: syntax and compatibility are re-evaluated automatically on each input change (no explicit verify action required).
+- Rule Lab and rule detail modal include `Copy LLM prompt` actions that generate deterministic structured prompts from existing rule metadata (context, observables, indicators, conversion statuses, emulation capability, current STIX pattern, and task).
 - Rule laboratory target list is dynamic: at startup SPUC probes `sigma` once, discovers compatible backend plugins from `sigma plugin list`, and adds them as `sigma-to-<backend>` compatibility rows.
 - In Rule Lab compatibility rows, `Show output` is displayed only for non-`unsupported` entries that include generated output text.
 - Adversaries catalog supports clickable header sorting (name, emulability confidence, TLP, PAP, steps, platforms), row-click open for detail/edit, and colored exporter-availability tags per adversary.

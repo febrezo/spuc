@@ -10,7 +10,7 @@ pub mod spl;
 pub mod suricata;
 pub mod yara;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum FidelityStatus {
     Exact,
     SchemaDependent,
@@ -20,7 +20,7 @@ pub enum FidelityStatus {
     Unsupported,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FailureCause {
     ParseError,

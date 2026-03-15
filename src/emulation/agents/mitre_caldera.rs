@@ -99,6 +99,7 @@ fn append_action_trace(mut script: String, ability: &Ability, windows: bool) -> 
 
 impl AbilityExporter for MitreCalderaExporter {
     fn export(&self, ability: &Ability) -> Result<String> {
+        let attack_id = ability.ttp.as_deref().unwrap_or("T0000");
         let mut platforms = serde_json::Map::new();
         for platform in normalize_platforms(&ability.supported_platforms) {
             let (executor, command) = platform_command(ability, &platform);
@@ -121,7 +122,7 @@ impl AbilityExporter for MitreCalderaExporter {
             "description": ability.description,
             "tactic": "collection",
             "technique": {
-                "attack_id": "T0000",
+                "attack_id": attack_id,
                 "name": "SPUC generated technique mapping",
             },
             "repeatable": false,

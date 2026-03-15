@@ -39,6 +39,8 @@ pub struct Ability {
     pub id: String,
     pub name: String,
     pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ttp: Option<String>,
     pub supported_platforms: Vec<String>,
     pub requires: Vec<AbilityRequirement>,
     pub optional: Vec<AbilityRequirement>,
@@ -68,6 +70,13 @@ impl Ability {
         }
         if self.name.trim().is_empty() {
             issues.push("name must not be empty".to_string());
+        }
+        if self
+            .ttp
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
+        {
+            issues.push("ttp must not be blank when provided".to_string());
         }
         if self.source_pattern.trim().is_empty() {
             issues.push("source_pattern must not be empty".to_string());
@@ -99,6 +108,7 @@ mod tests {
             id: "abl-test-001".to_string(),
             name: "Sample".to_string(),
             description: "Sample description".to_string(),
+            ttp: Some("T1059".to_string()),
             supported_platforms: vec!["linux".to_string()],
             requires: vec![AbilityRequirement {
                 id: "cap.process.spawn".to_string(),

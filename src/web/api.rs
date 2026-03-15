@@ -87,7 +87,11 @@ impl WebState {
         generated_password: bool,
         no_login: bool,
     ) -> Result<Self> {
-        let (users_path, users) = load_or_init_users(admin_user, admin_password)?;
+        let (users_path, users) = load_or_init_users(
+            admin_user,
+            admin_password,
+            !generated_password,
+        )?;
         let oauth = OAuthConfig::from_env();
         let (oauth_policy_path, oauth_policy) = load_or_init_oauth_policy(&oauth)?;
         let bootstrap_admin = users
@@ -559,6 +563,8 @@ struct RuleMutationRequest {
     #[serde(default)]
     description: Option<String>,
     #[serde(default)]
+    ttp: Option<String>,
+    #[serde(default)]
     tlp: Option<String>,
     #[serde(default)]
     pap: Option<String>,
@@ -706,6 +712,7 @@ struct RuleView {
     ability_id: Option<String>,
     name: String,
     description: Option<String>,
+    ttp: Option<String>,
     confidence: u8,
     tlp: String,
     pap: String,
@@ -734,6 +741,8 @@ struct StixObjectView {
 struct RuleMetadataEnvelope {
     tlp: String,
     pap: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ttp: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     observables: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -747,6 +756,7 @@ struct DecodedRuleMetadata {
     description: Option<String>,
     tlp: String,
     pap: String,
+    ttp: Option<String>,
     observables: Vec<String>,
     indicates: Option<RuleIndicatesRelation>,
     indicates_list: Vec<RuleIndicatesRelation>,
@@ -757,11 +767,14 @@ struct AbilityView {
     id: String,
     name: String,
     description: String,
+    ttp: Option<String>,
     platforms: Vec<String>,
     classification: String,
     emulation_level: String,
     confidence: u8,
     export_targets: Vec<String>,
+    export_files: BTreeMap<String, String>,
+    export_artifacts: BTreeMap<String, String>,
     source_pattern: String,
     agent_capabilities: Vec<String>,
     actions: Vec<AbilityActionView>,
@@ -1646,6 +1659,7 @@ fn save_rule(request: &HttpRequest) -> Result<HttpResponse> {
         payload.description.as_deref(),
         payload.tlp.as_deref(),
         payload.pap.as_deref(),
+        payload.ttp.as_deref(),
         Some(observables.as_slice()),
         Some(effective_indicates.as_slice()),
     );
@@ -1653,6 +1667,7 @@ fn save_rule(request: &HttpRequest) -> Result<HttpResponse> {
         &payload.rule,
         payload.name.as_deref(),
         storage_description.as_deref(),
+        payload.ttp.as_deref(),
         confidence,
     )?;
 
@@ -1691,6 +1706,7 @@ fn set_rule_indicates(selector: &str, request: &HttpRequest) -> Result<HttpRespo
         metadata.description.as_deref(),
         Some(&metadata.tlp),
         Some(&metadata.pap),
+        metadata.ttp.as_deref(),
         Some(observables.as_slice()),
         Some(indicates_list.as_slice()),
     );
@@ -1699,6 +1715,7 @@ fn set_rule_indicates(selector: &str, request: &HttpRequest) -> Result<HttpRespo
         &entry.rule,
         Some(&entry.name),
         storage_description.as_deref(),
+        metadata.ttp.as_deref(),
         entry.confidence,
     )?;
     HttpResponse::json(200, &rule_view(saved))
@@ -1708,6 +1725,7 @@ fn persist_rule_entry(
     rule: &str,
     name: Option<&str>,
     description: Option<&str>,
+    ttp: Option<&str>,
     confidence: u8,
 ) -> Result<(CatalogRuleEntry, bool)> {
     let rules = vec![rule.to_string()];
@@ -1722,6 +1740,7 @@ fn persist_rule_entry(
         None,
         None,
         description,
+        ttp,
         Some(confidence),
         ConversionMode::Strict,
         &empty_export_formats,
@@ -1736,6 +1755,7 @@ fn persist_rule_entry(
             None,
             None,
             description,
+            ttp,
             Some(confidence),
             &empty_sigma_targets,
             ConversionMode::Strict,
@@ -1859,6 +1879,7 @@ fn export_ability(ability_id: &str, target: Option<&str>) -> Result<HttpResponse
         &ability,
     )?;
     let extension = crate::commands::common::ability_target_extension(target);
+    let file_name = ability_export_filename(&ability.id, target);
     let content_type = match extension {
         "json" => "application/json; charset=utf-8",
         "yaml" | "yml" => "application/yaml; charset=utf-8",
@@ -1867,12 +1888,7 @@ fn export_ability(ability_id: &str, target: Option<&str>) -> Result<HttpResponse
     Ok(
         HttpResponse::text(200, content_type, artifact.into_bytes()).with_header(
             "Content-Disposition",
-            format!(
-                "attachment; filename=\"{}-{}.{}\"",
-                ability.id,
-                crate::commands::common::ability_target_label(target).replace('-', "_"),
-                extension
-            ),
+            format!("attachment; filename=\"{}\"", file_name),
         ),
     )
 }
@@ -2046,6 +2062,7 @@ fn create_adversary(request: &HttpRequest, state: &WebState) -> Result<HttpRespo
         payload.pap.as_deref(),
         None,
         None,
+        None,
     )
     .unwrap_or(description_plain);
 
@@ -2117,6 +2134,7 @@ fn update_adversary(selector: &str, request: &HttpRequest) -> Result<HttpRespons
         payload.pap.as_deref().or(Some(existing_meta.pap.as_str())),
         None,
         None,
+        None,
     )
     .unwrap_or(plain_description);
     let updated = emu_campaign::build_campaign_ordered_with_confidence(
@@ -2158,38 +2176,84 @@ fn export_adversary(
 ) -> Result<HttpResponse> {
     let (_, _, _, adversaries) = load_catalog_data()?;
     let adversary = resolve_adversary_selector(selector, &adversaries, None)?;
-    let executor = target
-        .and_then(parse_ability_target)
-        .unwrap_or(AbilityTarget::SpucAgent);
+    let requested = target.and_then(parse_ability_target);
+    let is_full_export = target.is_none()
+        || matches!(
+            target.map(|value| value.trim().to_ascii_lowercase()).as_deref(),
+            Some("all") | Some("full")
+        );
 
-    let export_root = unique_temp_export_dir(&adversary.adversary_id, executor)?;
-    plan::export_saved_adversary(
-        &adversary.path,
-        executor,
-        Some(export_root.as_path()),
-        &[BuildOutput::Manifest, BuildOutput::Artifact],
+    let targets = if is_full_export {
+        vec![
+            AbilityTarget::SpucAgent,
+            AbilityTarget::Bash,
+            AbilityTarget::Powershell,
+            AbilityTarget::AtomicRedTeam,
+            AbilityTarget::MitreCaldera,
+        ]
+    } else {
+        vec![requested.unwrap_or(AbilityTarget::SpucAgent)]
+    };
+
+    let export_root = unique_temp_export_dir(
+        &adversary.adversary_id,
+        targets
+            .first()
+            .copied()
+            .unwrap_or(AbilityTarget::SpucAgent),
     )?;
+    let mut exported_any = false;
+    for executor in &targets {
+        let target_label = crate::commands::common::ability_target_label(*executor);
+        let target_root = export_root.join(target_label);
+        fs::create_dir_all(&target_root)?;
+        if plan::export_saved_adversary(
+            &adversary.path,
+            *executor,
+            Some(target_root.as_path()),
+            &[BuildOutput::Manifest, BuildOutput::Artifact],
+        )
+        .is_ok()
+        {
+            exported_any = true;
+        }
+    }
+
+    if !exported_any {
+        return Err(anyhow!(
+            "adversary '{}' could not be exported for any requested target",
+            adversary.adversary_id
+        ));
+    }
 
     let mut downloads = Vec::new();
-    for file in list_files(&export_root)? {
-        let name = file
-            .file_name()
+    for file in list_files_recursive(&export_root)? {
+        let relative = file
+            .strip_prefix(&export_root)
+            .ok()
             .and_then(|value| value.to_str())
             .unwrap_or("artifact")
-            .to_string();
+            .replace('/', "-");
         let token = state.register_download(DownloadEntry {
             content_type: guess_content_type(&file).to_string(),
-            name: name.clone(),
+            name: relative.clone(),
             path: file,
         });
-        downloads.push(download_link(&name, &token));
+        downloads.push(download_link(&relative, &token));
     }
 
     HttpResponse::json(
         200,
         &ExportResponse {
             id: adversary.adversary_id,
-            target: crate::commands::common::ability_target_label(executor).to_string(),
+            target: if is_full_export {
+                "full".to_string()
+            } else {
+                crate::commands::common::ability_target_label(
+                    requested.unwrap_or(AbilityTarget::SpucAgent),
+                )
+                .to_string()
+            },
             downloads,
         },
     )
@@ -2204,6 +2268,7 @@ fn verify_rule_request(request: &HttpRequest) -> Result<HttpResponse> {
         None,
         payload.name.as_deref().or(Some("web-preview")),
         payload.description.as_deref(),
+        payload.ttp.as_deref(),
         confidence,
     )
     .ok()
@@ -2282,6 +2347,7 @@ fn rule_view(entry: CatalogRuleEntry) -> RuleView {
         ability_id: entry.ability_id,
         name: entry.name,
         description: metadata.description,
+        ttp: metadata.ttp.or(entry.ttp),
         confidence: entry.confidence,
         tlp: metadata.tlp,
         pap: metadata.pap,
@@ -2383,6 +2449,7 @@ fn encode_rule_metadata_description(
     description: Option<&str>,
     tlp: Option<&str>,
     pap: Option<&str>,
+    ttp: Option<&str>,
     observables: Option<&[String]>,
     indicates: Option<&[RuleIndicatesRelation]>,
 ) -> Option<String> {
@@ -2396,6 +2463,7 @@ fn encode_rule_metadata_description(
     let envelope = RuleMetadataEnvelope {
         tlp: normalize_tlp(tlp).to_string(),
         pap: normalize_pap(pap).to_string(),
+        ttp: normalize_ttp(ttp),
         observables: observable_list,
         indicates: indicates_list.first().cloned(),
         indicates_list,
@@ -2421,6 +2489,7 @@ fn decode_rule_metadata_description(description: Option<String>) -> DecodedRuleM
             description: None,
             tlp: normalize_tlp(None).to_string(),
             pap: normalize_pap(None).to_string(),
+            ttp: None,
             observables: Vec::new(),
             indicates: None,
             indicates_list: Vec::new(),
@@ -2444,6 +2513,7 @@ fn decode_rule_metadata_description(description: Option<String>) -> DecodedRuleM
                         },
                         tlp: normalize_tlp(Some(&metadata.tlp)).to_string(),
                         pap: normalize_pap(Some(&metadata.pap)).to_string(),
+                        ttp: normalize_ttp(metadata.ttp.as_deref()),
                         observables: normalize_observables(metadata.observables),
                         indicates: indicates_list.first().cloned(),
                         indicates_list,
@@ -2467,6 +2537,7 @@ fn decode_rule_metadata_description(description: Option<String>) -> DecodedRuleM
                     description: desc,
                     tlp,
                     pap,
+                    ttp: None,
                     observables: Vec::new(),
                     indicates: None,
                     indicates_list: Vec::new(),
@@ -2478,10 +2549,17 @@ fn decode_rule_metadata_description(description: Option<String>) -> DecodedRuleM
         description: Some(raw),
         tlp: normalize_tlp(None).to_string(),
         pap: normalize_pap(None).to_string(),
+        ttp: None,
         observables: Vec::new(),
         indicates: None,
         indicates_list: Vec::new(),
     }
+}
+
+fn normalize_ttp(raw: Option<&str>) -> Option<String> {
+    raw.map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_ascii_uppercase())
 }
 
 fn extract_rule_observable_types(rule: &str) -> Vec<String> {
@@ -2615,15 +2693,20 @@ fn is_valid_stix_id(value: &str) -> bool {
 
 fn ability_view(ability: emu_ability::Ability) -> AbilityView {
     let export_targets = infer_ability_export_targets(&ability);
+    let export_files = ability_export_files(&ability.id, &export_targets);
+    let export_artifacts = ability_export_artifacts(&ability, &export_targets);
     AbilityView {
         id: ability.id,
         name: ability.name,
         description: ability.description,
+        ttp: ability.ttp,
         platforms: ability.supported_platforms,
         classification: classification_label(&ability.classification).to_string(),
         emulation_level: emulation_level_label(&ability.emulation_level).to_string(),
         confidence: ability.confidence,
         export_targets,
+        export_files,
+        export_artifacts,
         source_pattern: ability.source_pattern,
         agent_capabilities: ability.agent_capabilities,
         actions: ability
@@ -2661,6 +2744,43 @@ fn infer_ability_export_targets(ability: &emu_ability::Ability) -> Vec<String> {
         }
     }
     targets
+}
+
+fn ability_export_files(ability_id: &str, targets: &[String]) -> BTreeMap<String, String> {
+    targets
+        .iter()
+        .filter_map(|target| {
+            let parsed = parse_ability_target(target.as_str())?;
+            Some((target.clone(), ability_export_filename(ability_id, parsed)))
+        })
+        .collect()
+}
+
+fn ability_export_artifacts(
+    ability: &emu_ability::Ability,
+    targets: &[String],
+) -> BTreeMap<String, String> {
+    targets
+        .iter()
+        .filter_map(|target| {
+            let parsed = parse_ability_target(target.as_str())?;
+            let content = emu_export::export_ability(
+                crate::commands::common::ability_target_to_export(parsed),
+                ability,
+            )
+            .ok()?;
+            Some((target.clone(), content))
+        })
+        .collect()
+}
+
+fn ability_export_filename(ability_id: &str, target: AbilityTarget) -> String {
+    format!(
+        "{}-{}.{}",
+        ability_id,
+        crate::commands::common::ability_target_label(target).replace('-', "_"),
+        crate::commands::common::ability_target_extension(target)
+    )
 }
 
 fn infer_adversary_export_targets(entry: &CatalogAdversaryEntry) -> Vec<String> {
@@ -2938,6 +3058,27 @@ fn list_files(root: &Path) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
+fn list_files_recursive(root: &Path) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        for entry in fs::read_dir(&current)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.is_file() {
+                files.push(path);
+            }
+        }
+    }
+    files.sort_by(|a, b| {
+        let an = a.to_string_lossy();
+        let bn = b.to_string_lossy();
+        an.cmp(&bn)
+    });
+    Ok(files)
+}
+
 fn guess_content_type(path: &Path) -> &'static str {
     match path
         .extension()
@@ -3006,6 +3147,7 @@ mod tests {
             ability_id: None,
             name: "R".to_string(),
             description: None,
+            ttp: None,
             confidence: 80,
             emulable: false,
             rule: "[process:name = 'cmd.exe']".to_string(),
@@ -3026,6 +3168,7 @@ mod tests {
             Some("Sample rule"),
             Some("TLP:AMBER+STRICT"),
             Some("PAP:RED"),
+            None,
             Some(&["process".to_string(), "file".to_string()]),
             Some(&[RuleIndicatesRelation {
                 stix_id: "indicator--01234567-89ab-4def-8abc-0123456789ab".to_string(),
@@ -3051,11 +3194,35 @@ mod tests {
     }
 
     #[test]
+    fn ability_export_filename_matches_download_header_format() {
+        assert_eq!(
+            ability_export_filename("abl-123", AbilityTarget::SpucAgent),
+            "abl-123-spuc_agent.json"
+        );
+        assert_eq!(
+            ability_export_filename("abl-123", AbilityTarget::AtomicRedTeam),
+            "abl-123-atomic_red_team.yaml"
+        );
+    }
+
+    #[test]
+    fn ability_export_files_includes_requested_targets() {
+        let files =
+            ability_export_files("abl-123", &["spuc-agent".to_string(), "bash".to_string()]);
+        assert_eq!(
+            files.get("spuc-agent"),
+            Some(&"abl-123-spuc_agent.json".to_string())
+        );
+        assert_eq!(files.get("bash"), Some(&"abl-123-bash.sh".to_string()));
+    }
+
+    #[test]
     fn metadata_roundtrip_preserves_multiple_indicates() {
         let encoded = encode_rule_metadata_description(
             Some("Sample rule"),
             Some("TLP:GREEN"),
             Some("PAP:GREEN"),
+            None,
             Some(&["artifact".to_string()]),
             Some(&[
                 RuleIndicatesRelation {
@@ -3124,6 +3291,7 @@ mod tests {
             Some("TLP:GREEN"),
             Some("PAP:GREEN"),
             None,
+            None,
             Some(&[
                 RuleIndicatesRelation {
                     stix_id: "malware--01234567-89ab-4def-8abc-0123456789ab".to_string(),
@@ -3140,6 +3308,7 @@ mod tests {
             ability_id: None,
             name: "Rule 1".to_string(),
             description,
+            ttp: None,
             confidence: 70,
             emulable: false,
             rule: "[process:name = 'cmd.exe']".to_string(),
@@ -3264,6 +3433,7 @@ mod tests {
             Some("Campaign description"),
             Some("TLP:AMBER"),
             Some("PAP:RED"),
+            None,
             None,
             None,
         )

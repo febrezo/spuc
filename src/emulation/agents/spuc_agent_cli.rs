@@ -69,6 +69,7 @@ mod tests {
             id: "abl-agent-test".to_string(),
             name: "Agent test".to_string(),
             description: "Agent test ability".to_string(),
+            ttp: None,
             supported_platforms: vec![std::env::consts::OS.to_string()],
             requires: vec![AbilityRequirement {
                 id: "cap.process.spawn".to_string(),

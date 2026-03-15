@@ -3,7 +3,8 @@ use crate::commands::sigma_runtime::sigma_runtime_info;
 pub(crate) const SIGMA_TARGET_PREFIX: &str = "sigma-to-";
 
 pub(crate) fn dynamic_sigma_targets() -> Vec<String> {
-    dynamic_targets_from_backends(&sigma_runtime_info().compatible_backends)
+    let runtime = sigma_runtime_info();
+    dynamic_targets_from_backends(&runtime.compatible_backends)
 }
 
 pub(crate) fn dynamic_target_label(backend: &str) -> String {
@@ -29,7 +30,8 @@ pub(crate) fn is_dynamic_target_available(label: &str) -> bool {
     let Some(backend) = target_to_backend(label) else {
         return false;
     };
-    sigma_runtime_info().compatible_backends.contains(&backend)
+    let runtime = sigma_runtime_info();
+    runtime.compatible_backends.contains(&backend)
 }
 
 fn dynamic_targets_from_backends(backends: &[String]) -> Vec<String> {

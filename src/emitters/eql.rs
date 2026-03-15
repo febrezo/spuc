@@ -284,6 +284,11 @@ fn lower_predicate(p: &IrPredicate) -> Result<(Option<String>, String, Vec<Strin
     {
         notes.push("artifact schema fields are backend-dependent and may require pipeline-specific mapping".to_string());
     }
+    if (p.target.as_str(), p.field.as_str()) == ("file", "mime_type") {
+        notes.push(
+            "file:mime_type mapping is schema-dependent; verify backend field profile".to_string(),
+        );
+    }
     if (p.target.as_str(), p.field.as_str()) == ("artifact", "payload_bin")
         && matches!(p.op, IrOp::Matches)
     {
@@ -371,6 +376,7 @@ fn validate_operator(p: &IrPredicate) -> Result<()> {
             &[IrOp::Eq, IrOp::Ne, IrOp::Matches]
         }
         ("file", f) if f.starts_with("hashes.") => &[IrOp::Eq, IrOp::Ne],
+        ("file", "mime_type") => &[IrOp::Eq, IrOp::Ne, IrOp::Matches],
         ("domain-name", "value") => &[IrOp::Eq, IrOp::Ne, IrOp::Matches],
         ("url", "value") => &[IrOp::Eq, IrOp::Ne, IrOp::Matches],
         ("email-message", f) if f.starts_with("body_multipart[*].body_raw_ref.hashes.") => {
@@ -472,6 +478,7 @@ fn map_field(p: &IrPredicate) -> Result<String> {
             Ok("process.hash.sha256".to_string())
         }
         ("file", "name") => Ok("file.name".to_string()),
+        ("file", "mime_type") => Ok("file.mime_type".to_string()),
         ("directory", "path") => Ok("directory.path".to_string()),
         ("directory", "ctime") => Ok("directory.ctime".to_string()),
         ("directory", "mtime") => Ok("directory.mtime".to_string()),

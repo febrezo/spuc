@@ -221,6 +221,7 @@ fn validate_operator(p: &IrPredicate) -> Result<()> {
             &[IrOp::Eq, IrOp::Ne, IrOp::Matches]
         }
         ("file", f) if f.starts_with("hashes.") => &[IrOp::Eq, IrOp::Ne],
+        ("file", "mime_type") => &[IrOp::Eq, IrOp::Ne, IrOp::Matches],
         ("domain-name", "value") => &[IrOp::Eq, IrOp::Ne, IrOp::Matches],
         ("url", "value") => &[IrOp::Eq, IrOp::Ne, IrOp::Matches],
         ("email-message", f) if f.starts_with("body_multipart[*].body_raw_ref.hashes.") => {
@@ -495,6 +496,11 @@ fn map_field(p: &IrPredicate) -> Result<KqlField> {
             table: Some("DeviceFileEvents".to_string()),
             field: "FileSize".to_string(),
             notes: Vec::new(),
+        }),
+        ("file", "mime_type") => Ok(KqlField {
+            table: Some("DeviceFileEvents".to_string()),
+            field: "FileMimeType".to_string(),
+            notes: vec!["file:mime_type mapping is schema-dependent; verify backend field availability".to_string()],
         }),
         ("file", f) if f.starts_with("hashes.MD5") => Ok(KqlField {
             table: Some("DeviceFileEvents".to_string()),

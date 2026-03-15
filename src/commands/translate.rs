@@ -14,6 +14,7 @@ pub(crate) fn options<'a>(
     rule_file: Option<&'a Path>,
     output_dir: Option<&'a Path>,
     description: Option<&'a str>,
+    ttp: Option<&'a str>,
     confidence: Option<u8>,
     sigma_targets: &'a [String],
     mode: ConversionMode,
@@ -28,6 +29,7 @@ pub(crate) fn options<'a>(
         },
         output_dir,
         description,
+        ttp,
         confidence,
         sigma_targets,
         mode,
@@ -55,6 +57,7 @@ mod tests {
             Some(rule_file),
             Some(output_dir),
             Some("demo"),
+            Some("T1059"),
             Some(80),
             &sigma_targets,
             ConversionMode::Partial,
@@ -67,6 +70,7 @@ mod tests {
         assert_eq!(options.input.rule_file, Some(rule_file));
         assert_eq!(options.output_dir, Some(output_dir));
         assert_eq!(options.description, Some("demo"));
+        assert_eq!(options.ttp, Some("T1059"));
         assert_eq!(options.confidence, Some(80));
         assert_eq!(options.sigma_targets, &sigma_targets);
         assert_eq!(options.mode, ConversionMode::Partial);

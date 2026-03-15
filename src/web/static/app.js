@@ -19,7 +19,7 @@ const state = {
     tlpFilter: "ALL",
     papFilter: "ALL",
     sort: "confidence_desc",
-    visibleColumns: new Set(["name", "confidence", "tlp", "pap", "rule", "observables", "indicates", "outputs", "emulation"]),
+    visibleColumns: new Set(["name", "confidence", "tlp", "pap", "ttp", "rule", "observables", "indicates", "outputs", "emulation"]),
     bulkEditOpen: false,
     lastExportSelectedCsv: "",
     advancedFilters: [],
@@ -90,6 +90,7 @@ const state = {
   selectedChallenge: null,
   completedChallenges: new Set(),
   detailDetectionExport: null,
+  detailLlmPrompt: null,
 };
 
 const STIX_TOKENS = [
@@ -152,7 +153,7 @@ const COMPATIBILITY_GROUPS = [
 ];
 let RULE_OUTPUT_TARGETS = ["kql", "sigma", "eql", "snort", "suricata", "yara"];
 const RULE_EMULATION_TARGETS = ["spuc-agent", "bash", "powershell", "atomic-red-team", "mitre-caldera"];
-const RULE_COLUMN_KEYS = ["name", "confidence", "tlp", "pap", "rule", "observables", "indicates", "outputs", "emulation"];
+const RULE_COLUMN_KEYS = ["name", "confidence", "tlp", "pap", "ttp", "rule", "observables", "indicates", "outputs", "emulation"];
 const ADVERSARY_COLUMN_KEYS = ["name", "confidence", "tlp", "pap", "steps", "platforms", "exporters"];
 
 const ROUTE_META = {
@@ -409,8 +410,8 @@ function applyTranslations() {
   }
   const exportInlineBtn = document.getElementById("adversary-export-inline-button");
   if (exportInlineBtn) {
-    exportInlineBtn.title = t("adversaries.detail.export");
-    exportInlineBtn.setAttribute("aria-label", t("adversaries.detail.export"));
+    exportInlineBtn.title = t("adversaries.detail.export_full");
+    exportInlineBtn.setAttribute("aria-label", t("adversaries.detail.export_full"));
   }
   renderRulesColumnPicker();
   renderAdversariesColumnPicker();
@@ -509,6 +510,10 @@ function normalizePapValue(value) {
   return mapping[upper] || "PAP:GREEN";
 }
 
+function normalizeTtpValue(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
 function levelClassFromValue(value) {
   const upper = String(value || "").toUpperCase();
   if (upper === "ALL" || upper === "KEEP") return "level-clear";
@@ -591,6 +596,243 @@ function setDetailModalMode(mode = "default", targetLabel = "", conversionStatus
   }
 }
 
+function statusLabel(status) {
+  const bucket = statusBucket(status);
+  if (bucket === "exact") return t("rules.status.exact");
+  if (bucket === "lossy") return t("rules.status.lossy");
+  return t("rules.status.unsupported");
+}
+
+function llmTaskInstruction(task) {
+  switch (String(task || "").toLowerCase()) {
+    case "generate":
+      return "Generate a STIX pattern";
+    case "repair":
+      return "Repair an invalid STIX pattern";
+    case "explain":
+      return "Explain pattern coverage";
+    default:
+      return "Improve an existing pattern";
+  }
+}
+
+function normalizePromptTask(task, hasPattern = true, syntaxOk = true) {
+  const normalized = String(task || "").toLowerCase();
+  if (["generate", "repair", "improve", "explain"].includes(normalized)) {
+    return normalized;
+  }
+  if (!hasPattern) return "generate";
+  if (!syntaxOk) return "repair";
+  return "improve";
+}
+
+function normalizePromptObservables(ruleEntry) {
+  const observables = Array.isArray(ruleEntry?.observables)
+    ? ruleEntry.observables
+    : [];
+  const clean = observables
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  if (clean.length) {
+    return [...new Set(clean)].sort((a, b) => a.localeCompare(b));
+  }
+
+  const pattern = String(ruleEntry?.rule || "");
+  const inferred = [];
+  const rx = /\[\s*([a-z0-9-]+)\s*:/ig;
+  let match = rx.exec(pattern);
+  while (match) {
+    inferred.push(`${match[1]}:*`);
+    match = rx.exec(pattern);
+  }
+  return [...new Set(inferred)].sort((a, b) => a.localeCompare(b));
+}
+
+function normalizePromptIndicators(ruleEntry) {
+  const fromList = Array.isArray(ruleEntry?.indicates_list) ? ruleEntry.indicates_list : [];
+  const fallback = ruleEntry?.indicates ? [ruleEntry.indicates] : [];
+  const source = fromList.length ? fromList : fallback;
+  return source
+    .map((item) => ({
+      stixId: String(item?.stix_id || "").trim(),
+      objectName: String(item?.object_name || "").trim(),
+    }))
+    .filter((item) => item.stixId || item.objectName)
+    .sort((a, b) => {
+      const left = `${a.objectName}|${a.stixId}`.toLowerCase();
+      const right = `${b.objectName}|${b.stixId}`.toLowerCase();
+      return left.localeCompare(right);
+    });
+}
+
+function normalizePromptTargetStatuses(ruleEntry) {
+  const statuses = new Map();
+  const map = ruleEntry?.target_statuses && typeof ruleEntry.target_statuses === "object"
+    ? ruleEntry.target_statuses
+    : {};
+
+  Object.entries(map).forEach(([target, status]) => {
+    const key = String(target || "").trim().toLowerCase();
+    if (!key) return;
+    statuses.set(key, statusBucket(status || "unsupported"));
+  });
+
+  const targets = Array.isArray(ruleEntry?.targets) ? ruleEntry.targets : [];
+  const rowStatuses = Array.isArray(ruleEntry?.statuses) ? ruleEntry.statuses : [];
+  targets.forEach((target, idx) => {
+    const key = String(target || "").trim().toLowerCase();
+    if (!key || statuses.has(key)) return;
+    statuses.set(key, statusBucket(rowStatuses[idx] || "unsupported"));
+  });
+
+  const ordered = [];
+  const seen = new Set();
+  const preferred = RULE_OUTPUT_TARGETS
+    .map((target) => String(target || "").trim().toLowerCase())
+    .filter(Boolean);
+  const extras = Array.from(statuses.keys())
+    .filter((target) => !preferred.includes(target))
+    .sort((a, b) => a.localeCompare(b));
+
+  [...preferred, ...extras].forEach((target) => {
+    if (!statuses.has(target) || seen.has(target)) return;
+    seen.add(target);
+    ordered.push({ target, status: statuses.get(target) || "unsupported" });
+  });
+  return ordered;
+}
+
+function normalizePromptEmulationStatuses(ruleEntry) {
+  const map = ruleEntry?.emulation_statuses && typeof ruleEntry.emulation_statuses === "object"
+    ? ruleEntry.emulation_statuses
+    : {};
+  return RULE_EMULATION_TARGETS
+    .map((target) => ({
+      target,
+      status: statusBucket(map[target] || map[String(target || "").toLowerCase()] || "unsupported"),
+    }))
+    .filter((entry) => entry.status !== "unsupported");
+}
+
+function buildAdversaryPromptBlock(adversary) {
+  if (!adversary || typeof adversary !== "object") return "";
+  const lines = ["### Related adversary context"];
+  lines.push(`Adversary name: ${adversary.name || "N/A"}`);
+  lines.push(`Confidence: ${String(adversary.confidence ?? "N/A")}`);
+  lines.push(`TLP / PAP classification: ${adversary.tlp || "N/A"} / ${adversary.pap || "N/A"}`);
+  lines.push(`Steps: ${String(adversary.steps ?? 0)}`);
+  lines.push(`Platforms: ${Array.isArray(adversary.platforms) && adversary.platforms.length ? adversary.platforms.join(", ") : "N/A"}`);
+  lines.push(`Ability refs: ${Array.isArray(adversary.ability_refs) && adversary.ability_refs.length ? adversary.ability_refs.join(", ") : "N/A"}`);
+  return lines.join("\n");
+}
+
+function buildStixLlmPrompt(ruleEntry, options = {}) {
+  const hasPattern = Boolean(String(ruleEntry?.rule || "").trim());
+  const task = normalizePromptTask(options.task, hasPattern, options.syntaxOk ?? true);
+  const observables = normalizePromptObservables(ruleEntry);
+  const indicators = normalizePromptIndicators(ruleEntry);
+  const detectionTargets = normalizePromptTargetStatuses(ruleEntry);
+  const emulation = normalizePromptEmulationStatuses(ruleEntry);
+
+  const lines = [];
+  lines.push("### Detection context");
+  lines.push(`Rule name: ${String(ruleEntry?.name || "N/A")}`);
+  lines.push(`Rule description: ${String(ruleEntry?.description || "N/A")}`);
+  lines.push(`Threat technique (TTP): ${String(ruleEntry?.ttp || "N/A")}`);
+  lines.push(`Confidence: ${String(ruleEntry?.confidence ?? "N/A")}`);
+  lines.push(`TLP / PAP classification: ${String(ruleEntry?.tlp || "N/A")} / ${String(ruleEntry?.pap || "N/A")}`);
+
+  lines.push("");
+  lines.push("### Observables available");
+  if (observables.length) {
+    observables.forEach((item) => lines.push(`- ${item}`));
+  } else {
+    lines.push("- none");
+  }
+
+  lines.push("");
+  lines.push("### Related indicators");
+  if (indicators.length) {
+    indicators.forEach((item) => {
+      const label = [item.objectName, item.stixId].filter(Boolean).join(" | ");
+      lines.push(`- ${label || "unknown"}`);
+    });
+  } else {
+    lines.push("- none");
+  }
+
+  lines.push("");
+  lines.push("### Detection targets");
+  if (detectionTargets.length) {
+    detectionTargets.forEach((item) => lines.push(`- ${item.target} -> ${item.status}`));
+  } else {
+    lines.push("- none");
+  }
+
+  lines.push("");
+  lines.push("### Emulation capability");
+  if (emulation.length) {
+    emulation.forEach((item) => lines.push(`- ${item.target} -> ${item.status}`));
+  } else {
+    lines.push("- none");
+  }
+
+  lines.push("");
+  lines.push("### Existing STIX pattern");
+  lines.push(hasPattern ? String(ruleEntry.rule) : "N/A");
+
+  if (options.adversary) {
+    lines.push("");
+    lines.push(buildAdversaryPromptBlock(options.adversary));
+  }
+
+  lines.push("");
+  lines.push("### Task for the model");
+  lines.push(llmTaskInstruction(task));
+  return lines.join("\n").trim();
+}
+
+function collectRuleLabPromptContext() {
+  const inputRule = String(document.getElementById("rulelab-input")?.value || "").trim();
+  const rows = Array.isArray(state.compatibility) ? state.compatibility : [];
+  const targetStatuses = {};
+  const targets = [];
+  const statuses = [];
+  rows.forEach((row) => {
+    const target = String(row?.target || "").trim().toLowerCase();
+    if (!target) return;
+    const status = String(row?.runtime_status || "unsupported").toLowerCase();
+    targetStatuses[target] = status;
+    targets.push(target);
+    statuses.push(status);
+  });
+  return {
+    name: document.getElementById("rulelab-title")?.value || "Rule Lab draft",
+    description: document.getElementById("rulelab-description")?.value || "",
+    ttp: normalizeTtpValue(document.getElementById("rulelab-ttp")?.value || ""),
+    confidence: Number(document.getElementById("rulelab-confidence")?.value || 70),
+    tlp: document.getElementById("rulelab-tlp")?.value || "TLP:GREEN",
+    pap: document.getElementById("rulelab-pap")?.value || "PAP:GREEN",
+    rule: inputRule,
+    observables: normalizePromptObservables({ rule: inputRule }),
+    indicates_list: [],
+    targets,
+    statuses,
+    target_statuses: targetStatuses,
+    emulation_statuses: {},
+  };
+}
+
+async function copyPromptToClipboard(text) {
+  const prompt = String(text || "").trim();
+  if (!prompt) {
+    showToast("common.no_data", true);
+    return;
+  }
+  await navigator.clipboard.writeText(prompt);
+  showToast("toast.copied");
+}
+
 function targetLabel(target, family = "emulation") {
   const normalized = String(target || "").toLowerCase();
   if (family === "detection") {
@@ -654,6 +896,8 @@ function openDetail(title, payload, extra = "") {
 
 function openRuleDetail(entry) {
   state.detailDetectionExport = null;
+  state.detailLlmPrompt = null;
+  const targets = availableRuleEmulationTargets(entry);
   const indicatesList = Array.isArray(entry.indicates_list) && entry.indicates_list.length
     ? entry.indicates_list
     : (entry.indicates ? [entry.indicates] : []);
@@ -674,14 +918,26 @@ function openRuleDetail(entry) {
       </section>
     `
     : "";
+  const emulationSection = `
+    <section class="detail-section">
+      <h4>${escapeHtml(t("detail.rule.available_emulations"))}</h4>
+      <div class="chip-list">
+        ${targets.length
+          ? targets.map((target) => `<span class="rule-observable-tag">${escapeHtml(targetLabel(target, "emulation"))}</span>`).join("")
+          : `<span class="muted">${escapeHtml(t("common.no_data"))}</span>`}
+      </div>
+    </section>
+  `;
   const view = `
     <section class="detail-section">
-      <h4>${escapeHtml(t("rules.col.name"))}</h4>
+      <h4>${escapeHtml(t("detail.rule.summary"))}</h4>
       <div class="detail-grid">
+        <div class="detail-kv"><span class="label">${escapeHtml(t("rules.col.name"))}</span><code>${escapeHtml(entry.name || "-")}</code></div>
         <div class="detail-kv"><span class="label">${escapeHtml(t("common.id"))}</span><code>${escapeHtml(entry.id || "-")}</code></div>
         <div class="detail-kv"><span class="label">${escapeHtml(t("rules.col.confidence"))}</span><code>${escapeHtml(String(entry.confidence ?? "-"))}</code></div>
         <div class="detail-kv"><span class="label">TLP</span>${trafficBadge(entry.tlp, "tlp")}</div>
         <div class="detail-kv"><span class="label">PAP</span>${trafficBadge(entry.pap, "pap")}</div>
+        <div class="detail-kv"><span class="label">TTP</span><code>${escapeHtml(entry.ttp || "-")}</code></div>
       </div>
     </section>
     <section class="detail-section">
@@ -693,9 +949,9 @@ function openRuleDetail(entry) {
         <pre class="detail-code">${escapeHtml(entry.rule || "")}</pre>
       </div>
     </section>
+    ${emulationSection}
     ${indicatesSection}
   `;
-  const targets = availableRuleEmulationTargets(entry);
   const emulationActions = targets.length
     ? `
       <div class="detail-copy-emulation">
@@ -715,11 +971,17 @@ function openRuleDetail(entry) {
       </div>
     `
     : "";
+  const promptActions = `
+    <div class="detail-copy-emulation">
+      <button class="btn btn-ghost" data-action="rule-copy-llm-prompt" data-id="${escapeHtml(entry.id)}" data-task="improve">${escapeHtml(t("detail.copy_prompt_improve"))}</button>
+      <button class="btn btn-ghost" data-action="rule-copy-llm-prompt" data-id="${escapeHtml(entry.id)}" data-task="explain">${escapeHtml(t("detail.copy_prompt_explain"))}</button>
+    </div>
+  `;
   document.getElementById("detail-title").textContent = entry.name || t("rules.col.rule");
-  setDetailModalMode("default");
+  setDetailModalMode("detection", t("detail.stix_pattern"), "");
   document.getElementById("detail-view").innerHTML = view;
   document.getElementById("detail-raw").textContent = JSON.stringify(entry, null, 2);
-  document.getElementById("detail-actions").innerHTML = renderDetailActions(emulationActions);
+  document.getElementById("detail-actions").innerHTML = renderDetailActions(`${promptActions}${emulationActions}`);
   setDetailTab("view");
   document.getElementById("detail-dialog").showModal();
 }
@@ -799,8 +1061,8 @@ function detectionUtilityLinks(target) {
   const normalized = String(target || "").toLowerCase();
   if (normalized === "sigma" || normalized.startsWith("sigma-to-")) {
     return [
-      { label: "Sigma", url: "https://sigmahq.io/" },
-      { label: "Sigma", url: "https://github.com/SigmaHQ/sigma-cli" },
+      { label: "Documentacion de Sigma", url: "https://sigmahq.io/" },
+      { label: "Proyecto GitHub de sigma-cli", url: "https://github.com/SigmaHQ/sigma-cli" },
     ];
   }
   if (normalized === "kql") {
@@ -821,30 +1083,31 @@ function detectionUtilityLinks(target) {
   return [];
 }
 
-function detectionExecutionCommand(target) {
+function detectionExportFileName(title, target) {
+  return `spuc-${sanitizeFileToken(title)}-${sanitizeFileToken(target)}.${detectionExportExtension(target)}`;
+}
+
+function detectionExecutionCommand(target, title = "") {
   const normalized = String(target || "").toLowerCase();
+  const fileName = detectionExportFileName(title || "rule", target);
   if (normalized === "sigma") {
-    return "sigma convert -t splunk -r <rule.yml>";
-  }
-  if (normalized.startsWith("sigma-to-")) {
-    const backend = normalized.replace("sigma-to-", "");
-    return `sigma convert -t ${backend} -r <rule.yml>`;
+    return `sigma convert -t splunk -r ${fileName}`;
   }
   if (normalized === "snort") {
-    return "snort -A console -q -c /etc/snort/snort.conf -R <rule.rules> -r <traffic.pcap>";
+    return `snort -A console -q -c /etc/snort/snort.conf -R ${fileName} -r <traffic.pcap>`;
   }
   if (normalized === "suricata") {
-    return "suricata -S <rule.rules> -r <traffic.pcap> -k none";
+    return `suricata -S ${fileName} -r <traffic.pcap> -k none`;
   }
   if (normalized === "yara") {
-    return "yara <rule.yar> <sample_or_directory>";
+    return `yara ${fileName} <sample_or_directory>`;
   }
   return "";
 }
 
-function renderDetectionDetonationGuide(target) {
+function renderDetectionDetonationGuide(target, title = "") {
   const links = detectionUtilityLinks(target);
-  const command = detectionExecutionCommand(target);
+  const command = detectionExecutionCommand(target, title);
   const steps = detectionHintSteps(target);
   const linksHtml = links.length
     ? `<ul class="hint-steps">${links.map((item) => `<li><a href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(item.label)}</a></li>`).join("")}</ul>`
@@ -912,17 +1175,24 @@ function openConversionDetail(title, stixRule, detail) {
       <div class="detail-code-wrap">
         <div class="detail-code-head">
           <h4>${escapeHtml(tf("detail.output_target", { target: displayTarget }))}</h4>
+          ${copyButtonFor(output || "", t("detail.copy_output"))}
         </div>
         <pre class="detail-code">${escapeHtml(output || t("detail.no_output_for_target"))}</pre>
       </div>
     </section>
-    ${renderDetectionDetonationGuide(target)}
+    ${renderDetectionDetonationGuide(target, title)}
   `;
   const rightActions = [];
+  const promptContext = collectRuleLabPromptContext();
+  const promptTask = statusBucket(detail?.runtime_status) === "unsupported" ? "improve" : "explain";
+  state.detailLlmPrompt = buildStixLlmPrompt(promptContext, {
+    task: promptTask,
+    syntaxOk: state.ruleLab.syntaxOk === true,
+  });
+  rightActions.push(
+    `<button class="btn btn-ghost" data-action="rulelab-copy-llm-prompt" data-task="${escapeHtml(promptTask)}">${escapeHtml(t("detail.copy_prompt"))}</button>`,
+  );
   if (output && String(output).trim()) {
-    rightActions.push(
-      `<button class="btn btn-ghost" data-action="detail-copy" data-copy="${escapeHtml(encodeURIComponent(output))}">${escapeHtml(t("detail.copy_output"))}</button>`,
-    );
     rightActions.push(
       `<button class="btn btn-success" data-action="detail-export-detection">${escapeHtml(tf("detail.export_rule", { target: displayTarget }))}</button>`,
     );
@@ -956,29 +1226,48 @@ function emulationUtilityLinks(target) {
   return [];
 }
 
-function emulationExecutionCommand(target) {
+function emulationExecutionCommand(target, payload = {}) {
   const normalized = String(target || "").toLowerCase();
+  const exportFiles = payload?.export_files || {};
+  const fileName = exportFiles[normalized] || exportFiles[target] || defaultEmulationExportFileName(payload?.ability_id, normalized);
   if (normalized === "spuc-agent") {
-    return "spuc-agent validate --file <payload.json> && spuc-agent run --file <payload.json>";
+    return fileName ? `spuc-agent validate --file ${fileName} && spuc-agent run --file ${fileName}` : "";
   }
   if (normalized === "bash") {
-    return "chmod +x <payload.sh> && ./<payload.sh>";
+    return fileName ? `chmod +x ${fileName} && ./${fileName}` : "";
   }
   if (normalized === "powershell") {
-    return "powershell -ExecutionPolicy Bypass -File .\\payload.ps1";
+    return fileName ? `powershell -ExecutionPolicy Bypass -File .\\${fileName}` : "";
   }
   if (normalized === "atomic-red-team") {
-    return "Invoke-AtomicTest <technique_id> -PathToAtomicsFolder <path>";
+    return fileName ? `Invoke-AtomicTest <technique_id> -PathToAtomicsFolder <path> -InputArgs @{ Path='${fileName}' }` : "";
   }
   if (normalized === "mitre-caldera") {
-    return "curl -X POST <caldera_url>/api/rest -H \"KEY:<api_key>\" -d @<ability.json>";
+    return fileName ? `curl -X POST <caldera_url>/api/rest -H \"KEY:<api_key>\" -d @${fileName}` : "";
   }
   return "";
 }
 
-function renderEmulationDetonationGuide(target) {
+function defaultEmulationExportFileName(abilityId, target) {
+  const id = String(abilityId || "").trim();
+  const normalized = String(target || "").toLowerCase();
+  if (!id || !normalized) return "";
+  const extensionMap = {
+    "spuc-agent": "json",
+    bash: "sh",
+    powershell: "ps1",
+    "atomic-red-team": "yaml",
+    "mitre-caldera": "json",
+  };
+  const extension = extensionMap[normalized];
+  if (!extension) return "";
+  return `${id}-${normalized.replaceAll("-", "_")}.${extension}`;
+}
+
+function renderEmulationDetonationGuide(target, payload = {}) {
   const links = emulationUtilityLinks(target);
-  const command = emulationExecutionCommand(target);
+  const command = emulationExecutionCommand(target, payload);
+  if (!command) return "";
   const steps = ruleExportHintSteps(target);
   const linksHtml = links.length
     ? `<ul class="hint-steps">${links.map((item) => `<li><a href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(item.label)}</a></li>`).join("")}</ul>`
@@ -1009,6 +1298,8 @@ function openEmulationDetail(title, stixRule, payload) {
     ? [...new Set(payload.available_targets.map((target) => String(target || "").toLowerCase()).filter(Boolean))]
     : (selectedTarget ? [selectedTarget] : []);
   const initialTarget = availableTargets.includes(selectedTarget) ? selectedTarget : (availableTargets[0] || selectedTarget);
+  const alternateTargets = availableTargets.filter((target) => target !== initialTarget);
+  const canExport = Boolean(payload?.ability_id && initialTarget);
   const actions = Array.isArray(payload?.actions) ? payload.actions : [];
   const actionsHtml = actions.length
     ? actions
@@ -1032,9 +1323,9 @@ function openEmulationDetail(title, stixRule, payload) {
     <section class="detail-section">
       <h4>${escapeHtml(t("detail.emulation.summary"))}</h4>
       <div class="detail-grid">
-        <div class="detail-kv"><span class="label">${escapeHtml(t("common.status"))}</span>${statusBadge(payload?.status || "unsupported", payload?.status || "error")}</div>
         <div class="detail-kv"><span class="label">${escapeHtml(t("detail.ability"))}</span><code>${escapeHtml(payload?.ability_name || "-")}</code></div>
         <div class="detail-kv"><span class="label">${escapeHtml(t("detail.ability_id"))}</span><code>${escapeHtml(payload?.ability_id || "-")}</code></div>
+        <div class="detail-kv"><span class="label">TTP</span><code>${escapeHtml(payload?.ttp || "-")}</code></div>
         <div class="detail-kv"><span class="label">${escapeHtml(t("detail.level"))}</span><code>${escapeHtml(payload?.emulation_level || "-")}</code></div>
         <div class="detail-kv"><span class="label">${escapeHtml(t("detail.platforms"))}</span><code>${escapeHtml((payload?.platforms || []).join(", ") || "-")}</code></div>
         <div class="detail-kv"><span class="label">${escapeHtml(t("detail.classification"))}</span><code>${escapeHtml(payload?.classification || "-")}</code></div>
@@ -1044,7 +1335,7 @@ function openEmulationDetail(title, stixRule, payload) {
     <section class="detail-section">
       <h4>${escapeHtml(t("detail.emulation.available_exports"))}</h4>
       <div class="chip-list">
-        ${availableTargets.map((target) => `<span class="rule-observable-tag">${escapeHtml(targetLabel(target, "emulation"))}</span>`).join("") || `<span class="muted">${escapeHtml(t("common.no_data"))}</span>`}
+        ${alternateTargets.map((target) => `<span class="rule-observable-tag">${escapeHtml(targetLabel(target, "emulation"))}</span>`).join("") || `<span class="muted">${escapeHtml(t("common.no_data"))}</span>`}
       </div>
     </section>
     <section class="detail-section">
@@ -1056,18 +1347,40 @@ function openEmulationDetail(title, stixRule, payload) {
         <pre class="detail-code">${escapeHtml(stixRule || "")}</pre>
       </div>
     </section>
+    <section class="detail-section">
+      <h4>${escapeHtml(t("detail.emulation.available_exports"))}</h4>
+      <div class="stack">
+        ${availableTargets.length
+          ? availableTargets
+            .map((target) => {
+              const artifacts = payload?.export_artifacts || {};
+              const content = artifacts[target] || artifacts[String(target || "").toLowerCase()] || "";
+              const heading = targetLabel(target, "emulation");
+              return `
+                <div class="detail-code-wrap">
+                  <div class="detail-code-head">
+                    <h4>${escapeHtml(heading)}</h4>
+                    ${copyButtonFor(String(content || ""), t("common.copy"))}
+                  </div>
+                  <pre class="detail-code">${escapeHtml(String(content || "").trim() || t("detail.no_output_for_target"))}</pre>
+                </div>
+              `;
+            })
+            .join("")
+          : `<span class="muted">${escapeHtml(t("common.no_data"))}</span>`}
+      </div>
+    </section>
     ${actionsHtml}
-    ${initialTarget ? `<section id="emulation-detonation-guide">${renderEmulationDetonationGuide(initialTarget)}</section>` : ""}
+    ${initialTarget ? `<section id="emulation-detonation-guide">${renderEmulationDetonationGuide(initialTarget, payload)}</section>` : ""}
   `;
   document.getElementById("detail-title").textContent = title;
-  setDetailModalMode("emulation", detailBadgeText("emulation", initialTarget || selectedTarget));
+  setDetailModalMode("emulation", detailBadgeText("emulation", initialTarget || selectedTarget), payload?.status || "unsupported");
   document.getElementById("detail-view").innerHTML = view;
   document.getElementById("detail-raw").textContent = "";
   document.getElementById("detail-actions").innerHTML = renderDetailActions(
-    payload?.ability_id && initialTarget
-      ? `<button class="btn btn-success" data-action="emulation-export-download" data-ability="${escapeHtml(payload.ability_id)}" data-target="${escapeHtml(initialTarget)}">${escapeHtml(t("detail.emulation.download_payload"))}</button>`
-      : "",
+    `<button class="btn btn-success" data-action="emulation-export-download" data-ability="${escapeHtml(payload?.ability_id || "")}" data-target="${escapeHtml(initialTarget || "")}" ${canExport ? "" : "disabled"}>${escapeHtml(t("detail.emulation.download_payload"))}</button>`,
   );
+  setDetailTab("view");
   document.getElementById("detail-dialog").showModal();
 }
 
@@ -1672,6 +1985,7 @@ function rulesColumnLabel(columnKey) {
     case "confidence": return t("rules.col.confidence");
     case "tlp": return "TLP";
     case "pap": return "PAP";
+    case "ttp": return "TTP";
     case "rule": return t("rules.col.rule");
     case "observables": return t("rules.col.observables");
     case "indicates": return t("rules.col.indicates");
@@ -1767,6 +2081,7 @@ function ruleColumnExportValue(entry, column) {
   if (column === "confidence") return String(entry.confidence ?? "");
   if (column === "tlp") return String(entry.tlp || "");
   if (column === "pap") return String(entry.pap || "");
+  if (column === "ttp") return String(entry.ttp || "");
   if (column === "rule") return String(entry.rule || "");
   if (column === "observables") {
     return (Array.isArray(entry.observables) ? entry.observables : []).join(", ");
@@ -1837,8 +2152,7 @@ function exportDetectionOutputFromDetail() {
     showToast("common.no_data", true);
     return;
   }
-  const ext = detectionExportExtension(payload.target);
-  const fileName = `spuc-${sanitizeFileToken(payload.title)}-${sanitizeFileToken(payload.target)}.${ext}`;
+  const fileName = detectionExportFileName(payload.title, payload.target);
   downloadTextFile(payload.output, fileName, detectionExportMimeType(payload.target));
   showToast("toast.export_ready");
 }
@@ -2001,6 +2315,7 @@ function renderRulesTable() {
     }
     if (isVisible("tlp")) cells.push(`<td>${trafficBadge(entry.tlp, "tlp")}</td>`);
     if (isVisible("pap")) cells.push(`<td>${trafficBadge(entry.pap, "pap")}</td>`);
+    if (isVisible("ttp")) cells.push(`<td><code>${escapeHtml(entry.ttp || "-")}</code></td>`);
     if (isVisible("rule")) {
       cells.push(`
         <td>
@@ -2057,6 +2372,7 @@ function renderRulesTable() {
   if (isVisible("pap")) {
     headers.push(sortableHeader("PAP", "rules-sort-column", "pap", currentSort, "pap_asc", "pap_desc"));
   }
+  if (isVisible("ttp")) headers.push(`<th>TTP</th>`);
   if (isVisible("rule")) headers.push(`<th>${escapeHtml(t("rules.col.rule"))}</th>`);
   if (isVisible("observables")) headers.push(`<th>${escapeHtml(t("rules.col.observables"))}</th>`);
   if (isVisible("indicates")) headers.push(`<th>${escapeHtml(t("rules.col.indicates"))}</th>`);
@@ -2581,6 +2897,13 @@ function renderAdversaryAbilitySelector() {
         <div class="ability-copy">
           <strong>${escapeHtml(entry.name)}</strong>
           <small class="muted">${escapeHtml(entry.id)} · ${escapeHtml((entry.platforms || []).join(", "))}</small>
+          <div class="export-pill-row ability-inline-exports">
+            <button type="button" class="export-pill available" data-action="ability-export" data-id="${entry.id}" data-target="spuc-agent">SPUC</button>
+            <button type="button" class="export-pill available" data-action="ability-export" data-id="${entry.id}" data-target="bash">Bash</button>
+            <button type="button" class="export-pill available" data-action="ability-export" data-id="${entry.id}" data-target="powershell">PowerShell</button>
+            <button type="button" class="export-pill available" data-action="ability-export" data-id="${entry.id}" data-target="atomic-red-team">Atomic</button>
+            <button type="button" class="export-pill available" data-action="ability-export" data-id="${entry.id}" data-target="mitre-caldera">Caldera</button>
+          </div>
         </div>
         <div class="selected-step-actions">
           <button type="button" class="btn btn-ghost" data-action="adversary-move-up" data-id="${entry.id}" ${index === 0 ? "disabled" : ""}>${escapeHtml(t("adversaries.create.move_up"))}</button>
@@ -2683,28 +3006,20 @@ function setAdversaryFormMode(mode, adversary = null) {
   }
 
   const exportRoot = document.getElementById("adversary-export-inline");
-  const exportSelect = document.getElementById("adversary-export-target-inline");
-  if (exportRoot && exportSelect) {
+  if (exportRoot) {
     if (normalized === "edit") {
       exportRoot.classList.remove("hidden");
-      const options = state.adversaryCompose.compatibleExports;
-      exportSelect.innerHTML = options
-        .map((target) => `<option value="${escapeHtml(target)}">${escapeHtml(target)}</option>`)
-        .join("");
-      if (!options.length) {
-        exportSelect.innerHTML = `<option value="">${escapeHtml(t("common.no_data"))}</option>`;
-      }
-      exportSelect.disabled = options.length === 0;
     } else {
       exportRoot.classList.add("hidden");
-      exportSelect.innerHTML = "";
-      exportSelect.disabled = true;
     }
   }
   const exportButton = document.getElementById("adversary-export-inline-button");
   if (exportButton) {
-    exportButton.title = t("adversaries.detail.export");
-    exportButton.setAttribute("aria-label", t("adversaries.detail.export"));
+    const enabled = normalized === "edit" && Boolean(state.adversaryCompose.editingId);
+    exportButton.disabled = !enabled;
+    exportButton.title = t("adversaries.detail.export_full");
+    exportButton.setAttribute("aria-label", t("adversaries.detail.export_full"));
+    exportButton.textContent = t("adversaries.detail.export_full");
   }
   syncAdversaryModalTitle();
 }
@@ -2831,14 +3146,7 @@ async function exportAdversaryFromDialog() {
   if (state.adversaryCompose.mode !== "edit" || !state.adversaryCompose.editingId) {
     return;
   }
-  const select = document.getElementById("adversary-export-target-inline");
-  if (!(select instanceof HTMLSelectElement) || !select.value) {
-    showToast("adversaries.export.unavailable", true);
-    return;
-  }
-  const response = await api(
-    `/api/adversaries/${encodeURIComponent(state.adversaryCompose.editingId)}/export${toQuery({ to: select.value })}`,
-  );
+  const response = await api(`/api/adversaries/${encodeURIComponent(state.adversaryCompose.editingId)}/export`);
   renderDownloadsModal(response.id, response.downloads);
 }
 
@@ -3274,6 +3582,7 @@ async function saveRuleLab() {
     confidence: Number(document.getElementById("rulelab-confidence").value || 70),
     tlp: document.getElementById("rulelab-tlp").value || "TLP:GREEN",
     pap: document.getElementById("rulelab-pap").value || "PAP:GREEN",
+    ttp: normalizeTtpValue(document.getElementById("rulelab-ttp")?.value || ""),
   };
   const response = await api("/api/rules/save", {
     method: "POST",
@@ -3283,6 +3592,16 @@ async function saveRuleLab() {
   openDetail(t("rulelab.saved"), response);
   await Promise.all([loadRules(1), loadOverview()]);
   renderDashboard();
+}
+
+async function copyRuleLabPrompt(task = "") {
+  const context = collectRuleLabPromptContext();
+  const normalizedTask = normalizePromptTask(task, Boolean(context.rule), state.ruleLab.syntaxOk === true);
+  const prompt = buildStixLlmPrompt(context, {
+    task: normalizedTask,
+    syntaxOk: state.ruleLab.syntaxOk === true,
+  });
+  await copyPromptToClipboard(prompt);
 }
 
 function parseRulesFromText(raw) {
@@ -3517,6 +3836,7 @@ async function saveRulesBatch(rules) {
     confidence: Number(document.getElementById("rules-new-confidence").value || 70),
     tlp: document.getElementById("rules-new-tlp").value || "TLP:GREEN",
     pap: document.getElementById("rules-new-pap").value || "PAP:GREEN",
+    ttp: normalizeTtpValue(document.getElementById("rules-new-ttp")?.value || ""),
   };
   let ok = 0;
   let failed = 0;
@@ -3595,6 +3915,7 @@ async function applyBulkRulesEdit() {
         confidence: updateConfidence ? parsedConfidence : Number(entry.confidence || 70),
         tlp: bulkTlp === "KEEP" ? entry.tlp : bulkTlp,
         pap: bulkPap === "KEEP" ? entry.pap : bulkPap,
+        ttp: normalizeTtpValue(entry.ttp || ""),
         indicates: entry.indicates || undefined,
       }),
     });
@@ -4085,9 +4406,12 @@ async function showRuleEmulationDetail(ruleId, target, abilityId) {
     status,
     ability_id: abilityId,
     ability_name: ability.name,
+    ttp: ability.ttp,
     platforms: ability.platforms,
     classification: ability.classification,
     emulation_level: ability.emulation_level,
+    export_files: ability.export_files,
+    export_artifacts: ability.export_artifacts,
     actions: ability.actions,
   });
 }
@@ -4423,8 +4747,9 @@ function installEventHandlers() {
   ruleLabInput.addEventListener("blur", () => {
     setTimeout(() => hideRuleLabAutocomplete(), 100);
   });
-  ["rulelab-title", "rulelab-description", "rulelab-confidence"].forEach((id) => {
+  ["rulelab-title", "rulelab-description", "rulelab-confidence", "rulelab-ttp"].forEach((id) => {
     const node = document.getElementById(id);
+    if (!node) return;
     node.addEventListener("input", scheduleRuleLabAnalysis);
   });
   document.querySelectorAll("[data-action='markdown-tab']").forEach((button) => {
@@ -4450,6 +4775,14 @@ function installEventHandlers() {
     });
   }
   document.getElementById("rulelab-save").addEventListener("click", saveRuleLab);
+  const ruleLabCopyPrompt = document.getElementById("rulelab-copy-prompt");
+  if (ruleLabCopyPrompt) {
+    ruleLabCopyPrompt.addEventListener("click", async () => {
+      const hasPattern = Boolean(String(document.getElementById("rulelab-input")?.value || "").trim());
+      const task = normalizePromptTask("", hasPattern, state.ruleLab.syntaxOk === true);
+      await copyRuleLabPrompt(task);
+    });
+  }
   document.getElementById("adversary-form").addEventListener("submit", createAdversary);
 
   const learningInput = document.getElementById("learning-input");
@@ -4544,7 +4877,7 @@ function installEventHandlers() {
     }
   });
 
-  document.body.addEventListener("mouseup", (event) => {
+  document.body.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const row = target.closest("#rules-table tbody tr[data-rule-row-id]");
@@ -4560,7 +4893,7 @@ function installEventHandlers() {
     }
   });
 
-  document.body.addEventListener("mouseup", async (event) => {
+  document.body.addEventListener("click", async (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const row = target.closest("#adversaries-table tbody tr[data-adversary-row-id]");
@@ -4661,6 +4994,13 @@ function installEventHandlers() {
           await navigator.clipboard.writeText(entry.rule);
           showToast("toast.copied");
         }
+      } else if (action === "rule-copy-llm-prompt") {
+        const entry = state.rules.entries.find((rule) => rule.id === target.dataset.id);
+        if (!entry) return;
+        const prompt = buildStixLlmPrompt(entry, {
+          task: normalizePromptTask(target.dataset.task || "", Boolean(entry.rule), true),
+        });
+        await copyPromptToClipboard(prompt);
       } else if (action === "rule-target-detail") {
         await showRuleTargetDetail(target.dataset.rule, target.dataset.target);
       } else if (action === "rule-emulation-detail") {
@@ -4719,6 +5059,8 @@ function installEventHandlers() {
         exportDetectionOutputFromDetail();
       } else if (action === "detail-cancel") {
         document.getElementById("detail-dialog").close();
+      } else if (action === "rulelab-copy-llm-prompt") {
+        await copyRuleLabPrompt(target.dataset.task || "");
       } else if (action === "compat-show") {
         const entry = state.compatibility.find((item) => item.target === target.dataset.target);
         if (entry && canShowCompatibilityOutput(entry)) {
