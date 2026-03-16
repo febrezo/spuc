@@ -60,9 +60,11 @@ const state = {
     workspaceMode: "welcome",
     sort: "confidence_desc",
     visibleColumns: new Set(["name", "confidence", "tlp", "pap", "steps", "platforms", "exporters"]),
+    viewMode: localStorage.getItem("spuc-web-adversaries-view-mode") || "cards",
   },
   adversaryCompose: {
     search: "",
+    targetPlatform: "",
     platform: "",
     utility: "",
     destination: "",
@@ -1158,6 +1160,26 @@ function renderConfidenceWidget(entry, targetConfidenceRaw) {
   `;
 }
 
+function renderConfidenceBar(rawValue, options = {}) {
+  const numericValue = normalizeConfidenceValue(rawValue);
+  const label = String(options.label || "").trim();
+  const variant = options.variant === "target" ? "target" : (options.variant === "warning" ? "warning" : "rule");
+  const valueText = numericValue == null ? "-" : `${numericValue}/100`;
+  const labelHtml = label ? `<span class="confidence-bar-label">${escapeHtml(label)}</span>` : "";
+  const meterHtml = numericValue == null
+    ? `<div class="confidence-bar-meter confidence-bar-meter-empty"><span>${escapeHtml(valueText)}</span></div>`
+    : `<div class="confidence-bar-meter"><span class="confidence-bar-fill ${variant}" style="width:${numericValue}%;"></span></div>`;
+  return `
+    <div class="confidence-bar-inline">
+      <div class="confidence-bar-head">
+        ${labelHtml}
+        <strong>${escapeHtml(valueText)}</strong>
+      </div>
+      ${meterHtml}
+    </div>
+  `;
+}
+
 function renderRuleTechCard(entry, item, family) {
   const normalizedTarget = String(item?.target || "").toLowerCase();
   const heading = targetLabel(normalizedTarget, family);
@@ -1179,37 +1201,16 @@ function renderRuleTechCard(entry, item, family) {
   const guideLabel = family === "detection" ? t("detail.detection.command") : t("detail.emulation.command");
   const linksLabel = family === "detection" ? t("detail.detection.utility_links") : t("detail.emulation.utility_links");
   const comments = compactConverterComments(item);
-  const previewLineCount = 6;
-  const outputLines = outputText.split(/\r?\n/);
-  const outputPreview = outputLines.slice(0, previewLineCount).join("\n");
-  const hasOutputOverflow = outputLines.length > previewLineCount;
-  const commentsPreviewCount = 2;
-  const commentsPreview = comments.slice(0, commentsPreviewCount);
-  const hasCommentsOverflow = comments.length > commentsPreviewCount;
   const hasOutput = Boolean(rawOutput);
+  const guideId = `rule-tech-guide-${family}-${normalizedTarget.replace(/[^a-z0-9_-]/g, "-")}`;
   return `
-    <details class="rule-tech-card rule-tech-accordion status-${statusBucket(status)}" data-rule-tech-target="${escapeHtml(normalizedTarget)}">
-      <summary class="rule-tech-summary">
-        <div class="rule-tech-head">
-          <h4>${escapeHtml(heading)}</h4>
-          <span class="badge ${statusClass(status)}">${escapeHtml(statusLabel(status))}</span>
-        </div>
-        <p class="muted">${escapeHtml(targetSummaryText(normalizedTarget, family))}</p>
-        ${renderConfidenceWidget(entry, targetConfidence)}
-        ${comments.length
-    ? `<div class="rule-tech-preview ${hasCommentsOverflow ? "rule-tech-preview-truncated" : ""}"><h5>${escapeHtml(t("detail.converter.comments"))}</h5><ul class="hint-steps compact-list">${commentsPreview.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>${hasCommentsOverflow ? `<button class="rule-preview-more" data-action="rule-preview-expand"><span>${escapeHtml(t("detail.preview.more"))}</span><i class="fa-solid fa-angle-down" aria-hidden="true"></i></button>` : ""}</div>`
-    : ""}
-        <div class="rule-tech-preview ${hasOutputOverflow ? "rule-tech-preview-truncated" : ""}">
-          <div class="rule-tech-preview-head">
-            <h5>${escapeHtml(tf("detail.output_target", { target: heading }))}</h5>
-            ${copyButtonFor(rawOutput, t("detail.copy_output"))}
-          </div>
-          ${hasOutput
-    ? `<pre class="detail-code rule-output-preview">${escapeHtml(outputPreview)}</pre>`
-    : `<div class="rule-output-empty">${escapeHtml(t("detail.output.compact_unavailable"))}</div>`}
-          ${hasOutputOverflow ? `<button class="rule-preview-more" data-action="rule-preview-expand"><span>${escapeHtml(t("detail.preview.more"))}</span><i class="fa-solid fa-angle-down" aria-hidden="true"></i></button>` : ""}
-        </div>
-      </summary>
+    <article class="rule-tech-card status-${statusBucket(status)}" data-rule-tech-target="${escapeHtml(normalizedTarget)}">
+      <div class="rule-tech-head">
+        <h4>${escapeHtml(heading)}</h4>
+        <span class="badge ${statusClass(status)}">${escapeHtml(statusLabel(status))}</span>
+      </div>
+      <p class="muted">${escapeHtml(targetSummaryText(normalizedTarget, family))}</p>
+      ${renderConfidenceWidget(entry, targetConfidence)}
       <div class="rule-tech-body">
         ${comments.length
     ? `<div class="rule-tech-comments"><h5>${escapeHtml(t("detail.converter.comments"))}</h5><ul class="hint-steps compact-list">${comments.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul></div>`
@@ -1221,7 +1222,13 @@ function renderRuleTechCard(entry, item, family) {
           </div>
           ${hasOutput ? `<pre class="detail-code">${escapeHtml(outputText)}</pre>` : `<div class="rule-output-empty">${escapeHtml(t("detail.output.compact_unavailable"))}</div>`}
         </div>
-        <div class="rule-tech-guide">
+        <div class="rule-tech-guide-toggle-row">
+          <button type="button" class="rule-preview-more" data-action="rule-tech-guide-toggle" data-target-id="${escapeHtml(guideId)}" aria-expanded="false" aria-controls="${escapeHtml(guideId)}">
+            <span>${escapeHtml(t("detail.preview.more"))}</span>
+            <i class="fa-solid fa-angle-down" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div id="${escapeHtml(guideId)}" class="rule-tech-guide hidden">
           <h5>${escapeHtml(t("detail.rule.how_to_use"))}</h5>
           <div class="rule-tech-guide-body">
             ${guideSteps}
@@ -1231,7 +1238,7 @@ function renderRuleTechCard(entry, item, family) {
           </div>
         </div>
       </div>
-    </details>
+    </article>
   `;
 }
 
@@ -1256,9 +1263,6 @@ function setRuleDetailTab(tab) {
     ? Array.from(pane.querySelectorAll("[data-rule-tech-target]")).find((item) => item.getAttribute("data-rule-tech-target") === focusTarget)
     : null;
   if (node) {
-    if (node instanceof HTMLDetailsElement) {
-      node.open = true;
-    }
     node.classList.add("rule-tech-card-focus");
     node.scrollIntoView({ behavior: "smooth", block: "center" });
     window.setTimeout(() => node.classList.remove("rule-tech-card-focus"), 1200);
@@ -1409,7 +1413,7 @@ async function openRuleDetail(entry, options = {}) {
         <div class="detail-grid">
           <div class="detail-kv"><span class="label">${escapeHtml(t("rules.col.name"))}</span><code>${escapeHtml(entry.name || "-")}</code></div>
           <div class="detail-kv"><span class="label">${escapeHtml(t("common.id"))}</span><code>${escapeHtml(entry.id || "-")}</code></div>
-          <div class="detail-kv"><span class="label">${escapeHtml(t("rules.col.confidence"))}</span><code>${escapeHtml(String(entry.confidence ?? "-"))}</code></div>
+          <div class="detail-kv detail-kv-confidence"><span class="label">${escapeHtml(t("rules.col.confidence"))}</span>${renderConfidenceBar(entry.confidence, { variant: "rule" })}</div>
           <div class="detail-kv"><span class="label">TLP</span>${trafficBadge(entry.tlp, "tlp")}</div>
           <div class="detail-kv"><span class="label">PAP</span>${trafficBadge(entry.pap, "pap")}</div>
           <div class="detail-kv"><span class="label">TTP</span><code>${escapeHtml(entry.ttp || "-")}</code></div>
@@ -1644,14 +1648,14 @@ function openConversionDetail(title, stixRule, detail) {
             ${escapeHtml(t("detail.conversion.confidence"))}
             ${inlineHelpTip(t("detail.tooltip.conversion_confidence"))}
           </span>
-          <code>${escapeHtml(String(detail?.conversion_confidence ?? "-"))}</code>
+          ${renderConfidenceBar(detail?.conversion_confidence, { variant: "target" })}
         </div>
         <div class="detail-kv">
           <span class="label label-with-help">
             ${escapeHtml(t("detail.rule.confidence"))}
             ${inlineHelpTip(t("detail.tooltip.rule_confidence"))}
           </span>
-          <code>${escapeHtml(String(detail?.rule_confidence ?? "-"))}</code>
+          ${renderConfidenceBar(detail?.rule_confidence, { variant: "rule" })}
         </div>
       </div>
       <div class="muted">${escapeHtml(detail?.summary || t("detail.no_summary"))}</div>
@@ -2149,7 +2153,7 @@ async function bootstrap() {
   document.getElementById("logout-button").classList.toggle("hidden", !state.bootstrap.auth.show_logout);
 
   const adminNavSection = document.getElementById("admin-nav-section");
-  if (state.bootstrap.auth.no_login || !state.principal || state.principal.role !== "admin") {
+  if (!state.principal || state.principal.role !== "admin") {
     document.querySelector('[data-route="admin"]')?.classList.add("hidden");
     adminNavSection?.classList.add("hidden");
   } else {
@@ -2186,7 +2190,7 @@ function enterApplication() {
 async function loadSharedData() {
   await Promise.all([loadOverview(), loadRules(), loadAbilities(), loadAdversaries(), loadStixObjects()]);
   await loadLearning();
-  if (state.principal?.role === "admin" && !state.bootstrap?.auth?.no_login) {
+  if (state.principal?.role === "admin") {
     await loadAdminUsers();
   }
   renderDashboard();
@@ -2887,8 +2891,10 @@ function renderRulesCards() {
             <div class="rule-card-title-wrap">
               <h4>${escapeHtml(entry.name || t("rules.col.rule"))}</h4>
               <div class="rule-card-subtitle">
-                <span class="rule-card-id">${escapeHtml(entry.id)}</span>
-                <span class="badge ${statusClass(globalStatus)}">${escapeHtml(statusLabel(globalStatus))}</span>
+                <span class="rule-card-id-stack">
+                  <span class="rule-card-id">${escapeHtml(entry.id)}</span>
+                  <span class="badge ${statusClass(globalStatus)}">${escapeHtml(statusLabel(globalStatus))}</span>
+                </span>
               </div>
             </div>
             <div class="rule-card-markings">
@@ -2899,7 +2905,7 @@ function renderRulesCards() {
 
           <section class="rule-card-body">
             <div class="rule-card-grid">
-              <div class="rule-card-kv"><span>${escapeHtml(t("rules.col.confidence"))}</span><strong>${escapeHtml(String(entry.confidence ?? "-"))}</strong></div>
+              <div class="rule-card-kv rule-card-kv-confidence">${renderConfidenceBar(entry.confidence, { label: t("rules.col.confidence"), variant: "rule" })}</div>
               <div class="rule-card-kv"><span>TTP</span><strong>${escapeHtml(entry.ttp || "-")}</strong></div>
               <div class="rule-card-kv"><span>${escapeHtml(t("rules.col.indicates"))}</span><strong>${escapeHtml(String(indicatesList.length))}</strong></div>
               <div class="rule-card-kv"><span>${escapeHtml(t("rules.col.observables"))}</span><strong>${escapeHtml(String(observables.length))}</strong></div>
@@ -3037,7 +3043,7 @@ function renderRulesTable() {
       `);
     }
     if (isVisible("confidence")) {
-      cells.push(`<td><input type="number" min="0" max="100" class="rules-confidence-input" data-id="${entry.id}" value="${Number(entry.confidence || 0)}"></td>`);
+      cells.push(`<td>${renderConfidenceBar(entry.confidence, { variant: "rule" })}</td>`);
     }
     if (markingsVisible) {
       cells.push(`
@@ -3295,12 +3301,6 @@ function applyAdversariesClientFilters(entries) {
   return applyAdversariesClientSort(filtered, state.adversaries.sort || "confidence_desc");
 }
 
-function adversaryConfidenceBadge(confidence) {
-  const value = Number(confidence || 0);
-  const severity = value >= 80 ? "success" : value >= 50 ? "warning" : "error";
-  return `<span class="badge ${severity} adversary-confidence-tag">${escapeHtml(`${value}/100`)}</span>`;
-}
-
 function updateAdversariesBulkState() {
   const count = state.adversaries.selected.size;
   const filteredEntries = applyAdversariesClientFilters(state.adversaries.allEntries || []);
@@ -3323,7 +3323,12 @@ function updateAdversariesBulkState() {
   }
   if (selectAllButton) {
     selectAllButton.disabled = filteredEntries.length === 0;
-    selectAllButton.textContent = allFilteredSelected ? t("adversaries.bulk.deselect_all") : t("adversaries.bulk.select_all");
+    const selectLabel = allFilteredSelected ? t("adversaries.bulk.deselect_all") : t("adversaries.bulk.select_all");
+    selectAllButton.title = selectLabel;
+    selectAllButton.setAttribute("aria-label", selectLabel);
+    selectAllButton.innerHTML = allFilteredSelected
+      ? '<i class="fa-regular fa-square-check" aria-hidden="true"></i>'
+      : '<i class="fa-regular fa-square" aria-hidden="true"></i>';
   }
   const bulkEdit = document.getElementById("adversaries-bulk-edit");
   if (bulkEdit) {
@@ -3333,6 +3338,109 @@ function updateAdversariesBulkState() {
   const countLabel = document.getElementById("adversaries-bulk-count");
   if (countLabel) {
     countLabel.textContent = count > 0 ? tf("adversaries.bulk.selected_count", { count }) : "";
+  }
+}
+
+function renderAdversariesCards() {
+  const cardsRoot = document.getElementById("adversaries-cards");
+  if (!cardsRoot) return;
+  if (!state.adversaries.entries.length) {
+    cardsRoot.innerHTML = `<div class="rules-cards-empty">${escapeHtml(t("common.no_data"))}</div>`;
+    return;
+  }
+
+  const exportTargets = ["spuc-agent", "bash", "powershell", "atomic-red-team", "mitre-caldera"];
+  cardsRoot.innerHTML = state.adversaries.entries.map((entry, rowIndex) => {
+    const compatible = new Set((entry.compatible_exports || []).map((target) => String(target).toLowerCase()));
+    const exporterPills = exportTargets
+      .map((target) => {
+        const available = compatible.has(target);
+        return `
+          <button
+            class="export-pill ${available ? "available" : "unavailable"}"
+            data-action="adversary-export"
+            data-id="${entry.id}"
+            data-target="${target}"
+            ${available ? "" : "disabled"}
+            title="${available ? escapeHtml(t("adversaries.export.available")) : escapeHtml(t("adversaries.export.unavailable"))}"
+          >
+            ${escapeHtml(target)}
+          </button>
+        `;
+      })
+      .join("");
+
+    return `
+      <article class="rule-card adversary-card" data-adversary-card-id="${escapeHtml(entry.id)}">
+        <header class="rule-card-head">
+          <label class="rule-card-check">
+            <input type="checkbox" data-action="adversary-select" data-id="${entry.id}" data-index="${rowIndex}" ${state.adversaries.selected.has(entry.id) ? "checked" : ""}>
+          </label>
+          <div class="rule-card-title-wrap">
+            <h4>${escapeHtml(entry.name || t("adversaries.col.name"))}</h4>
+            <div class="rule-card-subtitle">
+              <span class="rule-card-id-stack">
+                <span class="rule-card-id">${escapeHtml(entry.id)}</span>
+              </span>
+            </div>
+          </div>
+          <div class="rule-card-markings">
+            ${trafficBadge(entry.tlp || "TLP:GREEN", "tlp")}
+            ${trafficBadge(entry.pap || "PAP:GREEN", "pap")}
+          </div>
+        </header>
+
+        <section class="rule-card-body">
+          <div class="rule-card-grid">
+            <div class="rule-card-kv rule-card-kv-confidence">${renderConfidenceBar(entry.confidence, { label: t("adversaries.col.confidence"), variant: "target" })}</div>
+            <div class="rule-card-kv"><span>${escapeHtml(t("adversaries.col.steps"))}</span><strong>${escapeHtml(String(entry.steps ?? 0))}</strong></div>
+          </div>
+
+          <div class="rule-card-pill-columns rule-card-pill-columns-2">
+            <div class="rule-card-pill-group">
+              <span class="rule-card-pill-label">${escapeHtml(t("adversaries.col.platforms"))}</span>
+              <div class="rule-card-tags">
+                ${(entry.platforms || []).length
+                  ? (entry.platforms || []).map((platform) => `<span class="rule-observable-tag">${escapeHtml(platform)}</span>`).join("")
+                  : `<span class="muted">${escapeHtml(t("common.no_data"))}</span>`}
+              </div>
+            </div>
+            <div class="rule-card-pill-group">
+              <span class="rule-card-pill-label">${escapeHtml(t("adversaries.col.exporters"))}</span>
+              <div class="export-pill-row">${exporterPills}</div>
+            </div>
+          </div>
+        </section>
+
+        <footer class="rule-card-actions">
+          <button class="btn btn-ghost" data-action="adversary-show" data-id="${escapeHtml(entry.id)}">${escapeHtml(t("common.details"))}</button>
+        </footer>
+      </article>
+    `;
+  }).join("");
+}
+
+function updateAdversariesViewModeUI() {
+  const mode = state.adversaries.viewMode === "table" ? "table" : "cards";
+  const tableBtn = document.getElementById("adversaries-view-table");
+  const cardsBtn = document.getElementById("adversaries-view-cards");
+  const tableWrap = document.getElementById("adversaries-table-wrap");
+  const cardsWrap = document.getElementById("adversaries-cards");
+  const columnsToggle = document.getElementById("adversaries-columns-toggle");
+
+  if (tableBtn) tableBtn.classList.toggle("active", mode === "table");
+  if (cardsBtn) cardsBtn.classList.toggle("active", mode === "cards");
+  if (tableWrap) tableWrap.classList.toggle("hidden", mode !== "table");
+  if (cardsWrap) cardsWrap.classList.toggle("hidden", mode !== "cards");
+  if (columnsToggle) columnsToggle.disabled = mode !== "table";
+}
+
+function setAdversariesViewMode(mode) {
+  state.adversaries.viewMode = mode === "table" ? "table" : "cards";
+  localStorage.setItem("spuc-web-adversaries-view-mode", state.adversaries.viewMode);
+  updateAdversariesViewModeUI();
+  if (state.adversaries.allEntries.length > 0) {
+    renderAdversariesTable();
   }
 }
 
@@ -3373,7 +3481,7 @@ function renderAdversariesTable() {
       `<td><input type="checkbox" data-action="adversary-select" data-id="${entry.id}" data-index="${rowIndex}" ${state.adversaries.selected.has(entry.id) ? "checked" : ""}></td>`,
     ];
     if (isVisible("name")) cells.push(`<td>${escapeHtml(entry.name)}</td>`);
-    if (isVisible("confidence")) cells.push(`<td>${adversaryConfidenceBadge(entry.confidence)}</td>`);
+    if (isVisible("confidence")) cells.push(`<td>${renderConfidenceBar(entry.confidence, { variant: "target" })}</td>`);
     if (markingsVisible) {
       cells.push(`
         <td>
@@ -3428,7 +3536,10 @@ function renderAdversariesTable() {
     </thead>
     <tbody>${rows.length ? rows.join("") : emptyRow}</tbody>
   `;
-  document.getElementById("adversaries-meta").textContent = `${state.adversaries.entries.length}/${state.adversaries.total} ${t("common.entries")}`;
+  renderAdversariesCards();
+  updateAdversariesViewModeUI();
+  const modeLabel = state.adversaries.viewMode === "cards" ? t("rules.view.cards") : t("rules.view.table");
+  document.getElementById("adversaries-meta").textContent = `${state.adversaries.entries.length}/${state.adversaries.total} ${t("common.entries")} · ${modeLabel}`;
   renderPager("adversaries-pager", state.adversaries.page, state.adversaries.pageSize, state.adversaries.total, "adversaries");
   updateAdversariesBulkState();
 }
@@ -3487,12 +3598,24 @@ function scheduleAdversariesReload() {
 
 function syncAdversaryComposerFromInputs() {
   const searchNode = document.getElementById("adversary-ability-search");
+  const targetPlatformNode = document.getElementById("adversary-target-platform");
   const platformNode = document.getElementById("adversary-ability-platform");
   const utilityNode = document.getElementById("adversary-ability-utility");
   const destinationNode = document.getElementById("adversary-ability-destination");
   const minConfidenceNode = document.getElementById("adversary-ability-min-confidence");
   if (searchNode) state.adversaryCompose.search = searchNode.value.trim();
-  if (platformNode) state.adversaryCompose.platform = platformNode.value.trim();
+  if (targetPlatformNode) {
+    state.adversaryCompose.targetPlatform = String(targetPlatformNode.value || "").trim().toLowerCase();
+  }
+  if (platformNode) {
+    const forced = state.adversaryCompose.targetPlatform;
+    if (forced) {
+      platformNode.value = forced;
+      state.adversaryCompose.platform = forced;
+    } else {
+      state.adversaryCompose.platform = platformNode.value.trim();
+    }
+  }
   if (utilityNode) state.adversaryCompose.utility = utilityNode.value.trim();
   if (destinationNode) state.adversaryCompose.destination = destinationNode.value.trim();
   if (minConfidenceNode) {
@@ -3503,6 +3626,7 @@ function syncAdversaryComposerFromInputs() {
 
 function resetAdversaryComposer() {
   state.adversaryCompose.search = "";
+  state.adversaryCompose.targetPlatform = "";
   state.adversaryCompose.platform = "";
   state.adversaryCompose.utility = "";
   state.adversaryCompose.destination = "";
@@ -3512,11 +3636,13 @@ function resetAdversaryComposer() {
   state.adversaryCompose.exportPreviewByTarget = {};
   state.adversaryCompose.exportPreviewLoading = false;
   const searchNode = document.getElementById("adversary-ability-search");
+  const targetPlatformNode = document.getElementById("adversary-target-platform");
   const platformNode = document.getElementById("adversary-ability-platform");
   const utilityNode = document.getElementById("adversary-ability-utility");
   const destinationNode = document.getElementById("adversary-ability-destination");
   const minConfidenceNode = document.getElementById("adversary-ability-min-confidence");
   if (searchNode) searchNode.value = "";
+  if (targetPlatformNode) targetPlatformNode.value = "";
   if (platformNode) platformNode.value = "";
   if (utilityNode) utilityNode.value = "";
   if (destinationNode) destinationNode.value = "";
@@ -3617,6 +3743,73 @@ function setSelectOptions(selectNode, values, allLabel, selectedValue = "") {
   selectNode.value = unique.includes(current) ? current : "";
 }
 
+function renderAdversaryTargetPlatformOptions() {
+  const targetNode = document.getElementById("adversary-target-platform");
+  if (!(targetNode instanceof HTMLSelectElement)) return;
+  const values = state.abilities.entries
+    .flatMap((entry) => entry.platforms || [])
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean);
+  const unique = [...new Set(values)].sort((a, b) => a.localeCompare(b));
+  const selected = state.adversaryCompose.targetPlatform || "";
+  targetNode.innerHTML = [
+    '<option value="">--</option>',
+    ...unique.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`),
+  ].join("");
+  if (selected && unique.includes(selected)) {
+    targetNode.value = selected;
+  } else if (!selected) {
+    targetNode.value = "";
+  }
+}
+
+function recomputeAdversaryCompatibleExportsFromSelection() {
+  const selectedAbilities = state.adversaryCompose.selectedOrder
+    .map((id) => state.abilities.entries.find((entry) => entry.id === id))
+    .filter(Boolean);
+  let compatible = [];
+  selectedAbilities.forEach((entry, index) => {
+    const targets = [...new Set((entry.export_targets || []).map((value) => String(value).toLowerCase()))];
+    if (index === 0) {
+      compatible = targets;
+      return;
+    }
+    compatible = compatible.filter((target) => targets.includes(target));
+  });
+  state.adversaryCompose.compatibleExports = [...new Set(compatible)].sort((a, b) => a.localeCompare(b));
+}
+
+function syncAdversaryExportInlineControls() {
+  const normalized = state.adversaryCompose.mode === "edit" ? "edit" : "create";
+  const exportRoot = document.getElementById("adversary-export-inline");
+  if (exportRoot) {
+    exportRoot.classList.toggle("hidden", normalized !== "edit");
+  }
+
+  const exportButton = document.getElementById("adversary-export-inline-button");
+  const exportTarget = document.getElementById("adversary-export-inline-target");
+  const currentValue = exportTarget instanceof HTMLSelectElement ? String(exportTarget.value || "") : "";
+  const options = [...new Set((state.adversaryCompose.compatibleExports || []).map((target) => String(target).toLowerCase()))];
+
+  if (exportTarget instanceof HTMLSelectElement) {
+    exportTarget.innerHTML = options
+      .map((target) => `<option value="${escapeHtml(target)}">${escapeHtml(target)}</option>`)
+      .join("");
+    const enabled = normalized === "edit" && Boolean(state.adversaryCompose.editingId) && options.length > 0;
+    exportTarget.disabled = !enabled;
+    if (enabled) {
+      exportTarget.value = options.includes(currentValue) ? currentValue : options[0];
+    }
+  }
+  if (exportButton) {
+    const enabled = normalized === "edit" && Boolean(state.adversaryCompose.editingId) && options.length > 0;
+    exportButton.disabled = !enabled;
+    exportButton.title = t("detail.rule.export");
+    exportButton.setAttribute("aria-label", t("detail.rule.export"));
+    exportButton.textContent = t("detail.rule.export");
+  }
+}
+
 function renderAdversaryAbilityFilterOptions() {
   const platformNode = document.getElementById("adversary-ability-platform");
   const utilityNode = document.getElementById("adversary-ability-utility");
@@ -3625,6 +3818,16 @@ function renderAdversaryAbilityFilterOptions() {
   const utilities = state.abilities.entries.map((entry) => entry.classification || "");
   const destinations = state.abilities.entries.flatMap((entry) => entry.export_targets || []);
   setSelectOptions(platformNode, platforms, t("common.all_platforms"), state.adversaryCompose.platform);
+  if (platformNode instanceof HTMLSelectElement) {
+    const forced = state.adversaryCompose.targetPlatform;
+    if (forced) {
+      platformNode.value = forced;
+      platformNode.disabled = true;
+      state.adversaryCompose.platform = forced;
+    } else {
+      platformNode.disabled = false;
+    }
+  }
   setSelectOptions(utilityNode, utilities, t("common.all_utility_types"), state.adversaryCompose.utility);
   setSelectOptions(destinationNode, destinations, t("common.all_destinations"), state.adversaryCompose.destination);
 }
@@ -3692,6 +3895,7 @@ function moveAdversarySelectedAbility(id, direction) {
 
 function renderAdversaryAbilitySelector() {
   syncAdversaryComposerFromInputs();
+  renderAdversaryTargetPlatformOptions();
   renderAdversaryAbilityFilterOptions();
   const availableRoot = document.getElementById("adversary-abilities");
   const selectedRoot = document.getElementById("adversary-selected");
@@ -3765,6 +3969,8 @@ function renderAdversaryAbilitySelector() {
   if (selectedCount) {
     selectedCount.textContent = String(state.adversaryCompose.selectedOrder.length);
   }
+  recomputeAdversaryCompatibleExportsFromSelection();
+  syncAdversaryExportInlineControls();
   renderAdversaryEmulablePlatforms();
   renderAdversaryExecutionCriteria();
   setAdversaryFormSubmitState();
@@ -3931,11 +4137,13 @@ async function persistAdversaryAutosave() {
   syncAdversaryComposerFromInputs();
   const selected = [...state.adversaryCompose.selectedOrder];
   const name = document.getElementById("adversary-name")?.value?.trim() || "";
-  if (!name || selected.length === 0) return;
+  const targetPlatform = String(document.getElementById("adversary-target-platform")?.value || "").trim().toLowerCase();
+  if (!name || !targetPlatform || selected.length === 0) return;
   const payload = {
     name,
     description: document.getElementById("adversary-description")?.value?.trim() || "",
     confidence: Number(document.getElementById("adversary-confidence")?.value || 70),
+    target_platform: targetPlatform,
     ability_ids: selected,
     order: selected,
   };
@@ -3977,6 +4185,7 @@ function adversaryFormSignature() {
     name: document.getElementById("adversary-name")?.value?.trim() || "",
     description: document.getElementById("adversary-description")?.value?.trim() || "",
     confidence: Number(document.getElementById("adversary-confidence")?.value || "70"),
+    target_platform: String(document.getElementById("adversary-target-platform")?.value || "").trim().toLowerCase(),
     selected: [...state.adversaryCompose.selectedOrder],
   };
   return JSON.stringify(payload);
@@ -4030,7 +4239,11 @@ function commitAdversaryTitleEdit(cancel = false) {
 
 function setAdversaryFormMode(mode, adversary = null) {
   const normalized = mode === "edit" ? "edit" : "create";
+  const initialTargetPlatform = normalized === "edit"
+    ? String(adversary?.target_platform || "").trim().toLowerCase()
+    : "";
   state.adversaryCompose.mode = normalized;
+  state.adversaryCompose.targetPlatform = initialTargetPlatform;
   state.adversaryCompose.editingId = normalized === "edit" ? adversary?.id || null : null;
   state.adversaryCompose.compatibleExports = normalized === "edit"
     ? [...new Set((adversary?.compatible_exports || []).map((target) => String(target).toLowerCase()))]
@@ -4048,41 +4261,11 @@ function setAdversaryFormMode(mode, adversary = null) {
     inlineTitle.value = "";
   }
   if (submit) {
-    submit.textContent = normalized === "edit" ? t("common.save") : t("common.apply");
-    submit.classList.add("hidden");
+    submit.textContent = normalized === "edit" ? t("common.save") : t("adversaries.create.submit");
+    submit.classList.remove("hidden", "btn-primary", "btn-success");
+    submit.classList.add(normalized === "edit" ? "btn-primary" : "btn-success");
   }
-
-  const exportRoot = document.getElementById("adversary-export-inline");
-  if (exportRoot) {
-    if (normalized === "edit") {
-      exportRoot.classList.remove("hidden");
-    } else {
-      exportRoot.classList.add("hidden");
-    }
-  }
-  const exportButton = document.getElementById("adversary-export-inline-button");
-  const exportTarget = document.getElementById("adversary-export-inline-target");
-  if (exportButton) {
-    const enabled = normalized === "edit" && Boolean(state.adversaryCompose.editingId);
-    exportButton.disabled = !enabled;
-    exportButton.title = t("detail.rule.export");
-    exportButton.setAttribute("aria-label", t("detail.rule.export"));
-    exportButton.textContent = t("detail.rule.export");
-  }
-  if (exportTarget instanceof HTMLSelectElement) {
-    const options = [...new Set((state.adversaryCompose.compatibleExports || []).map((target) => String(target).toLowerCase()))];
-    exportTarget.innerHTML = options
-      .map((target) => `<option value="${escapeHtml(target)}">${escapeHtml(target)}</option>`)
-      .join("");
-    const enabled = normalized === "edit" && Boolean(state.adversaryCompose.editingId) && options.length > 0;
-    exportTarget.disabled = !enabled;
-    if (enabled) {
-      exportTarget.value = options[0];
-    }
-    if (exportButton) {
-      exportButton.disabled = !enabled;
-    }
-  }
+  syncAdversaryExportInlineControls();
   renderAdversaryExecutionCriteria();
   syncAdversaryModalTitle();
 }
@@ -4091,8 +4274,9 @@ function setAdversaryFormSubmitState() {
   const submit = document.getElementById("adversary-submit");
   if (!(submit instanceof HTMLButtonElement)) return;
   const hasName = Boolean(document.getElementById("adversary-name")?.value?.trim());
+  const hasTargetPlatform = Boolean(String(document.getElementById("adversary-target-platform")?.value || "").trim());
   const hasSteps = state.adversaryCompose.selectedOrder.length > 0;
-  submit.disabled = !hasName || !hasSteps;
+  submit.disabled = !hasName || !hasTargetPlatform || !hasSteps;
 }
 
 function openAdversaryDialog() {
@@ -4119,6 +4303,10 @@ async function openAdversaryEditor(adversaryId) {
   document.getElementById("adversary-name").value = adversary.name || "";
   document.getElementById("adversary-description").value = adversary.description || "";
   document.getElementById("adversary-confidence").value = String(adversary.confidence ?? 70);
+  const targetPlatform = document.getElementById("adversary-target-platform");
+  if (targetPlatform instanceof HTMLSelectElement) {
+    targetPlatform.value = String(adversary.target_platform || "").trim().toLowerCase();
+  }
   state.adversaryCompose.selectedOrder = Array.isArray(adversary.ability_refs)
     ? [...adversary.ability_refs]
     : [];
@@ -5372,6 +5560,7 @@ async function loadAdminUsers() {
     rows,
   );
   await loadAdminOauthProviders();
+  await loadAdminRuntimeSettings();
 }
 
 async function loadAdminOauthProviders() {
@@ -5402,6 +5591,37 @@ async function loadAdminOauthProviders() {
       </div>
     </article>
   `).join("");
+}
+
+async function loadAdminRuntimeSettings() {
+  const form = document.getElementById("admin-runtime-settings");
+  if (!(form instanceof HTMLFormElement)) return;
+  if (state.principal?.role !== "admin") {
+    form.classList.add("hidden");
+    return;
+  }
+
+  const response = await api("/api/admin/settings");
+  const entry = response?.entry || {};
+  const sigmaUrl = document.getElementById("admin-sigma-rpc-url");
+  const sigmaToken = document.getElementById("admin-sigma-rpc-token");
+  const noLogin = document.getElementById("admin-no-login");
+  const tokenHint = document.getElementById("admin-sigma-rpc-token-hint");
+
+  if (sigmaUrl instanceof HTMLInputElement) {
+    sigmaUrl.value = entry.sigma_rpc_url || "";
+  }
+  if (sigmaToken instanceof HTMLInputElement) {
+    sigmaToken.value = "";
+  }
+  if (noLogin instanceof HTMLInputElement) {
+    noLogin.checked = Boolean(entry.no_login);
+  }
+  if (tokenHint) {
+    tokenHint.textContent = entry.sigma_rpc_token_set
+      ? t("admin.settings.sigma_token_set")
+      : t("admin.settings.sigma_token_unset");
+  }
 }
 
 function renderDownloadsModal(title, downloads) {
@@ -5723,6 +5943,14 @@ function installEventHandlers() {
     const eventName = node.tagName === "SELECT" ? "change" : "input";
     node.addEventListener(eventName, () => renderAdversaryAbilitySelector());
   });
+  const adversaryTargetPlatform = document.getElementById("adversary-target-platform");
+  if (adversaryTargetPlatform instanceof HTMLSelectElement) {
+    adversaryTargetPlatform.addEventListener("change", () => {
+      renderAdversaryAbilitySelector();
+      setAdversaryFormSubmitState();
+      scheduleAdversaryAutoSave();
+    });
+  }
   const adversaryExportInlineButton = document.getElementById("adversary-export-inline-button");
   if (adversaryExportInlineButton) {
     adversaryExportInlineButton.addEventListener("click", async () => {
@@ -5876,6 +6104,26 @@ function installEventHandlers() {
     event.target.reset();
   });
 
+  const runtimeSettingsForm = document.getElementById("admin-runtime-settings");
+  if (runtimeSettingsForm) {
+    runtimeSettingsForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const sigmaUrl = document.getElementById("admin-sigma-rpc-url")?.value || "";
+      const sigmaToken = document.getElementById("admin-sigma-rpc-token")?.value || "";
+      const noLogin = Boolean(document.getElementById("admin-no-login")?.checked);
+      await api("/api/admin/settings", {
+        method: "POST",
+        body: JSON.stringify({
+          sigma_rpc_url: sigmaUrl,
+          sigma_rpc_token: sigmaToken,
+          no_login: noLogin,
+        }),
+      });
+      showToast("toast.saved");
+      await bootstrap();
+    });
+  }
+
   document.getElementById("detail-close").addEventListener("click", () => {
     document.getElementById("detail-dialog").close();
   });
@@ -6000,6 +6248,8 @@ function installEventHandlers() {
         setRulesViewMode(target.dataset.mode || "table");
       } else if (action === "adversaries-sort-column") {
         await toggleAdversariesSortColumn(target.dataset.column);
+      } else if (action === "adversaries-view-mode") {
+        setAdversariesViewMode(target.dataset.mode || "table");
       } else if (action === "rules-type-toggle") {
         const type = target.dataset.type;
         if (!type) return;
@@ -6031,6 +6281,8 @@ function installEventHandlers() {
       } else if (action === "adversaries-page") {
         state.adversaries.page = Number(target.dataset.page || "1");
         renderAdversariesTable();
+      } else if (action === "adversary-show") {
+        await openAdversaryEditor(target.dataset.id || "");
       } else if (action === "rule-show") {
         const entry = state.rules.entries.find((rule) => rule.id === target.dataset.id);
         if (entry) await openRuleDetail(entry);
@@ -6242,12 +6494,14 @@ function installEventHandlers() {
           await downloadAbility(entry.ability_id, String(select.value || "").toLowerCase());
           showToast("toast.export_ready");
         }
-      } else if (action === "rule-preview-expand") {
+      } else if (action === "rule-tech-guide-toggle") {
         event.preventDefault();
         event.stopPropagation();
-        const details = target.closest("details");
-        if (details instanceof HTMLDetailsElement) {
-          details.open = true;
+        const targetId = target.dataset.targetId || "";
+        const panel = targetId ? document.getElementById(targetId) : null;
+        if (panel) {
+          const hidden = panel.classList.toggle("hidden");
+          target.setAttribute("aria-expanded", String(!hidden));
         }
       } else if (action === "detail-copy") {
         event.preventDefault();
@@ -6360,7 +6614,7 @@ function installEventHandlers() {
       const index = Number(target.dataset.index || "-1");
       if (event.shiftKey && index >= 0 && state.rules.lastSelectionIndex >= 0) {
         const [from, to] = [state.rules.lastSelectionIndex, index].sort((a, b) => a - b);
-        const checkboxes = [...document.querySelectorAll('#rules-table tbody input[data-action="rule-select"]')];
+        const checkboxes = [...document.querySelectorAll('input[data-action="rule-select"]')];
         checkboxes.forEach((node) => {
           if (!(node instanceof HTMLInputElement)) return;
           const nodeIndex = Number(node.dataset.index || "-1");
@@ -6384,7 +6638,7 @@ function installEventHandlers() {
       const index = Number(target.dataset.index || "-1");
       if (event.shiftKey && index >= 0 && state.adversaries.lastSelectionIndex >= 0) {
         const [from, to] = [state.adversaries.lastSelectionIndex, index].sort((a, b) => a - b);
-        const checkboxes = [...document.querySelectorAll('#adversaries-table tbody input[data-action="adversary-select"]')];
+        const checkboxes = [...document.querySelectorAll('input[data-action="adversary-select"]')];
         checkboxes.forEach((node) => {
           if (!(node instanceof HTMLInputElement)) return;
           const nodeIndex = Number(node.dataset.index || "-1");

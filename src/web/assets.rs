@@ -123,8 +123,6 @@ mod tests {
         assert!(APP_JS.contains("rule-detail-pane-overview"));
         assert!(APP_JS.contains("rule-detail-pane-detection"));
         assert!(APP_JS.contains("rule-detail-pane-emulation"));
-        assert!(APP_JS.contains("rule-tech-accordion"));
-        assert!(APP_JS.contains("if (node instanceof HTMLDetailsElement)"));
         assert!(APP_JS.contains("data-action=\"rule-open-in-lab\""));
         assert!(APP_JS.contains("data-action=\"rule-detail-export\""));
         assert!(APP_JS.contains("openRuleInLab(entry)"));
@@ -139,14 +137,13 @@ mod tests {
         assert!(APP_JS.contains("fa-circle-info"));
         assert!(APP_JS.contains("fa-shield-halved"));
         assert!(APP_JS.contains("fa-gears"));
-        assert!(APP_JS.contains("const previewLineCount = 6;"));
-        assert!(APP_JS.contains("rule-tech-preview-truncated"));
         assert!(APP_JS.contains("detail.preview.more"));
-        assert!(!APP_JS.contains("defaultOpen ? \"open\" : \"\""));
         assert!(APP_JS.contains("function renderConfidenceWidget(entry, targetConfidenceRaw) {"));
+        assert!(APP_JS.contains("function renderConfidenceBar(rawValue, options = {}) {"));
         assert!(APP_JS.contains("rule-confidence-grid"));
-        assert!(APP_JS.contains("data-action=\"rule-preview-expand\""));
+        assert!(APP_JS.contains("data-action=\"rule-tech-guide-toggle\""));
         assert!(APP_JS.contains("detail.output.compact_unavailable"));
+        assert!(APP_JS.contains("rule-card-id-stack"));
     }
 
     #[test]
@@ -165,14 +162,15 @@ mod tests {
         assert!(APP_CSS.contains("#rules-explore-shell .icon-only {"));
         assert!(APP_CSS.contains(".rule-card-pill-columns"));
         assert!(APP_CSS.contains(".rule-card-pill-label"));
+        assert!(APP_CSS.contains(".rule-card-id-stack"));
+        assert!(APP_CSS.contains(".confidence-bar-inline"));
+        assert!(APP_CSS.contains(".confidence-bar-meter"));
         assert!(APP_CSS.contains(".rule-tech-card"));
-        assert!(APP_CSS.contains(".rule-tech-accordion"));
-        assert!(APP_CSS.contains(".rule-tech-summary"));
         assert!(APP_CSS.contains(".rule-tech-body"));
-        assert!(APP_CSS.contains(".rule-tech-accordion.status-exact"));
         assert!(APP_CSS.contains(".rule-export-combo"));
         assert!(APP_CSS.contains(".rule-export-select"));
         assert!(APP_CSS.contains(".rule-tech-guide"));
+        assert!(APP_CSS.contains(".rule-tech-guide-toggle-row"));
         assert!(APP_CSS.contains("min-width: 116px;"));
         assert!(APP_CSS.contains(".compact-list"));
         assert!(APP_CSS.contains(".rule-tech-comments"));
@@ -181,12 +179,11 @@ mod tests {
         assert!(APP_CSS.contains("@keyframes toast-check-pulse"));
         assert!(APP_CSS.contains(".detail-tab-content"));
         assert!(APP_CSS.contains(".detail-tab-icon"));
-        assert!(APP_CSS.contains(".rule-tech-preview"));
-        assert!(APP_CSS.contains(".rule-tech-preview-truncated::after"));
         assert!(APP_CSS.contains(".rule-preview-more"));
         assert!(APP_CSS.contains(".rule-confidence-grid"));
         assert!(APP_CSS.contains(".rule-confidence-meter"));
         assert!(APP_CSS.contains(".rule-output-empty"));
+        assert!(APP_CSS.contains("#adversaries-catalog-shell .icon-only"));
     }
 
     #[test]
@@ -200,6 +197,10 @@ mod tests {
         assert!(INDEX_HTML.contains("fa-file-csv"));
         assert!(INDEX_HTML.contains("fa-file-code"));
         assert!(INDEX_HTML.contains("fa-trash-can"));
+        assert!(INDEX_HTML.contains("adversaries-view-cards"));
+        assert!(INDEX_HTML.contains("adversaries-view-table"));
+        assert!(INDEX_HTML.contains("adversaries-table-wrap"));
+        assert!(INDEX_HTML.contains("adversaries-cards"));
     }
 
     #[test]

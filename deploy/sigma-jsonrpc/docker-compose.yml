@@ -1,0 +1,25 @@
+services:
+  sigma-jsonrpc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      PORT: "8080"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      SIGMA_RPC_TOKEN: "${SIGMA_RPC_TOKEN:-}"
+      SIGMA_AUTH_REQUIRED: "${SIGMA_AUTH_REQUIRED:-true}"
+      SIGMA_ALLOW_INSECURE_WITHOUT_TOKEN: "${SIGMA_ALLOW_INSECURE_WITHOUT_TOKEN:-true}"
+      SIGMA_ALLOWED_BACKENDS: "${SIGMA_ALLOWED_BACKENDS:-}"
+      SIGMA_ALLOWED_PIPELINES: "${SIGMA_ALLOWED_PIPELINES:-}"
+      SIGMA_COMMAND_TIMEOUT: "${SIGMA_COMMAND_TIMEOUT:-20}"
+      MAX_RULE_SIZE_BYTES: "${MAX_RULE_SIZE_BYTES:-131072}"
+    command: ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

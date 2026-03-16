@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ service_name }} | JSON-RPC</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a111b;
+      --panel: #111b2a;
+      --line: #23324a;
+      --text: #dbe5f5;
+      --muted: #8ca3c7;
+      --ok: #2eb67d;
+      --accent: #4db3ff;
+      --purple: #7c3aed;
+      --purple-light: #a78bfa;
+      --red: #f87171;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "JetBrains Mono", "Iosevka", "Fira Code", monospace;
+      background: radial-gradient(circle at top right, #13223b, var(--bg) 45%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Scene / Carousel ── */
+    #scene { position: relative; overflow-x: hidden; min-height: 100vh; }
+    #main-view {
+      padding: 2rem;
+      transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+      will-change: transform;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      align-items: flex-start;
+    }
+    #try-panel {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      min-height: 100vh;
+      padding: 2rem;
+      transform: translateX(105%);
+      transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+      will-change: transform;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      align-items: flex-start;
+      background: radial-gradient(circle at bottom left, #13223b, var(--bg) 55%);
+    }
+    .panel-open #main-view  { transform: translateX(-105%); }
+    .panel-open #try-panel  { transform: translateX(0); }
+
+    /* ── Layout ── */
+    .wrap { max-width: 980px; margin: 0 auto; width: 100%; }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01));
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1rem 1.2rem;
+      margin-bottom: 1rem;
+    }
+    h1 { margin: 0 0 .5rem; font-size: 1.5rem; }
+    h2 { margin: 0 0 .8rem; font-size: 1rem; color: var(--accent); }
+    p, li { color: var(--muted); }
+    code, pre {
+      font-family: inherit;
+      font-size: .86rem;
+      background: #0b1523;
+      border: 1px solid #22324a;
+      border-radius: 10px;
+    }
+    pre { padding: .8rem; white-space: pre-wrap; word-break: break-word; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .pill {
+      display: inline-block;
+      margin-right: .5rem;
+      padding: .2rem .55rem;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+    }
+    .status-ok { border-color: #2e7356; color: #7de0b3; }
+    .btn {
+      border: 1px solid #2e78c8;
+      background: #143056;
+      color: #bcdcff;
+      border-radius: 8px;
+      padding: .4rem .7rem;
+      cursor: pointer;
+      font-family: inherit;
+      margin-bottom: .5rem;
+    }
+    .btn:hover { background: #1a3d6e; }
+
+    .top-tools {
+      width: 100%;
+      display: flex;
+      justify-content: flex-end;
+      margin: 0 0 .7rem;
+    }
+    .lang-picker {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      color: var(--muted);
+      font-size: .82rem;
+    }
+    .lang-select {
+      background: #0b1523;
+      border: 1px solid #22324a;
+      border-radius: 8px;
+      color: var(--text);
+      padding: .32rem .55rem;
+      font-family: inherit;
+      font-size: .82rem;
+      outline: none;
+      cursor: pointer;
+    }
+    .lang-select:focus { border-color: var(--accent); }
+
+    /* ── Endpoint table ── */
+    .ep-table { width: 100%; border-collapse: collapse; }
+    .ep-table td { padding: .42rem .5rem; vertical-align: top; font-size: .86rem; }
+    .ep-table tr + tr td { border-top: 1px solid var(--line); }
+    .verb {
+      display: inline-block;
+      padding: .13rem .4rem;
+      border-radius: 6px;
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .05em;
+    }
+    .verb-get  { background: #0d3320; color: #56e3a0; border: 1px solid #1a5c39; }
+    .verb-post { background: #0d2644; color: #60aaff; border: 1px solid #174a80; }
+    .ep-path { color: var(--text); font-weight: 600; }
+    .ep-desc { color: var(--muted); }
+
+    /* ── Methods list with descriptions ── */
+    .method-list { list-style: none; padding: 0; margin: 0; }
+    .method-item {
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+      padding: .5rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .method-item:last-child { border-bottom: none; }
+    .method-name { color: var(--text); white-space: nowrap; min-width: 220px; }
+    .method-desc { color: var(--muted); font-size: .83rem; }
+
+    /* ── Try button ── */
+    .try-actions {
+      width: 100%;
+      display: flex;
+      justify-content: flex-end;
+      margin: 0 0 .9rem;
+    }
+    .btn-try {
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      border: 1px solid #a78bfa44;
+      color: #fff;
+      border-radius: 10px;
+      padding: .7rem 1.8rem;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: .95rem;
+      font-weight: 700;
+      letter-spacing: .05em;
+      transition: filter .18s, transform .15s, box-shadow .18s;
+      box-shadow: 0 0 20px #7c3aed44;
+    }
+    .btn-try:hover {
+      filter: brightness(1.2);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 28px #7c3aed66;
+    }
+    .btn-try:active { filter: brightness(.9); transform: translateY(0); }
+
+    /* ── Try panel ── */
+    .try-wrap { max-width: 980px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; gap: .85rem; }
+    .try-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .btn-back {
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      border-radius: 8px;
+      padding: .35rem .85rem;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: .88rem;
+      transition: border-color .15s, color .15s;
+    }
+    .btn-back:hover { border-color: var(--accent); color: var(--accent); }
+    .try-title { font-size: 1.05rem; font-weight: 700; color: var(--purple-light); }
+
+    .token-row {
+      display: flex;
+      align-items: center;
+      gap: .8rem;
+      background: rgba(255,255,255,.02);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: .55rem 1rem;
+    }
+    .token-label { color: var(--muted); font-size: .84rem; white-space: nowrap; }
+    .token-input {
+      flex: 1;
+      background: #0b1523;
+      border: 1px solid #22324a;
+      border-radius: 8px;
+      padding: .35rem .7rem;
+      color: var(--text);
+      font-family: inherit;
+      font-size: .85rem;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .token-input:focus { border-color: var(--accent); }
+    .token-input:disabled {
+      color: var(--muted);
+      opacity: .55;
+      cursor: not-allowed;
+      border-style: dashed;
+    }
+
+    .converter-grid {
+      display: grid;
+      grid-template-columns: 1fr 2.5rem 1fr;
+      gap: .8rem;
+      align-items: start;
+    }
+    .conv-arrow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-top: 7rem;
+      color: var(--accent);
+      font-size: 1.6rem;
+      opacity: .45;
+    }
+    .conv-textarea {
+      width: 100%;
+      height: 280px;
+      background: #0b1523;
+      border: 1px solid #22324a;
+      border-radius: 10px;
+      padding: .8rem;
+      color: var(--text);
+      font-family: inherit;
+      font-size: .83rem;
+      resize: vertical;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .conv-textarea:focus          { border-color: var(--accent); }
+    .conv-textarea[readonly]      { border-style: dashed; }
+    .conv-textarea.error-output   { border-color: #c0392b; color: var(--red); }
+
+    .controls-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: .8rem;
+      margin-top: .15rem;
+      padding: 0;
+    }
+    .ctrl-label { color: var(--muted); font-size: .84rem; white-space: nowrap; }
+    .ctrl-select {
+      background: #0b1523;
+      border: 1px solid #22324a;
+      border-radius: 8px;
+      padding: .38rem .6rem;
+      color: var(--text);
+      font-family: inherit;
+      font-size: .84rem;
+      cursor: pointer;
+      min-width: 150px;
+      outline: none;
+    }
+    .btn-convert {
+      margin-left: auto;
+      background: linear-gradient(135deg, #0e4a8a, #0c3869);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      border-radius: 9px;
+      padding: .45rem 1.3rem;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: .9rem;
+      font-weight: 600;
+      transition: filter .15s, box-shadow .15s;
+    }
+    .btn-convert:hover { filter: brightness(1.25); box-shadow: 0 0 12px #4db3ff44; }
+    .btn-convert:disabled { opacity: .45; cursor: not-allowed; filter: none; box-shadow: none; }
+
+    /* ── Footer ── */
+    .site-footer {
+      max-width: 980px;
+      margin: 1.5rem auto 0;
+      padding: .9rem 0 .6rem;
+      border-top: 1px solid var(--line);
+      display: flex;
+      gap: .7rem;
+      justify-content: center;
+      align-items: center;
+      flex-wrap: wrap;
+      font-size: .77rem;
+      color: var(--muted);
+    }
+    .site-footer a { color: var(--muted); text-decoration: none; transition: color .15s; }
+    .site-footer a:hover { color: var(--accent); }
+    .heart { color: var(--red); }
+    .sep { opacity: .3; user-select: none; }
+
+    @media (max-width: 840px) {
+      .row           { grid-template-columns: 1fr; }
+      .method-item   { flex-direction: column; gap: .2rem; }
+      .method-name   { min-width: unset; }
+      .converter-grid { grid-template-columns: 1fr; }
+      .conv-arrow    { display: none; }
+    }
+    @media (max-width: 600px) {
+      #main-view, #try-panel { padding: 1rem; }
+    }
+  </style>
+</head>
+<body>
+<div id="scene">
+
+  <!-- ══════════════════════ MAIN VIEW ══════════════════════ -->
+  <div id="main-view">
+    <main class="wrap">
+
+      <div class="top-tools">
+        <label class="lang-picker" for="lang-select">
+          {{ ui.language_label }}:
+          <select id="lang-select" class="lang-select">
+            {% for option in language_options %}
+            <option value="{{ option.code }}" {% if option.code == lang %}selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+
+      <!-- Service header -->
+      <section class="card">
+        <h1>{{ service_name }}</h1>
+        <p>{{ service_description }}</p>
+        <span class="pill">{{ ui.version }} {{ service_version }}</span>
+        <span class="pill status-ok">{{ ui.status }} {{ status }}</span>
+        <p>{{ ui.primary_endpoint }} <code>{{ jsonrpc_endpoint }}</code> (JSON-RPC 2.0)</p>
+        <p>{{ ui.health_endpoint }} <code>{{ health_endpoint }}</code></p>
+      </section>
+
+      <!-- Try button -->
+      <div class="try-actions">
+        <button class="btn-try" id="open-try">{{ ui.try_button }}</button>
+      </div>
+
+      <!-- HTTP Endpoints -->
+      <section class="card">
+        <h2>{{ ui.http_endpoints_title }}</h2>
+        <table class="ep-table">
+          {% for ep in http_endpoints %}
+          <tr>
+            <td><span class="verb verb-{{ ep.verb | lower }}">{{ ep.verb }}</span></td>
+            <td><code class="ep-path">{{ ep.path }}</code></td>
+            <td class="ep-desc">{{ ep.desc }}</td>
+          </tr>
+          {% endfor %}
+        </table>
+      </section>
+
+      <!-- Methods with descriptions -->
+      <section class="card">
+        <h2>{{ ui.methods_title }}</h2>
+        <ul class="method-list">
+          {% for m in methods_detailed %}
+          <li class="method-item">
+            <code class="method-name">{{ m.name }}</code>
+            <span class="method-desc">{{ m.desc }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <!-- Quick cURL examples -->
+      <section class="card row">
+        <article>
+          <h2>{{ ui.examples_title }}</h2>
+          <p>rpc.discover</p>
+          <button class="btn" data-copy-target="curl-discover"
+            data-copy-label="{{ ui.copy_button }}"
+            data-copied-label="{{ ui.copied_button }}">{{ ui.copy_button }}</button>
+          <pre id="curl-discover">{{ curl_discover }}</pre>
+        </article>
+        <article>
+          <h2>&nbsp;</h2>
+          <p>sigma.backends.list</p>
+          <button class="btn" data-copy-target="curl-backends"
+            data-copy-label="{{ ui.copy_button }}"
+            data-copied-label="{{ ui.copied_button }}">{{ ui.copy_button }}</button>
+          <pre id="curl-backends">{{ curl_backends }}</pre>
+        </article>
+      </section>
+
+      <!-- Note -->
+      <section class="card">
+        <p><strong>{{ ui.note_label }}</strong> {{ ui.note_text }} <code>{{ jsonrpc_endpoint }}</code>. {{ ui.note_text_tail }}</p>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="site-footer">
+      <span>{{ ui.footer_coded }} <span class="heart">♥</span> {{ ui.footer_by }}
+        <a href="https://github.com/febrezo/spuc" target="_blank" rel="noreferrer">febrezo</a>
+      </span>
+      <span class="sep">·</span>
+      <a href="https://github.com/febrezo/spuc/blob/main/LICENSE.md" target="_blank" rel="noreferrer">{{ ui.footer_license }}</a>
+      <span class="sep">·</span>
+      <a href="https://github.com/febrezo/spuc" target="_blank" rel="noreferrer">{{ ui.footer_project }}</a>
+      <span class="sep">·</span>
+      <span>v{{ service_version }}</span>
+    </footer>
+  </div><!-- #main-view -->
+
+  <!-- ══════════════════════ TRY PANEL ══════════════════════ -->
+  <div id="try-panel">
+    <div class="try-wrap">
+
+      <!-- Header row -->
+      <div class="try-header">
+        <button class="btn-back" id="close-try">{{ ui.try_back }}</button>
+        <span class="try-title">{{ ui.try_title }}</span>
+      </div>
+
+      <!-- Token row -->
+      <div class="token-row">
+        <span class="token-label">{{ ui.try_token_label }}:</span>
+        {% if auth_configured %}
+        <input id="token-input" type="password" class="token-input"
+               placeholder="Bearer token" autocomplete="off">
+        {% else %}
+        <input id="token-input" type="text" class="token-input"
+               value="{{ ui.try_token_no_auth }}" disabled>
+        {% endif %}
+      </div>
+
+      <!-- Converter: rule | arrow | result -->
+      <div class="converter-grid">
+        <textarea id="rule-input" class="conv-textarea"
+                  placeholder="{{ ui.try_rule_placeholder }}"></textarea>
+        <div class="conv-arrow">→</div>
+        <textarea id="result-output" class="conv-textarea"
+                  placeholder="{{ ui.try_result_placeholder }}"
+                  readonly></textarea>
+      </div>
+
+      <!-- Controls: backend, pipeline, convert -->
+      <div class="controls-row">
+        <span class="ctrl-label">{{ ui.try_backend_label }}:</span>
+        <select id="backend-select" class="ctrl-select">
+          <option value="">— loading —</option>
+        </select>
+        <span class="ctrl-label">{{ ui.try_pipeline_label }}:</span>
+        <select id="pipeline-select" class="ctrl-select"
+                data-none-label="{{ ui.try_pipeline_none }}">
+          <option value="">{{ ui.try_pipeline_none }}</option>
+        </select>
+        <button class="btn-convert" id="convert-btn">{{ ui.try_convert_btn }}</button>
+      </div>
+
+    </div><!-- .try-wrap -->
+  </div><!-- #try-panel -->
+
+</div><!-- #scene -->
+
+<script>
+  /* ── Copy buttons ── */
+  document.querySelectorAll('[data-copy-target]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const el = document.getElementById(btn.getAttribute('data-copy-target'));
+      if (!el) return;
+      await navigator.clipboard.writeText(el.innerText);
+      const orig = btn.getAttribute('data-copy-label') || btn.innerText;
+      const done = btn.getAttribute('data-copied-label') || 'Copied';
+      btn.innerText = done;
+      setTimeout(() => { btn.innerText = orig; }, 1200);
+    });
+  });
+
+  const langSelect = document.getElementById('lang-select');
+  if (langSelect) {
+    langSelect.addEventListener('change', () => {
+      const url = new URL(window.location.href);
+      url.searchParams.set('lang', langSelect.value);
+      window.location.href = url.toString();
+    });
+  }
+
+  /* ── Carousel open / close ── */
+  const scene = document.getElementById('scene');
+  let resourcesLoaded = false;
+
+  document.getElementById('open-try').addEventListener('click', () => {
+    window.scrollTo(0, 0);
+    scene.classList.add('panel-open');
+    if (!resourcesLoaded) {
+      loadBackends();
+      loadPipelines();
+      resourcesLoaded = true;
+    }
+  });
+
+  document.getElementById('close-try').addEventListener('click', () => {
+    scene.classList.remove('panel-open');
+  });
+
+  /* ── RPC helper ── */
+  function rpcCall(method, params) {
+    const headers = { 'Content-Type': 'application/json' };
+    const tokenEl = document.getElementById('token-input');
+    if (tokenEl && !tokenEl.disabled) {
+      const t = tokenEl.value.trim();
+      if (t) headers['Authorization'] = 'Bearer ' + t;
+    }
+    return fetch('/jsonrpc', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ jsonrpc: '2.0', id: String(Date.now()), method, params }),
+    }).then(r => r.json());
+  }
+
+  /* ── Load backends ── */
+  const FALLBACK_BACKENDS = [
+    'splunk', 'es-qs', 'eql', 'microsoft365defender',
+    'azure-monitor', 'loki', 'qradar-epl', 'insightidr', 'sigma',
+  ];
+
+  async function loadBackends() {
+    const sel = document.getElementById('backend-select');
+    let items = [];
+    try {
+      const resp = await rpcCall('sigma.backends.list', {});
+      const raw = resp.result?.items || [];
+      items = raw
+        .map(i => (typeof i === 'string') ? i : (i.identifier || i.name || ''))
+        .filter(Boolean);
+    } catch (_) {}
+    if (!items.length) items = FALLBACK_BACKENDS;
+    sel.innerHTML = '';
+    items.forEach((name, idx) => {
+      const o = document.createElement('option');
+      o.value = name; o.textContent = name;
+      if (idx === 0) o.selected = true;
+      sel.appendChild(o);
+    });
+  }
+
+  /* ── Load pipelines ── */
+  async function loadPipelines() {
+    const sel = document.getElementById('pipeline-select');
+    const noneLabel = sel.dataset.noneLabel || 'none';
+    let items = [];
+    try {
+      const resp = await rpcCall('sigma.pipelines.list', {});
+      const raw = resp.result?.items || [];
+      items = raw
+        .map(i => (typeof i === 'string') ? i : (i.identifier || i.name || ''))
+        .filter(Boolean);
+    } catch (_) {}
+    sel.innerHTML = '';
+    const none = document.createElement('option');
+    none.value = ''; none.textContent = noneLabel;
+    sel.appendChild(none);
+    items.forEach(name => {
+      const o = document.createElement('option');
+      o.value = name; o.textContent = name;
+      sel.appendChild(o);
+    });
+  }
+
+  /* ── Convert ── */
+  document.getElementById('convert-btn').addEventListener('click', async () => {
+    const rule    = document.getElementById('rule-input').value.trim();
+    const backend = document.getElementById('backend-select').value.trim();
+    const pipeline = document.getElementById('pipeline-select').value.trim() || null;
+    const out     = document.getElementById('result-output');
+    const btn     = document.getElementById('convert-btn');
+
+    out.classList.remove('error-output');
+
+    if (!rule) {
+      out.value = '{{ ui.try_error_empty_rule }}';
+      out.classList.add('error-output');
+      return;
+    }
+    if (!backend) {
+      out.value = '{{ ui.try_error_no_backend }}';
+      out.classList.add('error-output');
+      return;
+    }
+
+    btn.disabled = true;
+    out.value = '{{ ui.try_loading }}';
+
+    try {
+      const params = { rule, target: backend };
+      if (pipeline) params.pipeline = pipeline;
+      const resp = await rpcCall('sigma.convert', params);
+      if (resp.error) {
+        const detail = resp.error.data?.detail ? '\n\n' + resp.error.data.detail : '';
+        out.value = '⚠  ' + resp.error.message + detail;
+        out.classList.add('error-output');
+      } else {
+        out.value = resp.result?.query ?? JSON.stringify(resp.result, null, 2);
+      }
+    } catch (err) {
+      out.value = '⚠  ' + err.message;
+      out.classList.add('error-output');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

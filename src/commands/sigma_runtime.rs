@@ -69,6 +69,25 @@ pub(crate) fn refresh_sigma_runtime_cache() -> SigmaRuntimeInfo {
 }
 
 fn detect_sigma_runtime() -> SigmaRuntimeInfo {
+    // If SIGMA_RPC_URL is configured, try remote backend discovery first.
+    if crate::commands::sigma_rpc::is_configured() {
+        if let Some(entries) = crate::commands::sigma_rpc::discover_backends_from_remote() {
+            let backends = compatible_backends_from_entries(&entries);
+            if !backends.is_empty() {
+                return SigmaRuntimeInfo {
+                    binary: "sigma-jsonrpc".to_string(),
+                    installed: true,
+                    operational: true,
+                    compatible_backends: backends,
+                    warning: None,
+                    cache_used: false,
+                };
+            }
+            eprintln!("[sigma-jsonrpc] remote discovery returned no backends, falling back to local sigma");
+        } else {
+            eprintln!("[sigma-jsonrpc] remote discovery failed, falling back to local sigma");
+        }
+    }
     detect_sigma_runtime_for_binary(sigma_binary())
 }
 

@@ -53,15 +53,18 @@
     </section>
   </main>
 
-  <div id="app-view" class="app-layout hidden">
-    <aside class="sidebar glass">
+                <div class="rules-view-mode" role="group" aria-label="Adversary view mode">
+                  <button id="adversaries-view-cards" class="btn btn-ghost icon-only active" data-action="adversaries-view-mode" data-mode="cards" data-i18n-title="rules.view.cards" aria-label="Cards" title="Cards"><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i></button>
+                  <button id="adversaries-view-table" class="btn btn-ghost icon-only" data-action="adversaries-view-mode" data-mode="table" data-i18n-title="rules.view.table" aria-label="Table" title="Table"><i class="fa-solid fa-table-list" aria-hidden="true"></i></button>
+                </div>
+                <button id="adversaries-select-all-toggle" class="btn btn-ghost icon-only" data-action="adversaries-select-all-toggle" data-i18n-title="adversaries.bulk.select_all" aria-label="Select all" title="Select all"><i class="fa-regular fa-square" aria-hidden="true"></i></button>
+                <button id="adversaries-bulk-toggle" class="btn btn-ghost icon-only" data-action="adversaries-bulk-toggle" data-i18n-title="adversaries.bulk.enable" aria-label="Bulk edit" title="Bulk edit" disabled><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>
       <div class="sidebar-head">
-        <div class="sidebar-brand-line">
+                  <button id="adversaries-columns-toggle" class="btn btn-ghost icon-only" data-action="adversaries-columns-toggle" data-i18n-title="common.show_hide_columns" aria-label="View columns" title="View columns"><i class="fa-solid fa-table-columns" aria-hidden="true"></i></button>
           <h2>SPUC</h2>
         </div>
         <p class="muted" data-i18n="app.tagline">Threat hunting studio</p>
       </div>
-
       <nav class="nav-list">
         <section class="nav-section">
           <p class="nav-section-title" data-i18n="nav.section.navigation">Navigation</p>
@@ -733,20 +736,25 @@
                 <button id="adversaries-bulk-cancel" class="btn btn-danger" data-action="adversaries-bulk-cancel" data-i18n="adversaries.bulk.cancel">Abort</button>
               </div>
               <div class="adversaries-actions-left">
-                <button id="adversaries-select-all-toggle" class="btn btn-ghost" data-action="adversaries-select-all-toggle" data-i18n="adversaries.bulk.select_all">Select all</button>
-                <button id="adversaries-bulk-toggle" class="btn btn-ghost" data-action="adversaries-bulk-toggle" data-i18n="adversaries.bulk.enable" disabled>Bulk edit</button>
+                <div class="rules-view-mode" role="group" aria-label="Adversary view mode">
+                  <button id="adversaries-view-cards" class="btn btn-ghost icon-only active" data-action="adversaries-view-mode" data-mode="cards" data-i18n-title="rules.view.cards" aria-label="Cards" title="Cards"><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i></button>
+                  <button id="adversaries-view-table" class="btn btn-ghost icon-only" data-action="adversaries-view-mode" data-mode="table" data-i18n-title="rules.view.table" aria-label="Table" title="Table"><i class="fa-solid fa-table-list" aria-hidden="true"></i></button>
+                </div>
+                <button id="adversaries-select-all-toggle" class="btn btn-ghost icon-only" data-action="adversaries-select-all-toggle" data-i18n-title="adversaries.bulk.select_all" aria-label="Select all" title="Select all"><i class="fa-regular fa-square" aria-hidden="true"></i></button>
+                <button id="adversaries-bulk-toggle" class="btn btn-ghost icon-only" data-action="adversaries-bulk-toggle" data-i18n-title="adversaries.bulk.enable" aria-label="Bulk edit" title="Bulk edit" disabled><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>
                 <div class="column-picker">
-                  <button id="adversaries-columns-toggle" class="btn btn-ghost" data-action="adversaries-columns-toggle" data-i18n="common.show_hide_columns">View columns</button>
+                  <button id="adversaries-columns-toggle" class="btn btn-ghost icon-only" data-action="adversaries-columns-toggle" data-i18n-title="common.show_hide_columns" aria-label="View columns" title="View columns"><i class="fa-solid fa-table-columns" aria-hidden="true"></i></button>
                   <div id="adversaries-columns-menu" class="column-menu hidden"></div>
                 </div>
               </div>
               <div class="adversaries-actions-right">
-                <button id="adversaries-duplicate-selected" class="btn btn-ghost" data-action="adversaries-duplicate-selected" disabled>Duplicar</button>
-                <button id="adversaries-delete-selected" class="btn btn-danger" data-i18n="adversaries.bulk.delete_selected" disabled>Delete selected</button>
+                <button id="adversaries-duplicate-selected" class="btn btn-ghost icon-only" data-action="adversaries-duplicate-selected" aria-label="Duplicate selected" title="Duplicate selected" disabled><i class="fa-regular fa-clone" aria-hidden="true"></i></button>
+                <button id="adversaries-delete-selected" class="btn btn-danger icon-only" data-i18n-title="adversaries.bulk.delete_selected" aria-label="Delete selected" title="Delete selected" disabled><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
               </div>
             </div>
             <div class="table-meta" id="adversaries-meta"></div>
-            <div class="table-wrap"><table id="adversaries-table"></table></div>
+            <div class="table-wrap" id="adversaries-table-wrap"><table id="adversaries-table"></table></div>
+            <div id="adversaries-cards" class="rules-cards hidden"></div>
             <div class="pager" id="adversaries-pager"></div>
           </article>
         </section>
@@ -823,6 +831,26 @@
               <h3 data-i18n="admin.oauth.title">External login providers</h3>
               <p class="muted" data-i18n="admin.oauth.subtitle">Authorize which providers are allowed in the login screen.</p>
               <div id="admin-oauth-providers" class="admin-oauth-list"></div>
+            </section>
+            <section>
+              <h3 data-i18n="admin.settings.title">Runtime settings</h3>
+              <p class="muted" data-i18n="admin.settings.subtitle">Configure no-login mode and Sigma JSON-RPC connection for dynamic backends.</p>
+              <form id="admin-runtime-settings" class="stack">
+                <label>
+                  <span data-i18n="admin.settings.sigma_url">Sigma JSON-RPC URL</span>
+                  <input id="admin-sigma-rpc-url" placeholder="http://sigma-jsonrpc:8000/rpc">
+                </label>
+                <label>
+                  <span data-i18n="admin.settings.sigma_token">Sigma JSON-RPC token (optional)</span>
+                  <input id="admin-sigma-rpc-token" type="password" data-i18n-placeholder="admin.settings.sigma_token_placeholder" placeholder="Paste token to set or rotate">
+                  <small id="admin-sigma-rpc-token-hint" class="muted"></small>
+                </label>
+                <label class="admin-enabled-toggle">
+                  <input id="admin-no-login" type="checkbox">
+                  <span data-i18n="admin.settings.no_login">Enable no-login mode (direct local admin access)</span>
+                </label>
+                <button type="submit" class="btn btn-primary" data-i18n="admin.settings.submit">Save runtime settings</button>
+              </form>
             </section>
           </article>
         </div>
@@ -919,10 +947,6 @@
           <div id="adversary-emulable-platforms" class="rule-card-tags" aria-label="Emulable platforms"></div>
         </header>
         <p class="muted" data-i18n="adversaries.create.flow_hint">Plan your adversary flow: filter catalog abilities, add ordered steps, and compile outputs.</p>
-        <div class="rule-detail-subtabs" id="adversary-tabs">
-          <button type="button" class="btn btn-ghost active" data-action="adversary-tab" data-tab="plan">Plan</button>
-          <button type="button" class="btn btn-ghost" data-action="adversary-tab" data-tab="criteria">Ayuda para la ejecucion</button>
-        </div>
         <section class="adversary-planner-grid">
           <article class="planner-card" id="adversary-pane-plan-settings">
             <div class="planner-card-title" data-i18n="adversaries.create.plan">Plan settings</div>
@@ -934,6 +958,12 @@
               <label>
                 <span data-i18n="adversaries.create.confidence">Confidence</span>
                 <input id="adversary-confidence" type="number" min="0" max="100" value="70">
+              </label>
+              <label>
+                <span data-i18n="adversaries.create.target_platform">Target platform</span>
+                <select id="adversary-target-platform" required>
+                  <option value="" data-i18n="common.all_platforms">All platforms</option>
+                </select>
               </label>
             </div>
             <label>
@@ -955,10 +985,6 @@
             </div>
             <div id="adversary-selected" class="selected-ability-list"></div>
           </article>
-          <article class="planner-card hidden" id="adversary-pane-criteria">
-            <div class="planner-card-title">Ayuda para la ejecucion</div>
-            <div id="adversary-execution-criteria" class="rule-tech-list"></div>
-          </article>
         </section>
         <div class="dialog-actions modal-actions-split">
           <button type="button" id="adversary-cancel" class="btn btn-danger" data-i18n="common.cancel">Cancel</button>
@@ -971,7 +997,7 @@
               </div>
             </div>
           </div>
-          <button type="submit" id="adversary-submit" class="btn btn-primary hidden" data-i18n="common.apply">Apply</button>
+          <button type="submit" id="adversary-submit" class="btn btn-success" data-i18n="adversaries.create.submit">Create new adversary</button>
         </div>
       </form>
     </article>

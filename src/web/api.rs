@@ -9,6 +9,7 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -23,9 +24,10 @@ use crate::cli::{AbilityTarget, BuildOutput, ConversionMode, ExportFormat};
 use crate::commands::common::{
     available_detection_target_labels, build_ability_from_rule, parse_ability_target,
 };
-use crate::commands::sigma_runtime::sigma_runtime_info;
+use crate::commands::sigma_runtime::{refresh_sigma_runtime_cache, sigma_runtime_info};
 use crate::commands::sigma_targets::dynamic_sigma_targets;
 use crate::commands::{emulate, learn, plan, translate, verify};
+use crate::paths::spuc_config_root;
 use crate::web::auth::{
     OAuthConfig, OAuthIdentity, OAuthPolicyStore, Principal, ProviderBootstrap, PublicUserView,
     Role, UserStore, build_oauth_authorize_url, change_password, create_user, delete_user,
@@ -40,6 +42,36 @@ use spuc::emulation::catalog::AbilityCatalog;
 use spuc::emulation::export as emu_export;
 
 const OAUTH_STATE_TTL_SECONDS: i64 = 600;
+const WEB_ADMIN_SETTINGS_SCHEMA_VERSION: &str = "1.0";
+const ENV_SIGMA_RPC_URL: &str = "SIGMA_RPC_URL";
+const ENV_SIGMA_RPC_TOKEN: &str = "SPUC_SIGMA_RPC_TOKEN";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AdminRuntimeSettingsStore {
+    schema_version: String,
+    no_login: bool,
+    #[serde(default)]
+    sigma_rpc_url: Option<String>,
+    #[serde(default)]
+    sigma_rpc_token: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct AdminRuntimeSettingsView {
+    no_login: bool,
+    sigma_rpc_url: Option<String>,
+    sigma_rpc_token_set: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct AdminRuntimeSettingsUpdateRequest {
+    #[serde(default)]
+    no_login: Option<bool>,
+    #[serde(default)]
+    sigma_rpc_url: Option<String>,
+    #[serde(default)]
+    sigma_rpc_token: Option<String>,
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct DownloadEntry {
@@ -62,7 +94,6 @@ struct OAuthStateEntry {
 
 #[derive(Debug, Clone)]
 pub(crate) struct WebRuntimeConfig {
-    pub(crate) no_login: bool,
     pub(crate) admin_user: String,
     pub(crate) project_link: String,
     pub(crate) project_name: String,
@@ -76,6 +107,9 @@ pub(crate) struct WebState {
     users: Mutex<UserStore>,
     oauth_policy_path: PathBuf,
     oauth_policy: Mutex<OAuthPolicyStore>,
+    runtime_settings_path: PathBuf,
+    runtime_settings: Mutex<AdminRuntimeSettingsStore>,
+    no_login: AtomicBool,
     generated_password: bool,
     runtime: WebRuntimeConfig,
     bootstrap_admin: Principal,
@@ -98,6 +132,9 @@ impl WebState {
         )?;
         let oauth = OAuthConfig::from_env();
         let (oauth_policy_path, oauth_policy) = load_or_init_oauth_policy(&oauth)?;
+        let (runtime_settings_path, runtime_settings) =
+            load_or_init_runtime_settings(no_login)?;
+        apply_sigma_rpc_env(&runtime_settings);
         let bootstrap_admin = users
             .users
             .iter()
@@ -125,9 +162,11 @@ impl WebState {
             users: Mutex::new(users),
             oauth_policy_path,
             oauth_policy: Mutex::new(oauth_policy),
+            runtime_settings_path,
+            no_login: AtomicBool::new(runtime_settings.no_login),
+            runtime_settings: Mutex::new(runtime_settings),
             generated_password,
             runtime: WebRuntimeConfig {
-                no_login,
                 admin_user: admin_user.to_string(),
                 project_link: "https://github.com/febrezo/spuc".to_string(),
                 project_name: "GitHub Project".to_string(),
@@ -148,6 +187,45 @@ impl WebState {
 
     pub(crate) fn runtime(&self) -> &WebRuntimeConfig {
         &self.runtime
+    }
+
+    pub(crate) fn no_login_enabled(&self) -> bool {
+        self.no_login.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn runtime_settings_view(&self) -> AdminRuntimeSettingsView {
+        let settings = self
+            .runtime_settings
+            .lock()
+            .expect("runtime settings mutex poisoned")
+            .clone();
+        settings_view(settings)
+    }
+
+    pub(crate) fn update_runtime_settings(
+        &self,
+        payload: AdminRuntimeSettingsUpdateRequest,
+    ) -> Result<AdminRuntimeSettingsView> {
+        let mut settings = self
+            .runtime_settings
+            .lock()
+            .expect("runtime settings mutex poisoned");
+
+        if let Some(no_login) = payload.no_login {
+            settings.no_login = no_login;
+            self.no_login.store(no_login, Ordering::Relaxed);
+        }
+        if let Some(url) = payload.sigma_rpc_url {
+            settings.sigma_rpc_url = normalize_optional_setting(url);
+        }
+        if let Some(token) = payload.sigma_rpc_token {
+            settings.sigma_rpc_token = normalize_optional_setting(token);
+        }
+
+        persist_runtime_settings(&self.runtime_settings_path, &settings)?;
+        apply_sigma_rpc_env(&settings);
+        let _ = refresh_sigma_runtime_cache();
+        Ok(settings_view(settings.clone()))
     }
 
     pub(crate) fn list_oauth_providers(&self) -> Vec<ProviderBootstrap> {
@@ -204,7 +282,7 @@ impl WebState {
     }
 
     pub(crate) fn resolve_principal(&self, session_cookie: Option<&str>) -> Option<Principal> {
-        if self.runtime.no_login {
+        if self.no_login_enabled() {
             return Some(self.bootstrap_admin.clone());
         }
         let session = session_cookie?;
@@ -275,7 +353,7 @@ impl WebState {
         let mut users = self.users.lock().expect("users mutex poisoned");
         let is_self_update = principal.user_id == target_user_id;
         let bypass =
-            self.runtime.no_login || (principal.role.can_manage_users() && !is_self_update);
+            self.no_login_enabled() || (principal.role.can_manage_users() && !is_self_update);
         change_password(
             &mut users,
             target_user_id,
@@ -383,6 +461,84 @@ impl WebState {
             user_id: format!("oauth-{}-{subject}", identity.provider_id),
             username: identity.username.trim().to_string(),
             role: Role::Analyst,
+        }
+    }
+}
+
+fn runtime_settings_path() -> Result<PathBuf> {
+    let root = spuc_config_root().ok_or_else(|| anyhow!("cannot resolve config root"))?;
+    fs::create_dir_all(&root)?;
+    Ok(root.join("web_runtime_settings.json"))
+}
+
+fn load_or_init_runtime_settings(no_login_default: bool) -> Result<(PathBuf, AdminRuntimeSettingsStore)> {
+    let path = runtime_settings_path()?;
+    if !path.exists() {
+        let settings = AdminRuntimeSettingsStore {
+            schema_version: WEB_ADMIN_SETTINGS_SCHEMA_VERSION.to_string(),
+            no_login: no_login_default,
+            sigma_rpc_url: normalize_optional_setting(std::env::var(ENV_SIGMA_RPC_URL).unwrap_or_default()),
+            sigma_rpc_token: normalize_optional_setting(std::env::var(ENV_SIGMA_RPC_TOKEN).unwrap_or_default()),
+        };
+        persist_runtime_settings(&path, &settings)?;
+        return Ok((path, settings));
+    }
+
+    let raw = fs::read_to_string(&path)?;
+    let mut settings: AdminRuntimeSettingsStore = serde_json::from_str(&raw)?;
+    if settings.schema_version.trim().is_empty() {
+        settings.schema_version = WEB_ADMIN_SETTINGS_SCHEMA_VERSION.to_string();
+    }
+    settings.sigma_rpc_url = settings
+        .sigma_rpc_url
+        .take()
+        .and_then(normalize_optional_setting);
+    settings.sigma_rpc_token = settings
+        .sigma_rpc_token
+        .take()
+        .and_then(normalize_optional_setting);
+    persist_runtime_settings(&path, &settings)?;
+    Ok((path, settings))
+}
+
+fn persist_runtime_settings(path: &Path, settings: &AdminRuntimeSettingsStore) -> Result<()> {
+    let raw = serde_json::to_string_pretty(settings)?;
+    fs::write(path, raw)?;
+    Ok(())
+}
+
+fn normalize_optional_setting(value: String) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn settings_view(settings: AdminRuntimeSettingsStore) -> AdminRuntimeSettingsView {
+    AdminRuntimeSettingsView {
+        no_login: settings.no_login,
+        sigma_rpc_url: settings.sigma_rpc_url,
+        sigma_rpc_token_set: settings
+            .sigma_rpc_token
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty()),
+    }
+}
+
+fn apply_sigma_rpc_env(settings: &AdminRuntimeSettingsStore) {
+    unsafe {
+        if let Some(url) = settings.sigma_rpc_url.as_deref() {
+            std::env::set_var(ENV_SIGMA_RPC_URL, url);
+        } else {
+            std::env::remove_var(ENV_SIGMA_RPC_URL);
+        }
+        if let Some(token) = settings.sigma_rpc_token.as_deref() {
+            std::env::set_var(ENV_SIGMA_RPC_TOKEN, token);
+        } else {
+            std::env::remove_var(ENV_SIGMA_RPC_TOKEN);
         }
     }
 }
@@ -616,6 +772,8 @@ struct CreateAdversaryRequest {
     #[serde(default)]
     confidence: Option<u8>,
     #[serde(default)]
+    target_platform: Option<String>,
+    #[serde(default)]
     ability_ids: Vec<String>,
     #[serde(default)]
     order: Vec<String>,
@@ -632,6 +790,8 @@ struct UpdateAdversaryRequest {
     pap: Option<String>,
     #[serde(default)]
     confidence: Option<u8>,
+    #[serde(default)]
+    target_platform: Option<String>,
     #[serde(default)]
     ability_ids: Vec<String>,
     #[serde(default)]
@@ -761,6 +921,8 @@ struct RuleMetadataEnvelope {
     pap: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     ttp: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    target_platform: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     observables: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -775,6 +937,7 @@ struct DecodedRuleMetadata {
     tlp: String,
     pap: String,
     ttp: Option<String>,
+    target_platform: Option<String>,
     observables: Vec<String>,
     indicates: Option<RuleIndicatesRelation>,
     indicates_list: Vec<RuleIndicatesRelation>,
@@ -817,6 +980,7 @@ struct AdversaryView {
     confidence: u8,
     tlp: String,
     pap: String,
+    target_platform: Option<String>,
     steps: usize,
     platforms: Vec<String>,
     description: String,
@@ -1039,6 +1203,10 @@ pub(crate) fn route(request: HttpRequest, state: &WebState) -> Result<HttpRespon
         ("POST", ["api", "admin", "oauth", "providers", provider_id, "update"]) => {
             admin_update_oauth_provider(&principal, provider_id, &request, state)
         }
+        ("GET", ["api", "admin", "settings"]) => admin_get_runtime_settings(&principal, state),
+        ("POST", ["api", "admin", "settings"]) => {
+            admin_update_runtime_settings(&principal, &request, state)
+        }
         _ => HttpResponse::json(
             404,
             &serde_json::json!({
@@ -1064,9 +1232,9 @@ fn bootstrap_response(state: &WebState, principal: Option<&Principal>) -> Result
                 license_name: state.runtime().license_name.clone(),
             },
             auth: AuthBootstrap {
-                no_login: state.runtime().no_login,
+                no_login: state.no_login_enabled(),
                 authenticated: principal.is_some(),
-                show_logout: !state.runtime().no_login,
+                show_logout: !state.no_login_enabled(),
                 generated_password: state.generated_password(),
                 principal: principal.map(principal_view),
                 providers: state.list_oauth_providers(),
@@ -1086,7 +1254,7 @@ fn bootstrap_response(state: &WebState, principal: Option<&Principal>) -> Result
 }
 
 fn login_local(request: &HttpRequest, state: &WebState) -> Result<HttpResponse> {
-    if state.runtime().no_login {
+    if state.no_login_enabled() {
         return HttpResponse::json(
             409,
             &serde_json::json!({
@@ -1137,7 +1305,7 @@ fn login_local(request: &HttpRequest, state: &WebState) -> Result<HttpResponse> 
 }
 
 fn login_oauth_prepare(request: &HttpRequest, state: &WebState) -> Result<HttpResponse> {
-    if state.runtime().no_login {
+    if state.no_login_enabled() {
         return HttpResponse::json(
             409,
             &serde_json::json!({
@@ -1196,7 +1364,7 @@ fn login_oauth_callback(
     request: &HttpRequest,
     state: &WebState,
 ) -> Result<HttpResponse> {
-    if state.runtime().no_login {
+    if state.no_login_enabled() {
         return Ok(oauth_callback_error_response(
             409,
             "Login is disabled in --no-login mode.",
@@ -1447,6 +1615,22 @@ fn admin_update_oauth_provider(
     HttpResponse::json(200, &serde_json::json!({ "ok": true, "entry": updated }))
 }
 
+fn admin_get_runtime_settings(principal: &Principal, state: &WebState) -> Result<HttpResponse> {
+    ensure_admin(principal)?;
+    HttpResponse::json(200, &serde_json::json!({ "entry": state.runtime_settings_view() }))
+}
+
+fn admin_update_runtime_settings(
+    principal: &Principal,
+    request: &HttpRequest,
+    state: &WebState,
+) -> Result<HttpResponse> {
+    ensure_admin(principal)?;
+    let payload: AdminRuntimeSettingsUpdateRequest = request.json()?;
+    let updated = state.update_runtime_settings(payload)?;
+    HttpResponse::json(200, &serde_json::json!({ "ok": true, "entry": updated }))
+}
+
 fn ensure_admin(principal: &Principal) -> Result<()> {
     if !principal.role.can_manage_users() {
         return Err(anyhow!("forbidden"));
@@ -1683,6 +1867,7 @@ fn save_rule(request: &HttpRequest) -> Result<HttpResponse> {
         payload.tlp.as_deref(),
         payload.pap.as_deref(),
         payload.ttp.as_deref(),
+        None,
         Some(observables.as_slice()),
         Some(effective_indicates.as_slice()),
     );
@@ -1730,6 +1915,7 @@ fn set_rule_indicates(selector: &str, request: &HttpRequest) -> Result<HttpRespo
         Some(&metadata.tlp),
         Some(&metadata.pap),
         metadata.ttp.as_deref(),
+        None,
         Some(observables.as_slice()),
         Some(indicates_list.as_slice()),
     );
@@ -2398,6 +2584,18 @@ fn create_adversary(request: &HttpRequest, state: &WebState) -> Result<HttpRespo
         return HttpResponse::json(400, &serde_json::json!({ "error": "ability_ids_required" }));
     }
     let confidence = payload.confidence.unwrap_or(70);
+    let target_platform = payload
+        .target_platform
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_ascii_lowercase());
+    let Some(target_platform) = target_platform else {
+        return HttpResponse::json(
+            400,
+            &serde_json::json!({ "error": "target_platform_required" }),
+        );
+    };
     if confidence > 100 {
         return HttpResponse::json(
             400,
@@ -2407,6 +2605,17 @@ fn create_adversary(request: &HttpRequest, state: &WebState) -> Result<HttpRespo
 
     let catalog = AbilityCatalog::from_default_root()?;
     let abilities = catalog.select_by_ids(&payload.ability_ids)?;
+    if abilities.iter().any(|ability| {
+        !ability
+            .supported_platforms
+            .iter()
+            .any(|platform| platform.eq_ignore_ascii_case(&target_platform))
+    }) {
+        return HttpResponse::json(
+            400,
+            &serde_json::json!({ "error": "abilities_platform_mismatch" }),
+        );
+    }
     let order = if payload.order.is_empty() {
         payload.ability_ids.clone()
     } else {
@@ -2421,6 +2630,7 @@ fn create_adversary(request: &HttpRequest, state: &WebState) -> Result<HttpRespo
         payload.tlp.as_deref(),
         payload.pap.as_deref(),
         None,
+        Some(target_platform.as_str()),
         None,
         None,
     )
@@ -2481,8 +2691,35 @@ fn update_adversary(selector: &str, request: &HttpRequest) -> Result<HttpRespons
     let entry = resolve_adversary_selector(selector, &adversaries, None)?;
     let existing = emu_campaign::load_campaign_yaml(&entry.path)?;
     let existing_meta = decode_rule_metadata_description(Some(existing.description.clone()));
+    let target_platform = payload
+        .target_platform
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_ascii_lowercase())
+        .or_else(|| existing_meta.target_platform.clone())
+        .or_else(|| {
+            updated_platform_from_steps(&existing.steps)
+        });
+    let Some(target_platform) = target_platform else {
+        return HttpResponse::json(
+            400,
+            &serde_json::json!({ "error": "target_platform_required" }),
+        );
+    };
     let ordered_ids = normalize_ability_order(&payload.ability_ids, &payload.order);
     let abilities = catalog.select_by_ids(&ordered_ids)?;
+    if abilities.iter().any(|ability| {
+        !ability
+            .supported_platforms
+            .iter()
+            .any(|platform| platform.eq_ignore_ascii_case(&target_platform))
+    }) {
+        return HttpResponse::json(
+            400,
+            &serde_json::json!({ "error": "abilities_platform_mismatch" }),
+        );
+    }
     let plain_description = payload
         .description
         .unwrap_or_else(|| existing_meta.description.clone().unwrap_or_default())
@@ -2493,6 +2730,7 @@ fn update_adversary(selector: &str, request: &HttpRequest) -> Result<HttpRespons
         payload.tlp.as_deref().or(Some(existing_meta.tlp.as_str())),
         payload.pap.as_deref().or(Some(existing_meta.pap.as_str())),
         None,
+        Some(target_platform.as_str()),
         None,
         None,
     )
@@ -2811,6 +3049,7 @@ fn encode_rule_metadata_description(
     tlp: Option<&str>,
     pap: Option<&str>,
     ttp: Option<&str>,
+    target_platform: Option<&str>,
     observables: Option<&[String]>,
     indicates: Option<&[RuleIndicatesRelation]>,
 ) -> Option<String> {
@@ -2825,6 +3064,10 @@ fn encode_rule_metadata_description(
         tlp: normalize_tlp(tlp).to_string(),
         pap: normalize_pap(pap).to_string(),
         ttp: normalize_ttp(ttp),
+        target_platform: target_platform
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_ascii_lowercase()),
         observables: observable_list,
         indicates: indicates_list.first().cloned(),
         indicates_list,
@@ -2851,6 +3094,7 @@ fn decode_rule_metadata_description(description: Option<String>) -> DecodedRuleM
             tlp: normalize_tlp(None).to_string(),
             pap: normalize_pap(None).to_string(),
             ttp: None,
+            target_platform: None,
             observables: Vec::new(),
             indicates: None,
             indicates_list: Vec::new(),
@@ -2875,6 +3119,10 @@ fn decode_rule_metadata_description(description: Option<String>) -> DecodedRuleM
                         tlp: normalize_tlp(Some(&metadata.tlp)).to_string(),
                         pap: normalize_pap(Some(&metadata.pap)).to_string(),
                         ttp: normalize_ttp(metadata.ttp.as_deref()),
+                        target_platform: metadata
+                            .target_platform
+                            .map(|value| value.trim().to_ascii_lowercase())
+                            .filter(|value| !value.is_empty()),
                         observables: normalize_observables(metadata.observables),
                         indicates: indicates_list.first().cloned(),
                         indicates_list,
@@ -2899,6 +3147,7 @@ fn decode_rule_metadata_description(description: Option<String>) -> DecodedRuleM
                     tlp,
                     pap,
                     ttp: None,
+                    target_platform: None,
                     observables: Vec::new(),
                     indicates: None,
                     indicates_list: Vec::new(),
@@ -2911,6 +3160,7 @@ fn decode_rule_metadata_description(description: Option<String>) -> DecodedRuleM
         tlp: normalize_tlp(None).to_string(),
         pap: normalize_pap(None).to_string(),
         ttp: None,
+        target_platform: None,
         observables: Vec::new(),
         indicates: None,
         indicates_list: Vec::new(),
@@ -3186,6 +3436,7 @@ fn adversary_view(entry: CatalogAdversaryEntry) -> AdversaryView {
         confidence: entry.confidence,
         tlp: metadata.tlp,
         pap: metadata.pap,
+        target_platform: metadata.target_platform,
         steps: entry.steps,
         platforms: entry.platforms,
         description: metadata.description.unwrap_or_default(),
@@ -3193,6 +3444,13 @@ fn adversary_view(entry: CatalogAdversaryEntry) -> AdversaryView {
         path: entry.path.display().to_string(),
         compatible_exports,
     }
+}
+
+fn updated_platform_from_steps(steps: &[spuc::emulation::campaign::CampaignStep]) -> Option<String> {
+    steps
+        .first()
+        .map(|step| step.platform.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())
 }
 
 fn normalize_ability_order(ability_ids: &[String], order: &[String]) -> Vec<String> {
@@ -3690,6 +3948,7 @@ mod tests {
             Some("TLP:AMBER+STRICT"),
             Some("PAP:RED"),
             None,
+            None,
             Some(&["process".to_string(), "file".to_string()]),
             Some(&[RuleIndicatesRelation {
                 stix_id: "indicator--01234567-89ab-4def-8abc-0123456789ab".to_string(),
@@ -3743,6 +4002,7 @@ mod tests {
             Some("Sample rule"),
             Some("TLP:GREEN"),
             Some("PAP:GREEN"),
+            None,
             None,
             Some(&["artifact".to_string()]),
             Some(&[
@@ -3811,6 +4071,7 @@ mod tests {
             Some("Rule"),
             Some("TLP:GREEN"),
             Some("PAP:GREEN"),
+            None,
             None,
             None,
             Some(&[
@@ -3963,6 +4224,7 @@ mod tests {
             Some("TLP:AMBER"),
             Some("PAP:RED"),
             None,
+            Some("linux"),
             None,
             None,
         )
@@ -3982,6 +4244,37 @@ mod tests {
         assert_eq!(view.tlp, "TLP:AMBER");
         assert_eq!(view.pap, "PAP:RED");
         assert_eq!(view.description, "Campaign description");
+        assert_eq!(view.target_platform.as_deref(), Some("linux"));
+    }
+
+    #[test]
+    fn metadata_roundtrip_normalizes_target_platform() {
+        let encoded = encode_rule_metadata_description(
+            Some("Campaign description"),
+            Some("TLP:GREEN"),
+            Some("PAP:GREEN"),
+            None,
+            Some(" Windows "),
+            None,
+            None,
+        )
+        .expect("encoded metadata");
+        let decoded = decode_rule_metadata_description(Some(encoded));
+        assert_eq!(decoded.target_platform.as_deref(), Some("windows"));
+    }
+
+    #[test]
+    fn updated_platform_from_steps_uses_first_step_platform() {
+        let steps = vec![spuc::emulation::campaign::CampaignStep {
+            id: "step-1".to_string(),
+            ability_ref: "ability-1".to_string(),
+            platform: " Linux ".to_string(),
+            after: None,
+            delay_seconds: None,
+            timeout_seconds: None,
+        }];
+
+        assert_eq!(updated_platform_from_steps(&steps).as_deref(), Some("linux"));
     }
 
     #[test]
@@ -4034,6 +4327,7 @@ mod tests {
             Some("desc"),
             Some("TLP:GREEN"),
             Some("PAP:GREEN"),
+            None,
             None,
             None,
             Some(&[RuleIndicatesRelation {

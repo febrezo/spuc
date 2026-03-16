@@ -113,13 +113,14 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Rule Lab and rule detail modal include `Copy LLM prompt` actions that generate deterministic structured prompts from existing rule metadata (context, observables, indicators, conversion statuses, emulation capability, current STIX pattern, and task).
 - Rule laboratory target list is dynamic: at startup SPUC probes `sigma` once, discovers compatible backend plugins from `sigma plugin list`, and adds them as `sigma-to-<backend>` compatibility rows.
 - In Rule Lab compatibility rows, `Show output` is displayed only for non-`unsupported` entries that include generated output text.
-- Adversaries catalog supports clickable header sorting (name, emulability confidence, TLP, PAP, steps, platforms), row-click open for detail/edit, and colored exporter-availability tags per adversary.
-- Adversary confidence labels are presented as emulability confidence in catalog/planner contexts.
+- Adversaries catalog supports clickable header sorting (name, emulability confidence, TLP, PAP, steps, platforms), row-click open for detail/edit, colored exporter-availability tags per adversary, and the same cards/table plus column-visibility controls used in the rules catalog.
+- Rule and adversary confidence values in catalog and detail views are rendered as horizontal color bars instead of plain numeric labels.
 - Adversary creation/editing uses a planner modal with autosave, ordered step selection, and a dedicated ability-picker modal instead of always-on catalog list.
+- Adversary creation requires selecting a destination platform; ability catalog filtering is auto-locked to that platform by default.
 - The adversary ability picker includes direct creation for dummy abilities (`sleep_seconds` and `execution_label`) so synthetic pacing/label steps can be selected alongside cataloged abilities.
 - Adversary modal header shows emulable platforms and an export split control (button + target combobox).
 - Adversary export now includes an `Operacional` action that downloads a target-specific runner/config artifact (`*-operational.*`) to execute the full ordered ability chain per emulator.
-- Adversary modal includes a `Criterios de ejecucion` tab with per-exporter instructions and command examples.
+- Adversary exportability is re-evaluated immediately when selected abilities change so inline export targets stay in sync.
 - Adversary catalog uses a dismissible non-intrusive safety toast (`How to use adversaries safely`) persisted locally once closed.
 - Adversary catalog uses auto-applied filters (search, single platform combobox, min emulability) and bulk operations consistent with rules: shift-range selection, select/deselect all, bulk edit for TLP/PAP/emulability confidence, and bulk delete.
 - Adversary bulk metadata updates persist TLP/PAP values with each adversary and expose them in catalog API responses.

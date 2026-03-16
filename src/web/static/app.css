@@ -1272,6 +1272,12 @@ textarea {
   flex-wrap: wrap;
 }
 
+.rule-card-id-stack {
+  display: grid;
+  gap: 6px;
+  align-items: start;
+}
+
 .rule-card-id {
   font-family: var(--font-mono);
   font-size: 0.74rem;
@@ -1311,6 +1317,69 @@ textarea {
 
 .rule-card-kv strong {
   font-size: 0.92rem;
+}
+
+.rule-card-kv-confidence {
+  grid-column: span 2;
+}
+
+.confidence-bar-inline {
+  display: grid;
+  gap: 6px;
+}
+
+.confidence-bar-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.confidence-bar-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.confidence-bar-head strong {
+  font-size: 0.82rem;
+  color: #d8e8ff;
+}
+
+.confidence-bar-meter {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(148, 182, 232, 0.18);
+  overflow: hidden;
+}
+
+.confidence-bar-meter-empty {
+  height: auto;
+  min-height: 8px;
+  background: rgba(148, 182, 232, 0.08);
+  padding: 4px 8px;
+  color: #c3d6f6;
+  font-size: 0.74rem;
+}
+
+.confidence-bar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+}
+
+.confidence-bar-fill.rule {
+  background: linear-gradient(90deg, rgba(63, 213, 224, 0.82), rgba(77, 141, 255, 0.84));
+}
+
+.confidence-bar-fill.target {
+  background: linear-gradient(90deg, rgba(57, 196, 122, 0.82), rgba(122, 218, 167, 0.84));
+}
+
+.confidence-bar-fill.warning {
+  background: linear-gradient(90deg, rgba(227, 179, 65, 0.82), rgba(255, 217, 145, 0.84));
 }
 
 .rule-card-code-wrap {
@@ -1353,6 +1422,10 @@ textarea {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   align-items: start;
+}
+
+.rule-card-pill-columns-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .rule-card-pill-group {
@@ -2815,6 +2888,11 @@ tr:hover td {
   gap: 8px;
 }
 
+.rule-tech-guide-toggle-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
 .detail-summary-actions {
   display: inline-flex;
   gap: 8px;
@@ -3020,6 +3098,19 @@ tr:hover td {
   border-radius: 10px;
   background: rgba(10, 18, 31, 0.5);
   padding: 8px;
+}
+
+.adversary-card {
+  border-color: rgba(122, 218, 167, 0.24);
+}
+
+#adversaries-catalog-shell .icon-only {
+  min-width: 42px;
+}
+
+.detail-kv-confidence {
+  display: grid;
+  gap: 8px;
 }
 
 .rule-tech-guide > h5 {
