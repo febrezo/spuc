@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use chrono::Utc;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::env;
@@ -248,59 +248,59 @@ pub(crate) fn emulate_rules(options: EmulateOptions<'_>) -> Result<()> {
             options.ttp,
             confidence,
         ) {
-                Ok(ability) => ability,
-                Err(err) => {
-                    if matches!(options.mode, ConversionMode::Strict) {
-                        return Err(err);
-                    }
-                    println!("{YELLOW}Skipping rule (partial mode): {err}{RESET}");
-                    for target in &targets {
-                        record_activity(
-                            Some(&catalog),
-                            TranslationActivity::new(
-                                "emulate",
-                                rule_str,
-                                ability_target_label(*target),
-                                "unsupported",
-                                0,
-                                None,
-                            )
-                            .with_cache_meta(
-                                &rule_hash,
-                                DUAL_FLOW_ENGINE_VERSION,
-                                false,
-                            ),
-                        );
-                        if should_export_csv {
-                            csv_rows.push(CsvRow {
-                                input_rule: rule_str.clone(),
-                                target: ability_target_label(*target).to_ascii_uppercase(),
-                                runtime_status: "unsupported".to_string(),
-                                conversion_confidence: 0,
-                                rule_confidence: options.confidence,
-                                cause: "Unsupported observable scope for ability v1".to_string(),
-                                summary: "No defensive emulation mapping available".to_string(),
-                                notes: err.to_string(),
-                                output: String::new(),
-                            });
-                        }
-                    }
-                    sync_hidden_translation_from_emulate(
-                        &catalog,
-                        rule_str,
-                        options.description,
-                        options.ttp,
-                        options.confidence,
-                        options.mode,
-                        &empty_sigma_targets,
-                        &parsed,
-                        &rule_hash,
-                        options.refresh_cache,
-                    )?;
-                    println!();
-                    continue;
+            Ok(ability) => ability,
+            Err(err) => {
+                if matches!(options.mode, ConversionMode::Strict) {
+                    return Err(err);
                 }
-            };
+                println!("{YELLOW}Skipping rule (partial mode): {err}{RESET}");
+                for target in &targets {
+                    record_activity(
+                        Some(&catalog),
+                        TranslationActivity::new(
+                            "emulate",
+                            rule_str,
+                            ability_target_label(*target),
+                            "unsupported",
+                            0,
+                            None,
+                        )
+                        .with_cache_meta(
+                            &rule_hash,
+                            DUAL_FLOW_ENGINE_VERSION,
+                            false,
+                        ),
+                    );
+                    if should_export_csv {
+                        csv_rows.push(CsvRow {
+                            input_rule: rule_str.clone(),
+                            target: ability_target_label(*target).to_ascii_uppercase(),
+                            runtime_status: "unsupported".to_string(),
+                            conversion_confidence: 0,
+                            rule_confidence: options.confidence,
+                            cause: "Unsupported observable scope for ability v1".to_string(),
+                            summary: "No defensive emulation mapping available".to_string(),
+                            notes: err.to_string(),
+                            output: String::new(),
+                        });
+                    }
+                }
+                sync_hidden_translation_from_emulate(
+                    &catalog,
+                    rule_str,
+                    options.description,
+                    options.ttp,
+                    options.confidence,
+                    options.mode,
+                    &empty_sigma_targets,
+                    &parsed,
+                    &rule_hash,
+                    options.refresh_cache,
+                )?;
+                println!();
+                continue;
+            }
+        };
 
         let (saved_path, created) = catalog.upsert_by_source_pattern(&ability)?;
         println!(
@@ -2122,7 +2122,11 @@ fn collect_predicates_for_partial(ir: &ir::IrExpr) -> Option<Vec<ir::IrPredicate
         }
     }
     let mut out = Vec::new();
-    if walk(ir, &mut out) { Some(out) } else { None }
+    if walk(ir, &mut out) {
+        Some(out)
+    } else {
+        None
+    }
 }
 
 fn format_predicate(p: &ir::IrPredicate) -> String {

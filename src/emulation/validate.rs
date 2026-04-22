@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::emulation::ability::{ABILITY_SCHEMA_VERSION, Ability};
+use crate::emulation::ability::{Ability, ABILITY_SCHEMA_VERSION};
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

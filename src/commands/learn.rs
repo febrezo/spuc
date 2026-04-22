@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
@@ -804,11 +804,9 @@ mod tests {
     fn evaluate_challenge_submission_rejects_missing_elements() {
         let result = evaluate_challenge_submission("core003", "[process:name = 'cmd.exe']");
         assert!(result.is_err());
-        assert!(
-            result
-                .err()
-                .unwrap_or_default()
-                .contains("Missing required elements")
-        );
+        assert!(result
+            .err()
+            .unwrap_or_default()
+            .contains("Missing required elements"));
     }
 }

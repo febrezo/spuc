@@ -10,7 +10,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use crate::commands::sigma_discovery::{SigmaPluginEntry, parse_plugin_list};
+use crate::commands::sigma_discovery::{parse_plugin_list, SigmaPluginEntry};
 use crate::paths::spuc_config_root;
 
 const SIGMA_DISCOVERY_TIMEOUT_SECS: u64 = 8;
@@ -294,8 +294,8 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        SigmaRuntimeInfo, compatible_backends_from_entries, detect_sigma_runtime_for_binary,
-        load_cached_runtime_from_path, persist_runtime_cache_to_path,
+        compatible_backends_from_entries, detect_sigma_runtime_for_binary,
+        load_cached_runtime_from_path, persist_runtime_cache_to_path, SigmaRuntimeInfo,
     };
     use crate::commands::sigma_discovery::SigmaPluginEntry;
 

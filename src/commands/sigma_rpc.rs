@@ -170,12 +170,10 @@ pub(crate) fn remote_convert(
         .ok_or_else(|| "empty result from sigma-jsonrpc".to_string())?;
 
     if !result.success {
-        return Err(
-            result
-                .error_detail
-                .or(result.stderr)
-                .unwrap_or_else(|| "sigma convert failed".to_string()),
-        );
+        return Err(result
+            .error_detail
+            .or(result.stderr)
+            .unwrap_or_else(|| "sigma convert failed".to_string()));
     }
 
     result

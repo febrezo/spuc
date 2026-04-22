@@ -5,8 +5,8 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn spuc_bin() -> String {
-    let bin = std::env::var("CARGO_BIN_EXE_spuc")
-        .unwrap_or_else(|_| "target/debug/spuc".to_string());
+    let bin =
+        std::env::var("CARGO_BIN_EXE_spuc").unwrap_or_else(|_| "target/debug/spuc".to_string());
     if !Path::new(&bin).exists() {
         let status = Command::new("cargo")
             .args(["build", "-q", "-p", "spuc-server", "--bin", "spuc"])
@@ -99,16 +99,12 @@ fn emulate_writes_output_directory_and_powershell_artifact() {
         .collect();
     exported.sort();
     assert_eq!(exported.len(), 2);
-    assert!(
-        exported
-            .iter()
-            .any(|p| p.extension().and_then(|e| e.to_str()) == Some("json"))
-    );
-    assert!(
-        exported
-            .iter()
-            .any(|p| p.extension().and_then(|e| e.to_str()) == Some("ps1"))
-    );
+    assert!(exported
+        .iter()
+        .any(|p| p.extension().and_then(|e| e.to_str()) == Some("json")));
+    assert!(exported
+        .iter()
+        .any(|p| p.extension().and_then(|e| e.to_str()) == Some("ps1")));
 
     let ps_path = exported
         .iter()
@@ -176,21 +172,15 @@ fn emulate_supports_ipv4_indicator_with_network_artifacts() {
         .expect("exports dir missing")
         .filter_map(|entry| entry.ok().map(|e| e.path()))
         .collect();
-    assert!(
-        exported
-            .iter()
-            .any(|p| p.extension().and_then(|e| e.to_str()) == Some("json"))
-    );
-    assert!(
-        exported
-            .iter()
-            .any(|p| p.extension().and_then(|e| e.to_str()) == Some("ps1"))
-    );
-    assert!(
-        exported
-            .iter()
-            .any(|p| p.extension().and_then(|e| e.to_str()) == Some("sh"))
-    );
+    assert!(exported
+        .iter()
+        .any(|p| p.extension().and_then(|e| e.to_str()) == Some("json")));
+    assert!(exported
+        .iter()
+        .any(|p| p.extension().and_then(|e| e.to_str()) == Some("ps1")));
+    assert!(exported
+        .iter()
+        .any(|p| p.extension().and_then(|e| e.to_str()) == Some("sh")));
 }
 
 #[test]

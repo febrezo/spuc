@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -348,8 +348,8 @@ impl AbilityCatalog {
 mod tests {
     use super::*;
     use crate::emulation::ability::{
-        ABILITY_SCHEMA_VERSION, Ability, AbilityAction, AbilityClassification, AbilityRequirement,
-        EmulationLevel,
+        Ability, AbilityAction, AbilityClassification, AbilityRequirement, EmulationLevel,
+        ABILITY_SCHEMA_VERSION,
     };
 
     fn sample_ability(id: &str, platform: &str, name: &str) -> Ability {
@@ -641,15 +641,11 @@ mod tests {
             )
             .expect("record");
 
-        assert!(
-            catalog
-                .has_cached_activity("translate", "abc123", "spuc-test", "sigma", true)
-                .expect("cache")
-        );
-        assert!(
-            !catalog
-                .has_cached_activity("translate", "abc123", "spuc-test", "sigma", false)
-                .expect("cache")
-        );
+        assert!(catalog
+            .has_cached_activity("translate", "abc123", "spuc-test", "sigma", true)
+            .expect("cache"));
+        assert!(!catalog
+            .has_cached_activity("translate", "abc123", "spuc-test", "sigma", false)
+            .expect("cache"));
     }
 }

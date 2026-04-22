@@ -29,8 +29,8 @@ pub fn export_ability(target: AbilityExportTarget, ability: &Ability) -> Result<
 mod tests {
     use super::*;
     use crate::emulation::ability::{
-        ABILITY_SCHEMA_VERSION, Ability, AbilityAction, AbilityClassification, AbilityRequirement,
-        EmulationLevel,
+        Ability, AbilityAction, AbilityClassification, AbilityRequirement, EmulationLevel,
+        ABILITY_SCHEMA_VERSION,
     };
 
     fn sample_ability() -> Ability {

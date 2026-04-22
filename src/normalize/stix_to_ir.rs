@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use std::net::{Ipv4Addr, Ipv6Addr};
 
 use crate::ast::{CompareOp, Expr, ObservationQualifier, Pattern, Value};
@@ -210,9 +210,7 @@ fn canonicalize_stix_path(object_type: &str, field: &str) -> (String, String) {
         ("file", "created") => ("file".to_string(), "ctime".to_string()),
         ("file", "modified") => ("file".to_string(), "mtime".to_string()),
         ("file", "accessed") => ("file".to_string(), "atime".to_string()),
-        ("file", "parent_directory_ref.path") => {
-            ("directory".to_string(), "path".to_string())
-        }
+        ("file", "parent_directory_ref.path") => ("directory".to_string(), "path".to_string()),
         (o, f) => (o.to_string(), f.to_string()),
     }
 }

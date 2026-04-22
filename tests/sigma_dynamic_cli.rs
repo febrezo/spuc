@@ -8,7 +8,8 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn spuc_bin() -> String {
-    let bin = std::env::var("CARGO_BIN_EXE_spuc").unwrap_or_else(|_| "target/debug/spuc".to_string());
+    let bin =
+        std::env::var("CARGO_BIN_EXE_spuc").unwrap_or_else(|_| "target/debug/spuc".to_string());
     if !Path::new(&bin).exists() {
         let status = Command::new("cargo")
             .args(["build", "-q", "-p", "spuc-server", "--bin", "spuc"])

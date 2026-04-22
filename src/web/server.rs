@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::thread;
 
 use crate::ui::ansi::{BLUE, RED, RESET, YELLOW};
-use crate::web::api::{HttpRequest, HttpResponse, WebState, generate_secret, route};
+use crate::web::api::{generate_secret, route, HttpRequest, HttpResponse, WebState};
 
 pub(crate) fn run(
     port: u16,
@@ -22,10 +22,8 @@ pub(crate) fn run(
 
     let state = Arc::new(WebState::new(admin_user, &password, generated, no_login)?);
     let url = format!("http://127.0.0.1:{port}/");
-    
-    log_info(&format!(
-        "Web interface listening on {url}"
-    ));
+
+    log_info(&format!("Web interface listening on {url}"));
 
     if no_login {
         log_info("Login disabled by --no-login. Browser enters directly as administrator.");
@@ -264,8 +262,7 @@ mod tests {
                     }
                 }
                 Err(err)
-                    if err.kind() == ErrorKind::WouldBlock
-                        || err.kind() == ErrorKind::TimedOut =>
+                    if err.kind() == ErrorKind::WouldBlock || err.kind() == ErrorKind::TimedOut =>
                 {
                     idle_reads = idle_reads.saturating_add(1);
                     if idle_reads >= 3 {
@@ -304,7 +301,8 @@ mod tests {
         with_test_config_dir("protected_routes", || {
             let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener");
             let port = listener.local_addr().expect("addr").port();
-            let state = Arc::new(WebState::new("admin", "secret-pass", false, false).expect("state"));
+            let state =
+                Arc::new(WebState::new("admin", "secret-pass", false, false).expect("state"));
             let state_for_thread = Arc::clone(&state);
             std::thread::spawn(move || {
                 start(listener, state_for_thread).expect("server");
@@ -364,7 +362,8 @@ mod tests {
         with_test_config_dir("no_login", || {
             let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener");
             let port = listener.local_addr().expect("addr").port();
-            let state = Arc::new(WebState::new("admin", "secret-pass", false, true).expect("state"));
+            let state =
+                Arc::new(WebState::new("admin", "secret-pass", false, true).expect("state"));
             let state_for_thread = Arc::clone(&state);
             std::thread::spawn(move || {
                 start(listener, state_for_thread).expect("server");
@@ -384,7 +383,8 @@ mod tests {
         with_test_config_dir("oauth_toggle", || {
             let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener");
             let port = listener.local_addr().expect("addr").port();
-            let state = Arc::new(WebState::new("admin", "secret-pass", false, false).expect("state"));
+            let state =
+                Arc::new(WebState::new("admin", "secret-pass", false, false).expect("state"));
             let state_for_thread = Arc::clone(&state);
             std::thread::spawn(move || {
                 start(listener, state_for_thread).expect("server");
@@ -425,8 +425,8 @@ mod tests {
             let bootstrap = send_raw(
                 port,
                 &format!(
-                "GET /api/bootstrap HTTP/1.1\r\nHost: localhost\r\nCookie: {}\r\n\r\n",
-                cookie
+                    "GET /api/bootstrap HTTP/1.1\r\nHost: localhost\r\nCookie: {}\r\n\r\n",
+                    cookie
                 ),
             );
             assert!(bootstrap.contains("\"authorized\": true"));

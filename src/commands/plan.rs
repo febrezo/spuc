@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use chrono::Utc;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
@@ -14,8 +14,8 @@ use crate::commands::common::{
 };
 use crate::paths;
 use crate::tui::{
-    SpucEditor, campaign_completion_words, load_editor_history, new_spuc_editor, read_line_compact,
-    read_line_with_spacing, save_editor_history, set_editor_words,
+    campaign_completion_words, load_editor_history, new_spuc_editor, read_line_compact,
+    read_line_with_spacing, save_editor_history, set_editor_words, SpucEditor,
 };
 use crate::ui::ansi::{BLUE, BOLD, GREEN, PURPLE, RED, RESET, UNBOLD, YELLOW};
 use spuc::emulation::ability as emu_ability;

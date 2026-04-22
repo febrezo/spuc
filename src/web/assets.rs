@@ -95,7 +95,8 @@ mod tests {
 
     #[test]
     fn app_js_supports_rules_cards_view_mode() {
-        assert!(APP_JS.contains("viewMode: localStorage.getItem(\"spuc-web-rules-view-mode\") || \"cards\""));
+        assert!(APP_JS
+            .contains("viewMode: localStorage.getItem(\"spuc-web-rules-view-mode\") || \"cards\""));
         assert!(APP_JS.contains("function renderRulesCards() {"));
         assert!(APP_JS.contains("setRulesViewMode(target.dataset.mode || \"table\")"));
         let start = APP_JS
@@ -208,11 +209,30 @@ mod tests {
         assert!(INDEX_HTML.contains("<div id=\"app-view\" class=\"app-layout hidden\">"));
         assert!(INDEX_HTML.contains("<aside class=\"sidebar glass\">"));
         assert!(INDEX_HTML.contains("<div class=\"sidebar-brand-line\">"));
-        assert_eq!(INDEX_HTML.matches("id=\"adversaries-view-cards\"").count(), 1);
-        assert_eq!(INDEX_HTML.matches("id=\"adversaries-view-table\"").count(), 1);
-        assert_eq!(INDEX_HTML.matches("id=\"adversaries-select-all-toggle\"").count(), 1);
-        assert_eq!(INDEX_HTML.matches("id=\"adversaries-bulk-toggle\"").count(), 1);
-        assert_eq!(INDEX_HTML.matches("id=\"adversaries-columns-toggle\"").count(), 1);
+        assert_eq!(
+            INDEX_HTML.matches("id=\"adversaries-view-cards\"").count(),
+            1
+        );
+        assert_eq!(
+            INDEX_HTML.matches("id=\"adversaries-view-table\"").count(),
+            1
+        );
+        assert_eq!(
+            INDEX_HTML
+                .matches("id=\"adversaries-select-all-toggle\"")
+                .count(),
+            1
+        );
+        assert_eq!(
+            INDEX_HTML.matches("id=\"adversaries-bulk-toggle\"").count(),
+            1
+        );
+        assert_eq!(
+            INDEX_HTML
+                .matches("id=\"adversaries-columns-toggle\"")
+                .count(),
+            1
+        );
     }
 
     #[test]

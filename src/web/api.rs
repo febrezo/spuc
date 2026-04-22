@@ -1,10 +1,10 @@
-use anyhow::{Result, anyhow};
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use anyhow::{anyhow, Result};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::{Datelike, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::collections::hash_map::DefaultHasher;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io::Read;
@@ -14,11 +14,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::app::services::translation::{TranslationRequest, evaluate_rule};
+use crate::app::services::translation::{evaluate_rule, TranslationRequest};
 use crate::catalog::{
-    CatalogAdversaryEntry, CatalogRuleEntry, delete_rule_entry, edit_rule_entry,
-    filter_adversary_entries, filter_rule_entries, load_catalog_data, resolve_adversary_selector,
-    resolve_rule_selector,
+    delete_rule_entry, edit_rule_entry, filter_adversary_entries, filter_rule_entries,
+    load_catalog_data, resolve_adversary_selector, resolve_rule_selector, CatalogAdversaryEntry,
+    CatalogRuleEntry,
 };
 use crate::cli::{AbilityTarget, BuildOutput, ConversionMode, ExportFormat};
 use crate::commands::common::{
@@ -29,11 +29,11 @@ use crate::commands::sigma_targets::dynamic_sigma_targets;
 use crate::commands::{emulate, learn, plan, translate, verify};
 use crate::paths::spuc_config_root;
 use crate::web::auth::{
+    build_oauth_authorize_url, change_password, create_user, delete_user, exchange_oauth_code,
+    list_users, load_or_init_oauth_policy, load_or_init_users, save_oauth_policy, save_users,
+    set_oauth_provider_authorized, update_user as update_store_user, verify_credentials,
     OAuthConfig, OAuthIdentity, OAuthPolicyStore, Principal, ProviderBootstrap, PublicUserView,
-    Role, UserStore, build_oauth_authorize_url, change_password, create_user, delete_user,
-    exchange_oauth_code, list_users, load_or_init_oauth_policy, load_or_init_users,
-    save_oauth_policy, save_users, set_oauth_provider_authorized, update_user as update_store_user,
-    verify_credentials,
+    Role, UserStore,
 };
 use crate::web::{assets, i18n};
 use spuc::emulation::ability as emu_ability;
@@ -125,15 +125,11 @@ impl WebState {
         generated_password: bool,
         no_login: bool,
     ) -> Result<Self> {
-        let (users_path, users) = load_or_init_users(
-            admin_user,
-            admin_password,
-            !generated_password,
-        )?;
+        let (users_path, users) =
+            load_or_init_users(admin_user, admin_password, !generated_password)?;
         let oauth = OAuthConfig::from_env();
         let (oauth_policy_path, oauth_policy) = load_or_init_oauth_policy(&oauth)?;
-        let (runtime_settings_path, runtime_settings) =
-            load_or_init_runtime_settings(no_login)?;
+        let (runtime_settings_path, runtime_settings) = load_or_init_runtime_settings(no_login)?;
         apply_sigma_rpc_env(&runtime_settings);
         let bootstrap_admin = users
             .users
@@ -471,14 +467,20 @@ fn runtime_settings_path() -> Result<PathBuf> {
     Ok(root.join("web_runtime_settings.json"))
 }
 
-fn load_or_init_runtime_settings(no_login_default: bool) -> Result<(PathBuf, AdminRuntimeSettingsStore)> {
+fn load_or_init_runtime_settings(
+    no_login_default: bool,
+) -> Result<(PathBuf, AdminRuntimeSettingsStore)> {
     let path = runtime_settings_path()?;
     if !path.exists() {
         let settings = AdminRuntimeSettingsStore {
             schema_version: WEB_ADMIN_SETTINGS_SCHEMA_VERSION.to_string(),
             no_login: no_login_default,
-            sigma_rpc_url: normalize_optional_setting(std::env::var(ENV_SIGMA_RPC_URL).unwrap_or_default()),
-            sigma_rpc_token: normalize_optional_setting(std::env::var(ENV_SIGMA_RPC_TOKEN).unwrap_or_default()),
+            sigma_rpc_url: normalize_optional_setting(
+                std::env::var(ENV_SIGMA_RPC_URL).unwrap_or_default(),
+            ),
+            sigma_rpc_token: normalize_optional_setting(
+                std::env::var(ENV_SIGMA_RPC_TOKEN).unwrap_or_default(),
+            ),
         };
         persist_runtime_settings(&path, &settings)?;
         return Ok((path, settings));
@@ -1167,9 +1169,7 @@ pub(crate) fn route(request: HttpRequest, state: &WebState) -> Result<HttpRespon
         ("POST", ["api", "rules", "save"]) => save_rule(&request),
         ("POST", ["api", "rules", selector, "indicates"]) => set_rule_indicates(selector, &request),
         ("POST", ["api", "rules", "compatibility"]) => rule_compatibility(&request),
-        ("POST", ["api", "rules", "export", "bundle"]) => {
-            export_rules_bundle(&request)
-        }
+        ("POST", ["api", "rules", "export", "bundle"]) => export_rules_bundle(&request),
         ("GET", ["api", "abilities"]) => list_abilities(&request),
         ("POST", ["api", "abilities", "dummy"]) => create_dummy_ability(&request),
         ("GET", ["api", "abilities", ability_id]) => show_ability(ability_id),
@@ -1627,7 +1627,10 @@ fn admin_update_oauth_provider(
 
 fn admin_get_runtime_settings(principal: &Principal, state: &WebState) -> Result<HttpResponse> {
     ensure_admin(principal)?;
-    HttpResponse::json(200, &serde_json::json!({ "entry": state.runtime_settings_view() }))
+    HttpResponse::json(
+        200,
+        &serde_json::json!({ "entry": state.runtime_settings_view() }),
+    )
 }
 
 fn admin_update_runtime_settings(
@@ -2050,10 +2053,12 @@ fn export_rules_bundle(request: &HttpRequest) -> Result<HttpResponse> {
     }
     let bundle = build_stix_bundle_from_rules(&selected)?;
     let pretty = serde_json::to_vec_pretty(&bundle)?;
-    Ok(HttpResponse::text(200, "application/json; charset=utf-8", pretty).with_header(
-        "Content-Disposition",
-        "attachment; filename=\"spuc-rules-bundle.json\"",
-    ))
+    Ok(
+        HttpResponse::text(200, "application/json; charset=utf-8", pretty).with_header(
+            "Content-Disposition",
+            "attachment; filename=\"spuc-rules-bundle.json\"",
+        ),
+    )
 }
 
 fn build_stix_bundle_from_rules(selected: &[CatalogRuleEntry]) -> Result<serde_json::Value> {
@@ -2094,7 +2099,12 @@ fn build_stix_bundle_from_rules(selected: &[CatalogRuleEntry]) -> Result<serde_j
             if row.runtime_status.eq_ignore_ascii_case("unsupported") {
                 continue;
             }
-            let Some(output) = row.output.as_deref().map(str::trim).filter(|value| !value.is_empty()) else {
+            let Some(output) = row
+                .output
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            else {
                 continue;
             };
             let coefficient = (row.conversion_confidence as f64 / 100.0).clamp(0.0, 1.0);
@@ -2164,7 +2174,11 @@ fn build_stix_bundle_from_rules(selected: &[CatalogRuleEntry]) -> Result<serde_j
     }))
 }
 
-fn build_stix_stub_object(stix_id: &str, object_name: &str, now: &str) -> Option<serde_json::Value> {
+fn build_stix_stub_object(
+    stix_id: &str,
+    object_name: &str,
+    now: &str,
+) -> Option<serde_json::Value> {
     let stix_type = stix_id.split_once("--")?.0.trim().to_ascii_lowercase();
     if stix_type.is_empty() {
         return None;
@@ -2288,7 +2302,8 @@ fn create_dummy_ability(request: &HttpRequest) -> Result<HttpResponse> {
                 .label
                 .as_deref()
                 .map(str::trim)
-                .filter(|value| !value.is_empty()) else {
+                .filter(|value| !value.is_empty())
+            else {
                 return HttpResponse::json(400, &json!({ "error": "dummy_label_required" }));
             };
             build_dummy_label_ability(label, &platform)
@@ -2708,9 +2723,7 @@ fn update_adversary(selector: &str, request: &HttpRequest) -> Result<HttpRespons
         .filter(|value| !value.is_empty())
         .map(|value| value.to_ascii_lowercase())
         .or_else(|| existing_meta.target_platform.clone())
-        .or_else(|| {
-            updated_platform_from_steps(&existing.steps)
-        });
+        .or_else(|| updated_platform_from_steps(&existing.steps));
     let Some(target_platform) = target_platform else {
         return HttpResponse::json(
             400,
@@ -2787,7 +2800,9 @@ fn export_adversary(
     let requested = target.and_then(parse_ability_target);
     let is_full_export = target.is_none()
         || matches!(
-            target.map(|value| value.trim().to_ascii_lowercase()).as_deref(),
+            target
+                .map(|value| value.trim().to_ascii_lowercase())
+                .as_deref(),
             Some("all") | Some("full")
         );
 
@@ -2805,10 +2820,7 @@ fn export_adversary(
 
     let export_root = unique_temp_export_dir(
         &adversary.adversary_id,
-        targets
-            .first()
-            .copied()
-            .unwrap_or(AbilityTarget::SpucAgent),
+        targets.first().copied().unwrap_or(AbilityTarget::SpucAgent),
     )?;
     let mut exported_any = false;
     for executor in &targets {
@@ -2837,9 +2849,11 @@ fn export_adversary(
 
     let mut downloads = Vec::new();
     for file in list_files_recursive(&export_root)? {
-        let relative_path = file.strip_prefix(&export_root).ok()
+        let relative_path = file
+            .strip_prefix(&export_root)
+            .ok()
             .and_then(|p| p.to_str());
-        
+
         // Remove the executor folder prefix (first component) from the relative path
         let relative = if let Some(path_str) = relative_path {
             let parts: Vec<&str> = path_str.split('/').collect();
@@ -2854,7 +2868,7 @@ fn export_adversary(
         } else {
             "artifact".to_string()
         };
-        
+
         let token = state.register_download(DownloadEntry {
             content_type: guess_content_type(&file).to_string(),
             name: relative.clone(),
@@ -3468,7 +3482,9 @@ fn adversary_view(entry: CatalogAdversaryEntry) -> AdversaryView {
     }
 }
 
-fn updated_platform_from_steps(steps: &[spuc::emulation::campaign::CampaignStep]) -> Option<String> {
+fn updated_platform_from_steps(
+    steps: &[spuc::emulation::campaign::CampaignStep],
+) -> Option<String> {
     steps
         .first()
         .map(|step| step.platform.trim().to_ascii_lowercase())
@@ -3805,18 +3821,22 @@ fn render_operational_runner_content(
                 "BLUE='\\033[0;34m'".to_string(),
                 "NC='\\033[0m' # No Color".to_string(),
                 "".to_string(),
-                format!("echo \"${{BLUE}}[spuc] operational adversary runner: {manifest_name}${{NC}}\""),
-                format!("echo \"${{YELLOW}}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${{NC}}\""),
+                format!(
+                    "echo \"${{BLUE}}[spuc] operational adversary runner: {manifest_name}${{NC}}\""
+                ),
+                format!(
+                    "echo \"${{YELLOW}}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${{NC}}\""
+                ),
                 "".to_string(),
             ];
-            
+
             for (idx, (name, content)) in artifact_contents.iter().enumerate() {
                 let step_num = idx + 1;
                 let total = artifact_contents.len();
                 lines.push(format!("echo \"${{GREEN}}[Step {}/{}]${{NC}} ${{YELLOW}}Ejecutando ability: {}${{NC}}\"", step_num, total, name));
                 lines.push("echo \"\"".to_string());
                 lines.push(format!("# ========== Ability: {} ==========", name));
-                
+
                 // Remove shebang and duplicate set -euo pipefail from nested scripts
                 let content_lines: Vec<&str> = content.lines().collect();
                 for (line_idx, line) in content_lines.iter().enumerate() {
@@ -3835,17 +3855,27 @@ fn render_operational_runner_content(
                     }
                     lines.push(line.to_string());
                 }
-                
+
                 lines.push(format!("# ========== End: {} ==========", name));
                 lines.push("echo \"\"".to_string());
-                lines.push(format!("echo \"${{GREEN}}✓ Completado: {}${{NC}}\"", name.replace(".sh", "")));
-                lines.push(format!("echo \"${{YELLOW}}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${{NC}}\""));
+                lines.push(format!(
+                    "echo \"${{GREEN}}✓ Completado: {}${{NC}}\"",
+                    name.replace(".sh", "")
+                ));
+                lines.push(format!(
+                    "echo \"${{YELLOW}}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${{NC}}\""
+                ));
                 lines.push("".to_string());
             }
-            
+
             lines.push("echo \"\"".to_string());
-            lines.push(format!("echo \"${{GREEN}}[spuc] operational run completed successfully${{NC}}\""));
-            lines.push(format!("echo \"${{BLUE}}All {} abilities executed${{NC}}\"", artifact_contents.len()));
+            lines.push(format!(
+                "echo \"${{GREEN}}[spuc] operational run completed successfully${{NC}}\""
+            ));
+            lines.push(format!(
+                "echo \"${{BLUE}}All {} abilities executed${{NC}}\"",
+                artifact_contents.len()
+            ));
             lines.join("\n") + "\n"
         }
         AbilityTarget::Powershell => {
@@ -3863,14 +3893,14 @@ fn render_operational_runner_content(
                 format!("Write-Host \"${{YELLOW}}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${{NC}}\""),
                 "".to_string(),
             ];
-            
+
             for (idx, (name, content)) in artifact_contents.iter().enumerate() {
                 let step_num = idx + 1;
                 let total = artifact_contents.len();
                 lines.push(format!("Write-Host \"${{GREEN}}[Step {}/{}]${{NC}} ${{YELLOW}}Ejecutando ability: {}${{NC}}\"", step_num, total, name));
                 lines.push("".to_string());
                 lines.push(format!("# ========== Ability: {} ==========", name));
-                
+
                 // Remove ErrorActionPreference duplicate from nested scripts if present at top
                 let content_lines: Vec<&str> = content.lines().collect();
                 for (line_idx, line) in content_lines.iter().enumerate() {
@@ -3881,17 +3911,25 @@ fn render_operational_runner_content(
                     }
                     lines.push(line.to_string());
                 }
-                
+
                 lines.push(format!("# ========== End: {} ==========", name));
                 lines.push("".to_string());
-                lines.push(format!("Write-Host \"${{GREEN}}✓ Completado: {}${{NC}}\"", name.replace(".ps1", "")));
+                lines.push(format!(
+                    "Write-Host \"${{GREEN}}✓ Completado: {}${{NC}}\"",
+                    name.replace(".ps1", "")
+                ));
                 lines.push(format!("Write-Host \"${{YELLOW}}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${{NC}}\""));
                 lines.push("".to_string());
             }
-            
+
             lines.push("".to_string());
-            lines.push(format!("Write-Host \"${{GREEN}}[spuc] operational run completed successfully${{NC}}\""));
-            lines.push(format!("Write-Host \"${{BLUE}}All {} abilities executed${{NC}}\"", artifact_contents.len()));
+            lines.push(format!(
+                "Write-Host \"${{GREEN}}[spuc] operational run completed successfully${{NC}}\""
+            ));
+            lines.push(format!(
+                "Write-Host \"${{BLUE}}All {} abilities executed${{NC}}\"",
+                artifact_contents.len()
+            ));
             lines.join("\n") + "\n"
         }
         AbilityTarget::AtomicRedTeam => {
@@ -3936,7 +3974,10 @@ fn render_operational_runner_content(
     }
 }
 
-fn generate_operational_runner_artifacts(executor: AbilityTarget, target_root: &Path) -> Result<()> {
+fn generate_operational_runner_artifacts(
+    executor: AbilityTarget,
+    target_root: &Path,
+) -> Result<()> {
     let manifest_files = list_files(target_root)?
         .into_iter()
         .filter(|path| path.extension().and_then(|v| v.to_str()) == Some("yaml"))
@@ -3963,7 +4004,11 @@ fn generate_operational_runner_artifacts(executor: AbilityTarget, target_root: &
         let campaign = emu_campaign::load_campaign_yaml(&manifest)?;
         let mut ordered_names = Vec::new();
         for step in &campaign.steps {
-            let candidate = format!("{stem}-{}.{}", slugify_token(&step.ability_ref), artifact_ext);
+            let candidate = format!(
+                "{stem}-{}.{}",
+                slugify_token(&step.ability_ref),
+                artifact_ext
+            );
             if target_root.join(&candidate).is_file() {
                 ordered_names.push(candidate);
             }
@@ -3973,7 +4018,9 @@ fn generate_operational_runner_artifacts(executor: AbilityTarget, target_root: &
                 .into_iter()
                 .filter_map(|path| {
                     let name = path.file_name()?.to_str()?.to_string();
-                    if name.starts_with(&(stem.clone() + "-")) && name.ends_with(&format!(".{artifact_ext}")) {
+                    if name.starts_with(&(stem.clone() + "-"))
+                        && name.ends_with(&format!(".{artifact_ext}"))
+                    {
                         Some(name)
                     } else {
                         None
@@ -4001,14 +4048,15 @@ fn generate_operational_runner_artifacts(executor: AbilityTarget, target_root: &
                 }
             }
         }
-        
+
         if artifact_contents.is_empty() {
             continue;
         }
 
         let runner_name = format!("{stem}.{op_ext}");
         let runner_path = target_root.join(runner_name);
-        let content = render_operational_runner_content(executor, &manifest_name, &artifact_contents);
+        let content =
+            render_operational_runner_content(executor, &manifest_name, &artifact_contents);
         fs::write(runner_path, content)?;
     }
 
@@ -4044,11 +4092,8 @@ mod tests {
             .get_or_init(|| Mutex::new(()))
             .lock()
             .expect("test lock poisoned");
-        let dir = std::env::temp_dir().join(format!(
-            "spuc_web_api_test_{}_{}",
-            tag,
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("spuc_web_api_test_{}_{}", tag, std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("create test config dir");
         unsafe {
@@ -4255,16 +4300,12 @@ mod tests {
 
         let objects = collect_stix_objects_from_rules(&rules);
         assert_eq!(objects.len(), 2);
-        assert!(
-            objects
-                .iter()
-                .any(|item| item.stix_id == "malware--01234567-89ab-4def-8abc-0123456789ab")
-        );
-        assert!(
-            objects
-                .iter()
-                .any(|item| item.stix_id == "indicator--11111111-2222-4def-8abc-0123456789ab")
-        );
+        assert!(objects
+            .iter()
+            .any(|item| item.stix_id == "malware--01234567-89ab-4def-8abc-0123456789ab"));
+        assert!(objects
+            .iter()
+            .any(|item| item.stix_id == "indicator--11111111-2222-4def-8abc-0123456789ab"));
     }
 
     #[test]
@@ -4424,7 +4465,10 @@ mod tests {
             timeout_seconds: None,
         }];
 
-        assert_eq!(updated_platform_from_steps(&steps).as_deref(), Some("linux"));
+        assert_eq!(
+            updated_platform_from_steps(&steps).as_deref(),
+            Some("linux")
+        );
     }
 
     #[test]
@@ -4562,9 +4606,7 @@ mod tests {
 
     #[test]
     fn operational_runner_content_for_spuc_agent_is_json() {
-        let artifact_contents = vec![
-            ("a.json".to_string(), "{}".to_string()),
-        ];
+        let artifact_contents = vec![("a.json".to_string(), "{}".to_string())];
         let content = render_operational_runner_content(
             AbilityTarget::SpucAgent,
             "campaign.yaml",

@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::fs;
@@ -259,8 +259,8 @@ fn order_abilities<'a>(abilities: &'a [Ability], order: &[String]) -> Vec<&'a Ab
 mod tests {
     use super::*;
     use crate::emulation::ability::{
-        ABILITY_SCHEMA_VERSION, AbilityAction, AbilityClassification, AbilityRequirement,
-        EmulationLevel,
+        AbilityAction, AbilityClassification, AbilityRequirement, EmulationLevel,
+        ABILITY_SCHEMA_VERSION,
     };
 
     fn sample_ability(id: &str) -> Ability {

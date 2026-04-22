@@ -1,4 +1,4 @@
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -13,7 +13,10 @@ fn spuc_agent_bin() -> String {
             .args(["build", "-q", "-p", "spuc-server", "--bin", "spuc-agent"])
             .status()
             .expect("failed to build spuc-agent binary for tests");
-        assert!(status.success(), "failed to build spuc-agent binary for tests");
+        assert!(
+            status.success(),
+            "failed to build spuc-agent binary for tests"
+        );
     }
     bin
 }

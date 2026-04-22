@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::highlight::Highlighter;
@@ -9,22 +9,22 @@ use rustyline::{Context, Editor, Helper};
 use std::path::PathBuf;
 
 use crate::catalog::{
-    CatalogAdversaryEntry, CatalogRuleEntry, delete_adversary_entry, delete_rule_entry,
-    edit_adversary_entry, edit_rule_entry, export_adversary_entry, export_rule_entry,
-    filter_adversary_entries, filter_rule_entries, load_catalog_data,
-    print_adversary_search_results, print_rule_search_results, resolve_adversary_selector,
-    resolve_rule_selector, show_adversary_entry, show_rule_entry,
+    delete_adversary_entry, delete_rule_entry, edit_adversary_entry, edit_rule_entry,
+    export_adversary_entry, export_rule_entry, filter_adversary_entries, filter_rule_entries,
+    load_catalog_data, print_adversary_search_results, print_rule_search_results,
+    resolve_adversary_selector, resolve_rule_selector, show_adversary_entry, show_rule_entry,
+    CatalogAdversaryEntry, CatalogRuleEntry,
 };
 use crate::cli::{AbilityTarget, BuildOutput, ConversionMode, ExportFormat};
 use crate::commands::common::{parse_ability_target, parse_build_outputs};
 use crate::commands::emulate::{options as emulate_options, run as run_emulate_command};
 use crate::commands::learn::{
-    LEARN_CHALLENGES, LearnSession, handle_learn_input, learn_prompt, print_learn_catalog,
-    print_learn_intro, select_learn_challenge,
+    handle_learn_input, learn_prompt, print_learn_catalog, print_learn_intro,
+    select_learn_challenge, LearnSession, LEARN_CHALLENGES,
 };
 use crate::commands::plan::{
-    ALLOWED_PLATFORMS, CampaignConsoleState, CampaignOptions, default_campaign_show,
-    run as run_campaign_command,
+    default_campaign_show, run as run_campaign_command, CampaignConsoleState, CampaignOptions,
+    ALLOWED_PLATFORMS,
 };
 use crate::commands::translate::{options as translate_options, run as run_translate_command};
 use crate::commands::verify::verify_rule;

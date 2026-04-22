@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 use crate::emitters::{EmitResult, FidelityStatus};
 use crate::ir::{IrExpr, IrOp, IrPredicate, IrValue};
