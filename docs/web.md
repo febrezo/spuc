@@ -11,9 +11,9 @@ spuc web --port 8090 --no-login
 ```
 
 `spuc` without subcommands starts standalone mode:
-- with `desktop-tauri` feature enabled, it opens a native desktop window (no browser);
-- otherwise it falls back to local web mode on `http://127.0.0.1:8090/` with `--no-login`.
-- desktop build command: `cargo run --bin spuc --features desktop-tauri`
+- it falls back to local web mode on `http://127.0.0.1:8090/` with `--no-login`.
+- `spuc web` binds to `127.0.0.1` and exposes `GET /healthz` for sidecar readiness checks.
+- desktop build command: `cargo run -p spuc-desktop`
 - Linux desktop prerequisites: WebKitGTK and JavaScriptCoreGTK development packages (`webkit2gtk-4.1` and `javascriptcoregtk-4.1` headers, or distro equivalent).
 
 If `--admin-password` is omitted, SPUC generates a random 25-character administrator password and prints it in startup logs.
@@ -119,7 +119,7 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Adversary creation requires selecting a destination platform; ability catalog filtering is auto-locked to that platform by default.
 - The adversary ability picker includes direct creation for dummy abilities (`sleep_seconds` and `execution_label`) so synthetic pacing/label steps can be selected alongside cataloged abilities.
 - Adversary modal header shows emulable platforms and an export split control (button + target combobox).
-- Adversary export now includes an `Operacional` action that downloads a target-specific runner/config artifact (`*-operational.*`) to execute the full ordered ability chain per emulator.
+- Adversary export now includes an `Operacional` action that downloads a target-specific executable artifact per emulator to execute the full ordered ability chain.
 - Adversary exportability is re-evaluated immediately when selected abilities change so inline export targets stay in sync.
 - Adversary catalog uses a dismissible non-intrusive safety toast (`How to use adversaries safely`) persisted locally once closed.
 - Adversary catalog uses auto-applied filters (search, single platform combobox, min emulability) and bulk operations consistent with rules: shift-range selection, select/deselect all, bulk edit for TLP/PAP/emulability confidence, and bulk delete.

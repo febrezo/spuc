@@ -1,0 +1,50 @@
+# deploy/docker-compose.spuc.yml
+#
+# Minimal compose example: SPUC + sigma-jsonrpc.
+# Suitable for local testing or as a base for production deployment.
+#
+# Usage:
+#   cp .env.example .env   # fill in secrets
+#   docker compose -f deploy/docker-compose.spuc.yml up -d
+
+services:
+  spuc:
+    image: ghcr.io/felixbrezo/spuc:latest
+    container_name: spuc
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      SPUC_PORT: "8080"
+      # sigma-jsonrpc is resolved by service name inside the Docker network
+      SIGMA_RPC_URL: "http://sigma-jsonrpc:8080/jsonrpc"
+      # OAuth – GitHub (required)
+      GITHUB_CLIENT_ID: "${GITHUB_CLIENT_ID:?}"
+      GITHUB_CLIENT_SECRET: "${GITHUB_CLIENT_SECRET:?}"
+      # OAuth – Google (optional)
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      # Session signing secret (min 32 chars)
+      SPUC_SECRET_KEY: "${SPUC_SECRET_KEY:?}"
+    depends_on:
+      sigma-jsonrpc:
+        condition: service_healthy
+    command: ["web", "--port", "8080"]
+
+  sigma-jsonrpc:
+    build:
+      context: ./sigma-jsonrpc
+      dockerfile: Dockerfile
+    container_name: sigma-jsonrpc
+    restart: unless-stopped
+    expose:
+      - "8080"
+    environment:
+      PORT: "8080"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

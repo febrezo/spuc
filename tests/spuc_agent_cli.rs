@@ -1,12 +1,21 @@
 use serde_json::{Value, json};
 use std::fs;
+use std::path::Path;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn spuc_agent_bin() -> String {
-    std::env::var("CARGO_BIN_EXE_spuc-agent")
+    let bin = std::env::var("CARGO_BIN_EXE_spuc-agent")
         .or_else(|_| std::env::var("CARGO_BIN_EXE_spuc_agent"))
-        .unwrap_or_else(|_| "target/debug/spuc-agent".to_string())
+        .unwrap_or_else(|_| "target/debug/spuc-agent".to_string());
+    if !Path::new(&bin).exists() {
+        let status = Command::new("cargo")
+            .args(["build", "-q", "-p", "spuc-server", "--bin", "spuc-agent"])
+            .status()
+            .expect("failed to build spuc-agent binary for tests");
+        assert!(status.success(), "failed to build spuc-agent binary for tests");
+    }
+    bin
 }
 
 fn write_temp_ability(payload: &Value) -> std::path::PathBuf {

@@ -1,22 +1,35 @@
 [package]
+name = "spuc-core"
+version = "0.3.0"
+edition = "2021"
+autobins = false
+
+[workspace]
+members = [
+	".",
+	"crates/spuc-server",
+	# "crates/spuc-desktop",
+]
+default-members = [
+	".",
+	"crates/spuc-server",
+]
+resolver = "2"
+
+[lib]
 name = "spuc"
-version = "0.2.0"
-edition = "2024"
+path = "src/lib.rs"
 
 [features]
 default = []
-desktop-tauri = ["dep:tauri", "dep:url"]
 legacy-cli-tests = []
-
-[[bin]]
-name = "spuc-agent"
-path = "src/emulation/agents/spuc_agent_cli.rs"
 
 [dependencies]
 anyhow = "1.0.102"
 base64 = "0.22.1"
 chrono = { version = "0.4.42", features = ["clock"] }
 clap = { version = "4.5.60", features = ["derive"] }
+open = "5.3.0"
 pest = "2.8.6"
 pest_derive = "2.8.6"
 serde = { version = "1.0.228", features = ["derive"] }
@@ -25,8 +38,6 @@ serde_yaml = "0.9.34"
 rustyline = "14.0.0"
 sha2 = "0.10.9"
 ureq = { version = "2.12.1", default-features = false, features = ["json", "tls"] }
-tauri = { version = "2.1.1", optional = true }
-url = { version = "2.5.8", optional = true }
 
 [build-dependencies]
 tauri-build = { version = "2.0.3" }

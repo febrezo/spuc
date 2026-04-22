@@ -106,17 +106,6 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
 }
 
 fn run_standalone_web_mode() -> Result<()> {
-    #[cfg(feature = "desktop-tauri")]
-    {
-        return crate::desktop::run(STANDALONE_WEB_PORT);
-    }
-
-    #[cfg(not(feature = "desktop-tauri"))]
-    {
-        eprintln!(
-            "Desktop GUI not compiled. Rebuild with --features desktop-tauri for standalone window mode."
-        );
-    }
     commands::web::run(STANDALONE_WEB_PORT, "admin", None, true)
 }
 

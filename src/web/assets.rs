@@ -204,6 +204,30 @@ mod tests {
     }
 
     #[test]
+    fn index_html_keeps_sidebar_shell_and_single_adversary_toolbar() {
+        assert!(INDEX_HTML.contains("<div id=\"app-view\" class=\"app-layout hidden\">"));
+        assert!(INDEX_HTML.contains("<aside class=\"sidebar glass\">"));
+        assert!(INDEX_HTML.contains("<div class=\"sidebar-brand-line\">"));
+        assert_eq!(INDEX_HTML.matches("id=\"adversaries-view-cards\"").count(), 1);
+        assert_eq!(INDEX_HTML.matches("id=\"adversaries-view-table\"").count(), 1);
+        assert_eq!(INDEX_HTML.matches("id=\"adversaries-select-all-toggle\"").count(), 1);
+        assert_eq!(INDEX_HTML.matches("id=\"adversaries-bulk-toggle\"").count(), 1);
+        assert_eq!(INDEX_HTML.matches("id=\"adversaries-columns-toggle\"").count(), 1);
+    }
+
+    #[test]
+    fn index_html_keeps_rulelab_save_button_visible() {
+        assert!(INDEX_HTML.contains("id=\"rulelab-save\" class=\"btn btn-success\""));
+        assert!(!INDEX_HTML.contains("id=\"rulelab-save\" class=\"btn btn-success hidden\""));
+    }
+
+    #[test]
+    fn app_js_allows_admin_route_in_no_login_mode() {
+        assert!(APP_JS.contains("if (route === \"admin\" && state.principal?.role !== \"admin\")"));
+        assert!(!APP_JS.contains("if (route === \"admin\" && (state.bootstrap?.auth?.no_login || state.principal?.role !== \"admin\"))"));
+    }
+
+    #[test]
     fn app_css_aligns_detail_labels_and_confidence_values() {
         assert!(APP_CSS.contains("grid-template-columns: minmax(0, 1fr) auto;"));
         assert!(APP_CSS.contains("min-height: 32px;"));

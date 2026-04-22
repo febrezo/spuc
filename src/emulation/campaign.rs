@@ -195,7 +195,7 @@ pub fn default_campaign_filename(name: &str, platform: Option<&str>, extension: 
     };
     let platform_tag = normalize_tag(platform.unwrap_or("any"));
     let name_tag = normalize_tag(name);
-    format!("spuc-intrusion_set-{platform_tag}-{name_tag}.{ext}")
+    format!("spuc-intrusion-set-{platform_tag}-{name_tag}.{ext}")
 }
 
 fn inferred_campaign_platform(campaign: &Campaign) -> String {
@@ -370,7 +370,7 @@ mod tests {
         let file = default_campaign_filename("Blue Team Validation", Some("linux"), "yaml");
         assert_eq!(
             file,
-            "spuc-intrusion_set-linux-blue_team_validation.yaml".to_string()
+            "spuc-intrusion-set-linux-blue_team_validation.yaml".to_string()
         );
     }
 }

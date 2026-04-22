@@ -1909,7 +1909,7 @@ fn show_campaign_variables(state: &CampaignConsoleState) {
             ("DESCRIPTION", "Intrusion set description."),
             (
                 "OUTPUT",
-                "Manifest output path (default: spuc-intrusion_set-<platform>-<snake_case_name>.yaml under config intrusion_sets folder).",
+                "Manifest output path (default: spuc-intrusion-set-<platform>-<snake_case_name>.yaml under config intrusion_sets folder).",
             ),
             ("FORMAT", "Fixed yaml for manifests in this iteration."),
             (
@@ -2647,7 +2647,7 @@ fn build_and_render_campaign(
         })?;
 
         let base_name = format!(
-            "spuc-intrusion_set-{}-{}-{}",
+            "spuc-intrusion-set-{}-{}-{}",
             slugify_token(&platform),
             name_tag,
             executor_label
@@ -2698,7 +2698,7 @@ fn build_and_render_campaign(
                                 .and_then(|name| name.to_str())
                                 .is_some_and(|name| {
                                     name.contains(&format!(
-                                        "spuc-intrusion_set-{}-{}-{}",
+                                        "spuc-intrusion-set-{}-{}-{}",
                                         slugify_token(&platform),
                                         name_tag,
                                         executor_label

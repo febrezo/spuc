@@ -1,4 +1,60 @@
+# Full SPUC stack
+#
+# Required environment variables (set in .env or export):
+#
+#   GITHUB_CLIENT_ID        OAuth App client ID for GitHub
+#   GITHUB_CLIENT_SECRET    OAuth App client secret for GitHub
+#   GOOGLE_CLIENT_ID        OAuth client ID for Google
+#   GOOGLE_CLIENT_SECRET    OAuth client secret for Google
+#   SPUC_SECRET_KEY         Secret used to sign session tokens (min 32 chars)
+#   SPUC_ALLOWED_ORIGINS    Comma-separated allowed CORS origins (optional)
+#
+# Optional:
+#   LOG_LEVEL               Log level for sigma-jsonrpc (default: INFO)
+
 services:
+  spuc:
+    image: ghcr.io/felixbrezo/spuc:latest
+    # Uncomment to build locally:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    container_name: spuc
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      SPUC_PORT: "8080"
+      SIGMA_RPC_URL: "http://sigma-jsonrpc:8080/jsonrpc"
+      GITHUB_CLIENT_ID: "${GITHUB_CLIENT_ID:?GITHUB_CLIENT_ID is required}"
+      GITHUB_CLIENT_SECRET: "${GITHUB_CLIENT_SECRET:?GITHUB_CLIENT_SECRET is required}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      SPUC_SECRET_KEY: "${SPUC_SECRET_KEY:?SPUC_SECRET_KEY is required}"
+      SPUC_ALLOWED_ORIGINS: "${SPUC_ALLOWED_ORIGINS:-}"
+    depends_on:
+      sigma-jsonrpc:
+        condition: service_healthy
+    command: ["web", "--port", "8080"]
+
+  sigma-jsonrpc:
+    build:
+      context: ./deploy/sigma-jsonrpc
+      dockerfile: Dockerfile
+    container_name: sigma-jsonrpc
+    restart: unless-stopped
+    expose:
+      - "8080"
+    environment:
+      PORT: "8080"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
   ollama:
     image: ollama/ollama:latest
     container_name: spuc-ollama

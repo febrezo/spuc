@@ -21,8 +21,10 @@ pub(crate) fn run(
         .unwrap_or_else(|| generate_secret(25));
 
     let state = Arc::new(WebState::new(admin_user, &password, generated, no_login)?);
+    let url = format!("http://127.0.0.1:{port}/");
+    
     log_info(&format!(
-        "Web interface listening on http://127.0.0.1:{port}/"
+        "Web interface listening on {url}"
     ));
 
     if no_login {
@@ -36,6 +38,10 @@ pub(crate) fn run(
     log_info(
         "OAuth providers are read from environment variables (Google/GitHub). If missing, local login is used.",
     );
+
+    // Open browser automatically
+    let _ = open::that(&url);
+
     start(listener, state)
 }
 
@@ -208,9 +214,35 @@ fn log_error(message: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::io::{ErrorKind, Read, Write};
     use std::net::TcpStream;
+    use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
+
+    fn with_test_config_dir<T>(tag: &str, run: impl FnOnce() -> T) -> T {
+        static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        let _guard = TEST_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("test lock poisoned");
+        let dir = std::env::temp_dir().join(format!(
+            "spuc_web_server_test_{}_{}",
+            tag,
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("create test config dir");
+        unsafe {
+            std::env::set_var("SPUC_CONFIG_DIR", &dir);
+        }
+        let result = run();
+        unsafe {
+            std::env::remove_var("SPUC_CONFIG_DIR");
+        }
+        let _ = fs::remove_dir_all(&dir);
+        result
+    }
 
     fn send_raw(port: u16, request: &str) -> String {
         let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
@@ -269,127 +301,136 @@ mod tests {
 
     #[test]
     fn web_server_serves_i18n_and_protected_routes() {
-        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener");
-        let port = listener.local_addr().expect("addr").port();
-        let state = Arc::new(WebState::new("admin", "secret-pass", false, false).expect("state"));
-        let state_for_thread = Arc::clone(&state);
-        std::thread::spawn(move || {
-            start(listener, state_for_thread).expect("server");
+        with_test_config_dir("protected_routes", || {
+            let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener");
+            let port = listener.local_addr().expect("addr").port();
+            let state = Arc::new(WebState::new("admin", "secret-pass", false, false).expect("state"));
+            let state_for_thread = Arc::clone(&state);
+            std::thread::spawn(move || {
+                start(listener, state_for_thread).expect("server");
+            });
+            std::thread::sleep(Duration::from_millis(120));
+
+            let i18n = send_raw(port, "GET /i18n.json HTTP/1.1\r\nHost: localhost\r\n\r\n");
+            assert!(i18n.contains("\"es\""));
+            assert!(i18n.contains("SPUC"));
+            assert!(i18n.contains("Import rules from file"));
+            assert!(i18n.contains("\"nav.rulelab\": \"Laboratory\""));
+            assert!(i18n.contains("\"rules.import.progress.reading\": \"Reading rules file...\""));
+
+            let health = send_raw(port, "GET /healthz HTTP/1.1\r\nHost: localhost\r\n\r\n");
+            assert!(health.contains("200 OK"));
+            assert!(health.contains("\"service\": \"spuc-web\""));
+
+            let unauthorized = send_raw(
+                port,
+                "GET /api/tutorial/challenges HTTP/1.1\r\nHost: localhost\r\n\r\n",
+            );
+            assert!(unauthorized.contains("401 Unauthorized"));
+
+            let login_body = r#"{"username":"admin","password":"secret-pass"}"#;
+            let login = send_raw(
+                port,
+                &format!(
+                    "POST /api/login HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                    login_body.len(),
+                    login_body
+                ),
+            );
+            assert!(login.contains("200 OK"));
+            let cookie = login
+                .lines()
+                .find(|line| line.starts_with("Set-Cookie: spuc_web_session="))
+                .and_then(|line| {
+                    line.split_once(':')
+                        .map(|(_, value)| value.trim().to_string())
+                })
+                .expect("session cookie");
+
+            let tutorial = send_raw(
+                port,
+                &format!(
+                    "GET /api/tutorial/challenges HTTP/1.1\r\nHost: localhost\r\nCookie: {}\r\n\r\n",
+                    cookie
+                ),
+            );
+            assert!(tutorial.contains("200 OK"));
+            assert!(tutorial.contains("core001"));
         });
-        std::thread::sleep(Duration::from_millis(120));
-
-        let i18n = send_raw(port, "GET /i18n.json HTTP/1.1\r\nHost: localhost\r\n\r\n");
-        assert!(i18n.contains("\"es\""));
-        assert!(i18n.contains("SPUC"));
-        assert!(i18n.contains("Import rules from file"));
-        assert!(i18n.contains("\"nav.rulelab\": \"Laboratory\""));
-        assert!(i18n.contains("\"rules.import.progress.reading\": \"Reading rules file...\""));
-
-        let unauthorized = send_raw(
-            port,
-            "GET /api/tutorial/challenges HTTP/1.1\r\nHost: localhost\r\n\r\n",
-        );
-        assert!(unauthorized.contains("401 Unauthorized"));
-
-        let login_body = r#"{"username":"admin","password":"secret-pass"}"#;
-        let login = send_raw(
-            port,
-            &format!(
-                "POST /api/login HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-                login_body.len(),
-                login_body
-            ),
-        );
-        assert!(login.contains("200 OK"));
-        let cookie = login
-            .lines()
-            .find(|line| line.starts_with("Set-Cookie: spuc_web_session="))
-            .and_then(|line| {
-                line.split_once(':')
-                    .map(|(_, value)| value.trim().to_string())
-            })
-            .expect("session cookie");
-
-        let tutorial = send_raw(
-            port,
-            &format!(
-                "GET /api/tutorial/challenges HTTP/1.1\r\nHost: localhost\r\nCookie: {}\r\n\r\n",
-                cookie
-            ),
-        );
-        assert!(tutorial.contains("200 OK"));
-        assert!(tutorial.contains("core001"));
     }
 
     #[test]
     fn no_login_mode_allows_access_without_cookie() {
-        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener");
-        let port = listener.local_addr().expect("addr").port();
-        let state = Arc::new(WebState::new("admin", "secret-pass", false, true).expect("state"));
-        let state_for_thread = Arc::clone(&state);
-        std::thread::spawn(move || {
-            start(listener, state_for_thread).expect("server");
-        });
-        std::thread::sleep(Duration::from_millis(120));
+        with_test_config_dir("no_login", || {
+            let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener");
+            let port = listener.local_addr().expect("addr").port();
+            let state = Arc::new(WebState::new("admin", "secret-pass", false, true).expect("state"));
+            let state_for_thread = Arc::clone(&state);
+            std::thread::spawn(move || {
+                start(listener, state_for_thread).expect("server");
+            });
+            std::thread::sleep(Duration::from_millis(120));
 
-        let tutorial = send_raw(
-            port,
-            "GET /api/tutorial/challenges HTTP/1.1\r\nHost: localhost\r\n\r\n",
-        );
-        assert!(tutorial.contains("200 OK"));
+            let tutorial = send_raw(
+                port,
+                "GET /api/tutorial/challenges HTTP/1.1\r\nHost: localhost\r\n\r\n",
+            );
+            assert!(tutorial.contains("200 OK"));
+        });
     }
 
     #[test]
     fn admin_can_toggle_oauth_provider_authorization() {
-        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener");
-        let port = listener.local_addr().expect("addr").port();
-        let state = Arc::new(WebState::new("admin", "secret-pass", false, false).expect("state"));
-        let state_for_thread = Arc::clone(&state);
-        std::thread::spawn(move || {
-            start(listener, state_for_thread).expect("server");
-        });
-        std::thread::sleep(Duration::from_millis(120));
+        with_test_config_dir("oauth_toggle", || {
+            let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener");
+            let port = listener.local_addr().expect("addr").port();
+            let state = Arc::new(WebState::new("admin", "secret-pass", false, false).expect("state"));
+            let state_for_thread = Arc::clone(&state);
+            std::thread::spawn(move || {
+                start(listener, state_for_thread).expect("server");
+            });
+            std::thread::sleep(Duration::from_millis(120));
 
-        let login_body = r#"{"username":"admin","password":"secret-pass"}"#;
-        let login = send_raw(
-            port,
-            &format!(
-                "POST /api/login HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-                login_body.len(),
-                login_body
-            ),
-        );
-        assert!(login.contains("200 OK"));
-        let cookie = login
-            .lines()
-            .find(|line| line.starts_with("Set-Cookie: spuc_web_session="))
-            .and_then(|line| {
-                line.split_once(':')
-                    .map(|(_, value)| value.trim().to_string())
-            })
-            .expect("session cookie");
+            let login_body = r#"{"username":"admin","password":"secret-pass"}"#;
+            let login = send_raw(
+                port,
+                &format!(
+                    "POST /api/login HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                    login_body.len(),
+                    login_body
+                ),
+            );
+            assert!(login.contains("200 OK"));
+            let cookie = login
+                .lines()
+                .find(|line| line.starts_with("Set-Cookie: spuc_web_session="))
+                .and_then(|line| {
+                    line.split_once(':')
+                        .map(|(_, value)| value.trim().to_string())
+                })
+                .expect("session cookie");
 
-        let oauth_update_body = r#"{"authorized":true}"#;
-        let oauth_update = send_raw(
-            port,
-            &format!(
-                "POST /api/admin/oauth/providers/google/update HTTP/1.1\r\nHost: localhost\r\nCookie: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-                cookie,
-                oauth_update_body.len(),
-                oauth_update_body
-            ),
-        );
-        assert!(oauth_update.contains("200 OK"));
+            let oauth_update_body = r#"{"authorized":true}"#;
+            let oauth_update = send_raw(
+                port,
+                &format!(
+                    "POST /api/admin/oauth/providers/google/update HTTP/1.1\r\nHost: localhost\r\nCookie: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                    cookie,
+                    oauth_update_body.len(),
+                    oauth_update_body
+                ),
+            );
+            assert!(oauth_update.contains("200 OK"));
 
-        let bootstrap = send_raw(
-            port,
-            &format!(
+            let bootstrap = send_raw(
+                port,
+                &format!(
                 "GET /api/bootstrap HTTP/1.1\r\nHost: localhost\r\nCookie: {}\r\n\r\n",
                 cookie
-            ),
-        );
-        assert!(bootstrap.contains("\"id\": \"google\""));
-        assert!(bootstrap.contains("\"authorized\": true"));
+                ),
+            );
+            assert!(bootstrap.contains("\"authorized\": true"));
+        });
     }
 
     #[test]

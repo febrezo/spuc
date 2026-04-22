@@ -6,12 +6,15 @@ on:
       - "**"
   pull_request:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -21,6 +24,9 @@ jobs:
 
       - name: Cargo check
         run: cargo check -q
+
+      - name: Build server binaries for integration tests
+        run: cargo build -q -p spuc-server --bins
 
       - name: Cargo test
         run: cargo test -q

@@ -332,6 +332,7 @@ pub(crate) const TRANSLATIONS_JSON: &str = r#"{
     "adversaries.welcome.create.desc": "Build a new adversary from selected abilities.",
     "adversaries.detail.compatible_exports": "Compatible exports",
     "adversaries.detail.export": "Export adversary",
+    "adversaries.card.label": "Adversary",
 
     "rulelab.editor.title": "STIX Pattern Editor",
     "rulelab.title": "Rule title",
@@ -362,6 +363,12 @@ pub(crate) const TRANSLATIONS_JSON: &str = r#"{
     "rulelab.compat_summary_exact": "{exact}/{total} fully compatible",
     "rulelab.compat_summary_partial": "{exact} exact · {lossy} lossy · {unsupported} unsupported",
     "rulelab.compat_summary_unsupported": "{unsupported}/{total} unsupported",
+    "rulelab.pattern_status.label": "Rule status",
+    "rulelab.pattern_status.empty": "No pattern entered",
+    "rulelab.pattern_status.valid": "Valid",
+    "rulelab.autosave_active": "Auto-save active",
+    "rulelab.saving": "Saving…",
+    "rulelab.saved_ok": "✓ Saved",
 
     "help.tlp.body": "Traffic Light Protocol (TLP) defines how information is shared.",
     "help.pap.body": "Permissible Actions Protocol (PAP) defines the allowed actions for shared information.",
@@ -867,6 +874,7 @@ pub(crate) const TRANSLATIONS_JSON: &str = r#"{
     "adversaries.welcome.create.desc": "Construye un nuevo adversario desde capacidades seleccionadas.",
     "adversaries.detail.compatible_exports": "Exports compatibles",
     "adversaries.detail.export": "Exportar adversario",
+    "adversaries.card.label": "Adversario",
 
     "rulelab.editor.title": "Editor de patrones STIX",
     "rulelab.title": "Título de regla",
@@ -897,6 +905,12 @@ pub(crate) const TRANSLATIONS_JSON: &str = r#"{
     "rulelab.compat_summary_exact": "{exact}/{total} totalmente compatibles",
     "rulelab.compat_summary_partial": "{exact} exactas · {lossy} con pérdida · {unsupported} no soportadas",
     "rulelab.compat_summary_unsupported": "{unsupported}/{total} no soportadas",
+    "rulelab.pattern_status.label": "Estado de la regla",
+    "rulelab.pattern_status.empty": "Patrón vacío",
+    "rulelab.pattern_status.valid": "Válida",
+    "rulelab.autosave_active": "Guardado automático activo",
+    "rulelab.saving": "Guardando…",
+    "rulelab.saved_ok": "✓ Guardada",
 
     "help.tlp.body": "Traffic Light Protocol (TLP) define cómo compartir la información.",
     "help.pap.body": "Permissible Actions Protocol (PAP) define las acciones permitidas con la información.",

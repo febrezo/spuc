@@ -57,14 +57,14 @@ struct AdminRuntimeSettingsStore {
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct AdminRuntimeSettingsView {
+pub(crate) struct AdminRuntimeSettingsView {
     no_login: bool,
     sigma_rpc_url: Option<String>,
     sigma_rpc_token_set: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct AdminRuntimeSettingsUpdateRequest {
+pub(crate) struct AdminRuntimeSettingsUpdateRequest {
     #[serde(default)]
     no_login: Option<bool>,
     #[serde(default)]
@@ -1088,6 +1088,16 @@ pub(crate) fn route(request: HttpRequest, state: &WebState) -> Result<HttpRespon
     let segments = path_segments(&request.path);
     let cookie_session = request.cookie("spuc_web_session");
     let principal = state.resolve_principal(cookie_session.as_deref());
+
+    if request.method == "GET" && request.path == "/healthz" {
+        return HttpResponse::json(
+            200,
+            &serde_json::json!({
+                "ok": true,
+                "service": "spuc-web"
+            }),
+        );
+    }
 
     if request.method == "GET" && request.path == "/" {
         return Ok(HttpResponse::html(assets::INDEX_HTML));
@@ -2827,12 +2837,24 @@ fn export_adversary(
 
     let mut downloads = Vec::new();
     for file in list_files_recursive(&export_root)? {
-        let relative = file
-            .strip_prefix(&export_root)
-            .ok()
-            .and_then(|value| value.to_str())
-            .unwrap_or("artifact")
-            .replace('/', "-");
+        let relative_path = file.strip_prefix(&export_root).ok()
+            .and_then(|p| p.to_str());
+        
+        // Remove the executor folder prefix (first component) from the relative path
+        let relative = if let Some(path_str) = relative_path {
+            let parts: Vec<&str> = path_str.split('/').collect();
+            if parts.len() > 1 {
+                // Skip the first component (executor folder) and rejoin
+                parts[1..].join("-")
+            } else if parts.len() == 1 {
+                parts[0].to_string()
+            } else {
+                "artifact".to_string()
+            }
+        } else {
+            "artifact".to_string()
+        };
+        
         let token = state.register_download(DownloadEntry {
             content_type: guess_content_type(&file).to_string(),
             name: relative.clone(),
@@ -3768,66 +3790,149 @@ fn operational_extension(executor: AbilityTarget) -> &'static str {
 fn render_operational_runner_content(
     executor: AbilityTarget,
     manifest_name: &str,
-    artifact_names: &[String],
+    artifact_contents: &[(String, String)],
 ) -> String {
     match executor {
         AbilityTarget::Bash => {
             let mut lines = vec![
                 "#!/usr/bin/env bash".to_string(),
                 "set -euo pipefail".to_string(),
-                "SCRIPT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"".to_string(),
-                format!("echo \"[spuc] operational adversary runner: {manifest_name}\""),
+                "".to_string(),
+                "# ANSI color codes for output".to_string(),
+                "RED='\\033[0;31m'".to_string(),
+                "GREEN='\\033[0;32m'".to_string(),
+                "YELLOW='\\033[1;33m'".to_string(),
+                "BLUE='\\033[0;34m'".to_string(),
+                "NC='\\033[0m' # No Color".to_string(),
+                "".to_string(),
+                format!("echo \"${{BLUE}}[spuc] operational adversary runner: {manifest_name}${{NC}}\""),
+                format!("echo \"${{YELLOW}}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${{NC}}\""),
+                "".to_string(),
             ];
-            for name in artifact_names {
-                lines.push(format!("bash \"$SCRIPT_DIR/{name}\""));
+            
+            for (idx, (name, content)) in artifact_contents.iter().enumerate() {
+                let step_num = idx + 1;
+                let total = artifact_contents.len();
+                lines.push(format!("echo \"${{GREEN}}[Step {}/{}]${{NC}} ${{YELLOW}}Ejecutando ability: {}${{NC}}\"", step_num, total, name));
+                lines.push("echo \"\"".to_string());
+                lines.push(format!("# ========== Ability: {} ==========", name));
+                
+                // Remove shebang and duplicate set -euo pipefail from nested scripts
+                let content_lines: Vec<&str> = content.lines().collect();
+                for (line_idx, line) in content_lines.iter().enumerate() {
+                    let trimmed = line.trim();
+                    // Skip shebang lines
+                    if trimmed.starts_with("#!") {
+                        continue;
+                    }
+                    // Skip duplicate shebang-like lines
+                    if line_idx == 0 && trimmed.starts_with("#!") {
+                        continue;
+                    }
+                    // Skip set -euo pipefail if it's already defined in outer script
+                    if trimmed == "set -euo pipefail" && line_idx < 5 {
+                        continue;
+                    }
+                    lines.push(line.to_string());
+                }
+                
+                lines.push(format!("# ========== End: {} ==========", name));
+                lines.push("echo \"\"".to_string());
+                lines.push(format!("echo \"${{GREEN}}✓ Completado: {}${{NC}}\"", name.replace(".sh", "")));
+                lines.push(format!("echo \"${{YELLOW}}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${{NC}}\""));
+                lines.push("".to_string());
             }
-            lines.push("echo \"[spuc] operational run completed\"".to_string());
+            
+            lines.push("echo \"\"".to_string());
+            lines.push(format!("echo \"${{GREEN}}[spuc] operational run completed successfully${{NC}}\""));
+            lines.push(format!("echo \"${{BLUE}}All {} abilities executed${{NC}}\"", artifact_contents.len()));
             lines.join("\n") + "\n"
         }
         AbilityTarget::Powershell => {
             let mut lines = vec![
                 "$ErrorActionPreference = \"Stop\"".to_string(),
-                "$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path".to_string(),
-                format!("Write-Host \"[spuc] operational adversary runner: {manifest_name}\""),
+                "".to_string(),
+                "# ANSI color codes for output".to_string(),
+                "$RED = '\\033[0;31m'".to_string(),
+                "$GREEN = '\\033[0;32m'".to_string(),
+                "$YELLOW = '\\033[1;33m'".to_string(),
+                "$BLUE = '\\033[0;34m'".to_string(),
+                "$NC = '\\033[0m' # No Color".to_string(),
+                "".to_string(),
+                format!("Write-Host \"${{BLUE}}[spuc] operational adversary runner: {manifest_name}${{NC}}\""),
+                format!("Write-Host \"${{YELLOW}}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${{NC}}\""),
+                "".to_string(),
             ];
-            for name in artifact_names {
-                lines.push(format!("& \"$scriptDir\\{name}\""));
+            
+            for (idx, (name, content)) in artifact_contents.iter().enumerate() {
+                let step_num = idx + 1;
+                let total = artifact_contents.len();
+                lines.push(format!("Write-Host \"${{GREEN}}[Step {}/{}]${{NC}} ${{YELLOW}}Ejecutando ability: {}${{NC}}\"", step_num, total, name));
+                lines.push("".to_string());
+                lines.push(format!("# ========== Ability: {} ==========", name));
+                
+                // Remove ErrorActionPreference duplicate from nested scripts if present at top
+                let content_lines: Vec<&str> = content.lines().collect();
+                for (line_idx, line) in content_lines.iter().enumerate() {
+                    let trimmed = line.trim();
+                    // Skip ErrorActionPreference if it's in first few lines
+                    if line_idx < 5 && trimmed.starts_with("$ErrorActionPreference") {
+                        continue;
+                    }
+                    lines.push(line.to_string());
+                }
+                
+                lines.push(format!("# ========== End: {} ==========", name));
+                lines.push("".to_string());
+                lines.push(format!("Write-Host \"${{GREEN}}✓ Completado: {}${{NC}}\"", name.replace(".ps1", "")));
+                lines.push(format!("Write-Host \"${{YELLOW}}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${{NC}}\""));
+                lines.push("".to_string());
             }
-            lines.push("Write-Host \"[spuc] operational run completed\"".to_string());
+            
+            lines.push("".to_string());
+            lines.push(format!("Write-Host \"${{GREEN}}[spuc] operational run completed successfully${{NC}}\""));
+            lines.push(format!("Write-Host \"${{BLUE}}All {} abilities executed${{NC}}\"", artifact_contents.len()));
             lines.join("\n") + "\n"
         }
         AbilityTarget::AtomicRedTeam => {
+            let names: Vec<&str> = artifact_contents.iter().map(|(n, _)| n.as_str()).collect();
             #[derive(Serialize)]
             struct OperationalYaml<'a> {
                 schema_version: &'a str,
                 executor: &'a str,
                 manifest: &'a str,
-                artifacts: &'a [String],
+                artifacts: Vec<&'a str>,
             }
             serde_yaml::to_string(&OperationalYaml {
                 schema_version: "1.0",
                 executor: "atomic-red-team",
                 manifest: manifest_name,
-                artifacts: artifact_names,
+                artifacts: names,
             })
             .unwrap_or_else(|_| "schema_version: \"1.0\"\n".to_string())
         }
-        AbilityTarget::SpucAgent => json!({
-            "schema_version": "1.0",
-            "executor": "spuc-agent",
-            "manifest": manifest_name,
-            "artifacts": artifact_names,
-            "run_hint": "spuc-agent validate/run using this ordered artifact list and manifest"
-        })
-        .to_string(),
-        AbilityTarget::MitreCaldera => json!({
-            "schema_version": "1.0",
-            "executor": "mitre-caldera",
-            "manifest": manifest_name,
-            "artifacts": artifact_names,
-            "run_hint": "import artifacts in order and execute operation with linked abilities"
-        })
-        .to_string(),
+        AbilityTarget::SpucAgent => {
+            let names: Vec<&str> = artifact_contents.iter().map(|(n, _)| n.as_str()).collect();
+            json!({
+                "schema_version": "1.0",
+                "executor": "spuc-agent",
+                "manifest": manifest_name,
+                "artifacts": names,
+                "run_hint": "spuc-agent validate/run using this ordered artifact list and manifest"
+            })
+            .to_string()
+        }
+        AbilityTarget::MitreCaldera => {
+            let names: Vec<&str> = artifact_contents.iter().map(|(n, _)| n.as_str()).collect();
+            json!({
+                "schema_version": "1.0",
+                "executor": "mitre-caldera",
+                "manifest": manifest_name,
+                "artifacts": names,
+                "run_hint": "import artifacts in order and execute operation with linked abilities"
+            })
+            .to_string()
+        }
     }
 }
 
@@ -3882,9 +3987,28 @@ fn generate_operational_runner_artifacts(executor: AbilityTarget, target_root: &
             continue;
         }
 
-        let runner_name = format!("{stem}-operational.{op_ext}");
+        // Read content of each artifact file (needed for bash/powershell to inline the code)
+        let mut artifact_contents = Vec::new();
+        for name in &ordered_names {
+            let path = target_root.join(name);
+            match fs::read_to_string(&path) {
+                Ok(content) => {
+                    artifact_contents.push((name.clone(), content));
+                }
+                Err(_) => {
+                    // If we can't read, skip this artifact
+                    continue;
+                }
+            }
+        }
+        
+        if artifact_contents.is_empty() {
+            continue;
+        }
+
+        let runner_name = format!("{stem}.{op_ext}");
         let runner_path = target_root.join(runner_name);
-        let content = render_operational_runner_content(executor, &manifest_name, &ordered_names);
+        let content = render_operational_runner_content(executor, &manifest_name, &artifact_contents);
         fs::write(runner_path, content)?;
     }
 
@@ -3911,6 +4035,32 @@ fn download_link(name: &str, token: &str) -> DownloadLink {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::sync::{Mutex, OnceLock};
+
+    fn with_test_config_dir<T>(tag: &str, run: impl FnOnce() -> T) -> T {
+        static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        let _guard = TEST_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("test lock poisoned");
+        let dir = std::env::temp_dir().join(format!(
+            "spuc_web_api_test_{}_{}",
+            tag,
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("create test config dir");
+        unsafe {
+            std::env::set_var("SPUC_CONFIG_DIR", &dir);
+        }
+        let result = run();
+        unsafe {
+            std::env::remove_var("SPUC_CONFIG_DIR");
+        }
+        let _ = fs::remove_dir_all(&dir);
+        result
+    }
 
     #[test]
     fn status_severity_maps_expected_values() {
@@ -4279,39 +4429,43 @@ mod tests {
 
     #[test]
     fn oauth_state_token_is_single_use_and_provider_bound() {
-        let state = WebState::new("admin", "secret-pass", false, false).expect("state");
-        let token = state.register_oauth_state("google");
-        assert!(state.take_oauth_state("google", &token));
-        assert!(!state.take_oauth_state("google", &token));
+        with_test_config_dir("oauth_state", || {
+            let state = WebState::new("admin", "secret-pass", false, false).expect("state");
+            let token = state.register_oauth_state("google");
+            assert!(state.take_oauth_state("google", &token));
+            assert!(!state.take_oauth_state("google", &token));
 
-        let second = state.register_oauth_state("google");
-        assert!(!state.take_oauth_state("github", &second));
+            let second = state.register_oauth_state("google");
+            assert!(!state.take_oauth_state("github", &second));
+        });
     }
 
     #[test]
     fn oauth_identity_maps_to_existing_user_or_falls_back_to_analyst() {
-        let state = WebState::new("admin", "secret-pass", false, false).expect("state");
+        with_test_config_dir("oauth_identity", || {
+            let state = WebState::new("admin", "secret-pass", false, false).expect("state");
 
-        let existing = OAuthIdentity {
-            provider_id: "google",
-            subject: "111".to_string(),
-            username: "admin".to_string(),
-            email: None,
-        };
-        let principal_existing = state.principal_from_oauth_identity(&existing);
-        assert_eq!(principal_existing.role, Role::Admin);
-        assert_eq!(principal_existing.username, "admin");
+            let existing = OAuthIdentity {
+                provider_id: "google",
+                subject: "111".to_string(),
+                username: "admin".to_string(),
+                email: None,
+            };
+            let principal_existing = state.principal_from_oauth_identity(&existing);
+            assert_eq!(principal_existing.role, Role::Admin);
+            assert_eq!(principal_existing.username, "admin");
 
-        let unknown = OAuthIdentity {
-            provider_id: "github",
-            subject: "abc-123".to_string(),
-            username: "gh-user".to_string(),
-            email: Some("gh-user@example.com".to_string()),
-        };
-        let principal_unknown = state.principal_from_oauth_identity(&unknown);
-        assert_eq!(principal_unknown.role, Role::Analyst);
-        assert!(principal_unknown.user_id.starts_with("oauth-github-"));
-        assert_eq!(principal_unknown.username, "gh-user");
+            let unknown = OAuthIdentity {
+                provider_id: "github",
+                subject: "abc-123".to_string(),
+                username: "gh-user".to_string(),
+                email: Some("gh-user@example.com".to_string()),
+            };
+            let principal_unknown = state.principal_from_oauth_identity(&unknown);
+            assert_eq!(principal_unknown.role, Role::Analyst);
+            assert!(principal_unknown.user_id.starts_with("oauth-github-"));
+            assert_eq!(principal_unknown.username, "gh-user");
+        });
     }
 
     #[test]
@@ -4390,22 +4544,31 @@ mod tests {
 
     #[test]
     fn operational_runner_content_for_bash_sequences_artifacts() {
+        let artifact_contents = vec![
+            ("one.sh".to_string(), "echo 'Running one'\n".to_string()),
+            ("two.sh".to_string(), "echo 'Running two'\n".to_string()),
+        ];
         let content = render_operational_runner_content(
             AbilityTarget::Bash,
             "campaign.yaml",
-            &["one.sh".to_string(), "two.sh".to_string()],
+            &artifact_contents,
         );
         assert!(content.contains("#!/usr/bin/env bash"));
-        assert!(content.contains("bash \"$SCRIPT_DIR/one.sh\""));
-        assert!(content.contains("bash \"$SCRIPT_DIR/two.sh\""));
+        assert!(content.contains("Ejecutando ability: one.sh"));
+        assert!(content.contains("Ejecutando ability: two.sh"));
+        assert!(content.contains("echo 'Running one'"));
+        assert!(content.contains("echo 'Running two'"));
     }
 
     #[test]
     fn operational_runner_content_for_spuc_agent_is_json() {
+        let artifact_contents = vec![
+            ("a.json".to_string(), "{}".to_string()),
+        ];
         let content = render_operational_runner_content(
             AbilityTarget::SpucAgent,
             "campaign.yaml",
-            &["a.json".to_string()],
+            &artifact_contents,
         );
         let value: serde_json::Value = serde_json::from_str(&content).expect("json");
         assert_eq!(value["executor"], "spuc-agent");

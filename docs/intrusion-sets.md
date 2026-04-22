@@ -99,7 +99,7 @@ Important variables shown by `show`:
 - `INTRUSION_SET_ID`
 - `NAME` (required)
 - `DESCRIPTION` (defaults to `intrusion set generated with SPUC`)
-- `OUTPUT` (defaults to `<config_root>/intrusion_sets/spuc-intrusion_set-<platform>-<snake_case_name>.yaml`)
+- `OUTPUT` (defaults to `<config_root>/intrusion_sets/spuc-intrusion-set-<platform>-<snake_case_name>.yaml`)
 - `FORMAT` (`yaml`, fixed)
 - `SHOW` (`summary,manifest` by default, configurable with `set SHOW=...`)
 - `PLATFORM` (required for build; comma-separated list allowed)
@@ -184,8 +184,8 @@ spuc plan --name "Validation" --platform linux,windows --executor spuc-agent --a
 
 Default naming pattern:
 
-- manifest: `spuc-intrusion_set-<platform>-<snake_case_name>-<executor>.yaml`
-- ability artifact: `spuc-intrusion_set-<platform>-<snake_case_name>-<executor>-<ability_id>.<ext>`
+- manifest: `spuc-intrusion-set-<platform>-<snake_case_name>-<executor>.yaml`
+- ability artifact: `spuc-intrusion-set-<platform>-<snake_case_name>-<executor>-<ability_id>.<ext>`
 
 ## Limitations
 

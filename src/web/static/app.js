@@ -98,6 +98,8 @@ const state = {
     autoSaveTimer: null,
     autoSaving: false,
     autoSaveLastSignature: "",
+    savedIndicatorTimer: null,
+    isDirty: false,
   },
   learningEditor: {
     autocomplete: [],
@@ -955,7 +957,7 @@ function collectRuleLabPromptContext() {
     statuses.push(status);
   });
   return {
-    name: document.getElementById("rulelab-title")?.value || "Rule Lab draft",
+    name: document.getElementById("rulelab-title")?.value || ruleLabDefaultTitle(),
     description: document.getElementById("rulelab-description")?.value || "",
     ttp: normalizeTtpValue(document.getElementById("rulelab-ttp")?.value || ""),
     confidence: Number(document.getElementById("rulelab-confidence")?.value || 70),
@@ -1284,7 +1286,7 @@ function openRuleInLab(entry) {
     ruleInput.value = entry.rule || "";
   }
   if (titleInput instanceof HTMLInputElement) {
-    titleInput.value = entry.name || "";
+    titleInput.value = entry.name || ruleLabDefaultTitle();
   }
   if (descriptionInput instanceof HTMLTextAreaElement) {
     descriptionInput.value = entry.description || "";
@@ -2064,7 +2066,7 @@ function applyNavSelection(route) {
 
 function setRoute(route) {
   if (!ROUTE_META[route]) route = "home";
-  if (route === "admin" && (state.bootstrap?.auth?.no_login || state.principal?.role !== "admin")) {
+  if (route === "admin" && state.principal?.role !== "admin") {
     route = "home";
   }
   state.route = route;
@@ -3688,10 +3690,13 @@ function triggerDownloadByUrl(url, fileName = "") {
 function pickOperationalDownload(downloads, target) {
   const normalizedTarget = String(target || "").toLowerCase();
   const entries = Array.isArray(downloads) ? downloads : [];
-  const hasOperationalName = (item) => String(normalizedDownloadName(item) || "").toLowerCase().includes("-operational.");
+  // Pick the executable file (not YAML manifest)
+  const isExecutable = (item) => {
+    const name = String(normalizedDownloadName(item) || "").toLowerCase();
+    return !name.endsWith(".yaml") && !name.endsWith(".json");
+  };
   const inTargetBucket = (item) => String(normalizedDownloadName(item) || "").toLowerCase().startsWith(`${normalizedTarget}-`);
-  return entries.find((item) => inTargetBucket(item) && hasOperationalName(item))
-    || entries.find((item) => hasOperationalName(item))
+  return entries.find((item) => isExecutable(item))
     || null;
 }
 
@@ -3761,6 +3766,10 @@ function renderAdversaryTargetPlatformOptions() {
   } else if (!selected) {
     targetNode.value = "";
   }
+  
+  // Deshabilitar el combo si hay abilities seleccionadas
+  const hasSelectedAbilities = state.adversaryCompose.selectedOrder.length > 0;
+  targetNode.disabled = hasSelectedAbilities;
 }
 
 function recomputeAdversaryCompatibleExportsFromSelection() {
@@ -4007,7 +4016,7 @@ function renderAdversaryEmulablePlatforms() {
     .filter(Boolean);
   root.innerHTML = platforms.length
     ? platforms.map((platform) => `<span class="rule-observable-tag">${escapeHtml(platform)}</span>`).join("")
-    : `<span class="muted">${escapeHtml(t("common.no_data"))}</span>`;
+    : `<span class="muted">👤 ${escapeHtml(t("adversaries.card.label") || "Adversary")}</span>`;
 }
 
 function renderAdversaryExecutionCriteria() {
@@ -4381,13 +4390,14 @@ function renderRuleLabPreview() {
   overlay.innerHTML = `${highlightStix(input)}\n`;
   overlay.scrollTop = editor.scrollTop;
   overlay.scrollLeft = editor.scrollLeft;
+  state.ruleLab.isDirty = true;
   state.ruleLab.syntaxOk = null;
   const statusNode = document.getElementById("rulelab-status");
   if (statusNode) {
     statusNode.textContent = t("rulelab.status.idle");
   }
   setRuleLabSaveEnabled(false);
-  setRuleLabError("");
+  setRuleLabPatternStatus("empty", "");
   clearRuleLabCompatibilityView();
   renderRuleLabAutocomplete();
   scheduleRuleLabAnalysis();
@@ -4399,22 +4409,47 @@ function setRuleLabEditorState(mode) {
   shell.classList.add(mode);
 }
 
+function ruleLabDefaultTitle() {
+  return `rule-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function setRuleLabSaveEnabled(enabled) {
   const button = document.getElementById("rulelab-save");
   if (!button) return;
   button.disabled = !enabled;
+  if (enabled) {
+    button.textContent = t("rulelab.save");
+    button.classList.remove("btn-ghost");
+    button.classList.add("btn-success");
+  } else {
+    button.classList.remove("btn-success");
+    button.classList.add("btn-ghost");
+  }
+}
+
+function setRuleLabPatternStatus(state_key, message) {
+  const widget = document.getElementById("rulelab-pattern-status");
+  const textNode = document.getElementById("rulelab-pattern-status-text");
+  if (!widget || !textNode) return;
+  widget.classList.remove("rulelab-pattern-status-empty", "rulelab-pattern-status-valid", "rulelab-pattern-status-error");
+  if (state_key === "valid") {
+    widget.classList.add("rulelab-pattern-status-valid");
+    textNode.textContent = t("rulelab.pattern_status.valid");
+  } else if (state_key === "error") {
+    widget.classList.add("rulelab-pattern-status-error");
+    textNode.textContent = message || t("rulelab.invalid_pattern");
+  } else {
+    widget.classList.add("rulelab-pattern-status-empty");
+    textNode.textContent = t("rulelab.pattern_status.empty");
+  }
 }
 
 function setRuleLabError(message) {
-  const box = document.getElementById("rulelab-error-box");
-  if (!box) return;
   if (!message) {
-    box.classList.add("hidden");
-    box.textContent = "";
-    return;
+    setRuleLabPatternStatus("empty", "");
+  } else {
+    setRuleLabPatternStatus("error", message);
   }
-  box.classList.remove("hidden");
-  box.innerHTML = `<strong>${escapeHtml(t("common.error"))}:</strong> ${escapeHtml(message)}`;
 }
 
 function clearRuleLabCompatibilityView() {
@@ -4738,13 +4773,13 @@ async function verifyRuleLab({ openPreview = true, silent = false } = {}) {
     state.ruleLab.syntaxOk = true;
     statusNode.innerHTML = `${statusBadge(t("rulelab.syntax_ok"), "success")} ${escapeHtml(t("rulelab.valid"))}`;
     setRuleLabEditorState("editor-valid");
-    setRuleLabError("");
-    setRuleLabSaveEnabled(true);
+    setRuleLabPatternStatus("valid", "");
+    setRuleLabSaveEnabled(state.ruleLab.isDirty);
   } else {
     state.ruleLab.syntaxOk = false;
     statusNode.innerHTML = `${statusBadge(t("rulelab.syntax_error"), "error")} ${escapeHtml(response.syntax_error || "")}`;
     setRuleLabEditorState("editor-invalid");
-    setRuleLabError(response.syntax_error || t("rulelab.invalid_pattern"));
+    setRuleLabPatternStatus("error", response.syntax_error || t("rulelab.invalid_pattern"));
     setRuleLabSaveEnabled(false);
     clearRuleLabCompatibilityView();
   }
@@ -4803,7 +4838,7 @@ function scheduleRuleLabAutoSave() {
   clearTimeout(state.ruleLab.autoSaveTimer);
   state.ruleLab.autoSaveTimer = setTimeout(async () => {
     await persistRuleLab({ silent: true });
-  }, 700);
+  }, 8000);
 }
 
 async function persistRuleLab({ silent = false } = {}) {
@@ -4825,15 +4860,32 @@ async function persistRuleLab({ silent = false } = {}) {
   };
   const signature = JSON.stringify(payload);
   if (signature === state.ruleLab.autoSaveLastSignature) {
+    state.ruleLab.isDirty = false;
+    setRuleLabSaveEnabled(false);
     return;
   }
   state.ruleLab.autoSaving = true;
+  const saveButton = document.getElementById("rulelab-save");
+  if (saveButton) {
+    saveButton.disabled = true;
+    saveButton.textContent = t("rulelab.saving");
+    saveButton.classList.remove("btn-success");
+    saveButton.classList.add("btn-ghost");
+  }
   try {
     await api("/api/rules/save", {
       method: "POST",
       body: JSON.stringify(payload),
     });
     state.ruleLab.autoSaveLastSignature = signature;
+    state.ruleLab.isDirty = false;
+    if (saveButton) {
+      saveButton.textContent = t("rulelab.saved_ok");
+      clearTimeout(state.ruleLab.savedIndicatorTimer);
+      state.ruleLab.savedIndicatorTimer = setTimeout(() => {
+        setRuleLabSaveEnabled(false);
+      }, 2000);
+    }
     if (!silent) {
       showToast("toast.saved");
     }
@@ -5711,6 +5763,10 @@ async function initialize() {
   state.translations = await fetch("/i18n.json").then((response) => response.json());
   applyTranslations();
   installEventHandlers();
+  const ruleLabTitleInput = document.getElementById("rulelab-title");
+  if (ruleLabTitleInput instanceof HTMLInputElement && !ruleLabTitleInput.value) {
+    ruleLabTitleInput.value = ruleLabDefaultTitle();
+  }
   await bootstrap();
 }
 
@@ -6130,6 +6186,13 @@ function installEventHandlers() {
   document.getElementById("indicates-cancel").addEventListener("click", () => {
     document.getElementById("indicates-dialog").close();
   });
+  document.getElementById("stix-object-cancel").addEventListener("click", () => {
+    document.getElementById("stix-object-dialog").close();
+    state.route = "adversaries-catalog";
+    localStorage.setItem("spuc-web-last-route", "adversaries-catalog");
+    applyNavSelection("adversaries-catalog");
+    refreshRouteMeta();
+  });
   document.getElementById("indicates-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const ruleId = document.getElementById("indicates-rule-id").value;
@@ -6149,6 +6212,26 @@ function installEventHandlers() {
     document.getElementById("indicates-dialog").close();
     showToast("toast.saved");
     await loadRules(state.rules.page);
+  });
+
+  document.getElementById("stix-object-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const stixId = document.getElementById("stix-object-id").value.trim();
+    const objectName = document.getElementById("stix-object-name").value.trim();
+    if (!stixId || !objectName) {
+      showToast("rules.indicates.invalid_payload", true);
+      return;
+    }
+    await api("/api/stix-objects", {
+      method: "POST",
+      body: JSON.stringify({
+        stix_id: stixId,
+        name: objectName,
+      }),
+    });
+    document.getElementById("stix-object-dialog").close();
+    showToast("toast.saved");
+    await loadStixObjects();
   });
 
   document.addEventListener("click", (event) => {
@@ -6543,6 +6626,56 @@ function installEventHandlers() {
         });
         showToast("toast.saved");
         await loadAdminUsers();
+      } else if (action === "stix-create-open") {
+        document.getElementById("stix-object-id").value = "";
+        document.getElementById("stix-object-name").value = "";
+        document.getElementById("stix-object-dialog").showModal();
+      } else if (action === "stix-object-cancel") {
+        document.getElementById("stix-object-dialog").close();
+      } else if (action === "stix-select-all-toggle") {
+        const filtered = state.stixObjects.filter((entry) => {
+          const searchLower = (state.stixObjectsView.searchTerm || "").toLowerCase();
+          return !searchLower || entry.stix_id.toLowerCase().includes(searchLower) || entry.name.toLowerCase().includes(searchLower);
+        });
+        const shouldSelect = !filtered.length || filtered.some((entry) => !state.stixObjectsView.selected.has(entry.stix_id));
+        filtered.forEach((entry) => {
+          if (shouldSelect) state.stixObjectsView.selected.add(entry.stix_id);
+          else state.stixObjectsView.selected.delete(entry.stix_id);
+        });
+        renderStixObjectsTable();
+      } else if (action === "stix-bulk-toggle") {
+        if (state.stixObjectsView.selected.size === 0) return;
+        state.stixObjectsView.bulkEditOpen = !state.stixObjectsView.bulkEditOpen;
+        updateStixObjectsBulkState();
+      } else if (action === "stix-bulk-cancel") {
+        state.stixObjectsView.bulkEditOpen = false;
+        state.stixObjectsView.selected.clear();
+        updateStixObjectsBulkState();
+        renderStixObjectsTable();
+      } else if (action === "stix-bulk-clear") {
+        state.stixObjectsView.selected.clear();
+        updateStixObjectsBulkState();
+      } else if (action === "stix-columns-toggle") {
+        toggleMenu("stix-columns-menu", "stix-columns-toggle");
+      } else if (action === "stix-export-selected") {
+        if (state.stixObjectsView.selected.size === 0) return;
+        const selected = state.stixObjects.filter((entry) => state.stixObjectsView.selected.has(entry.stix_id));
+        const rows = selected.map((entry) => [entry.stix_id, entry.name].join(",")).join("\n");
+        const ts = new Date().toISOString().slice(0, 19).replaceAll(":", "-");
+        downloadTextFile(rows, `spuc-stix-objects-selected-${ts}.csv`, "text/csv;charset=utf-8");
+        showToast("toast.export_ready");
+      } else if (action === "stix-delete-selected") {
+        if (state.stixObjectsView.selected.size === 0) return;
+        const confirmDelete = confirm(t("rules.bulk.delete_confirm"));
+        if (!confirmDelete) return;
+        await Promise.all(
+          Array.from(state.stixObjectsView.selected).map((stixId) =>
+            api(`/api/stix-objects/${encodeURIComponent(stixId)}`, { method: "DELETE", body: "{}" })
+          )
+        );
+        showToast("toast.saved");
+        state.stixObjectsView.selected.clear();
+        await loadStixObjects();
       }
     } catch (error) {
       showToast(error.payload?.error || error.message || "toast.unexpected", true);

@@ -2,12 +2,21 @@
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn spuc_bin() -> String {
-    std::env::var("CARGO_BIN_EXE_spuc").unwrap_or_else(|_| "target/debug/spuc".to_string())
+    let bin = std::env::var("CARGO_BIN_EXE_spuc").unwrap_or_else(|_| "target/debug/spuc".to_string());
+    if !Path::new(&bin).exists() {
+        let status = Command::new("cargo")
+            .args(["build", "-q", "-p", "spuc-server", "--bin", "spuc"])
+            .status()
+            .expect("failed to build spuc binary for tests");
+        assert!(status.success(), "failed to build spuc binary for tests");
+    }
+    bin
 }
 
 fn fake_sigma_script() -> PathBuf {

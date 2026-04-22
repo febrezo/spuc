@@ -53,14 +53,11 @@
     </section>
   </main>
 
-                <div class="rules-view-mode" role="group" aria-label="Adversary view mode">
-                  <button id="adversaries-view-cards" class="btn btn-ghost icon-only active" data-action="adversaries-view-mode" data-mode="cards" data-i18n-title="rules.view.cards" aria-label="Cards" title="Cards"><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i></button>
-                  <button id="adversaries-view-table" class="btn btn-ghost icon-only" data-action="adversaries-view-mode" data-mode="table" data-i18n-title="rules.view.table" aria-label="Table" title="Table"><i class="fa-solid fa-table-list" aria-hidden="true"></i></button>
-                </div>
-                <button id="adversaries-select-all-toggle" class="btn btn-ghost icon-only" data-action="adversaries-select-all-toggle" data-i18n-title="adversaries.bulk.select_all" aria-label="Select all" title="Select all"><i class="fa-regular fa-square" aria-hidden="true"></i></button>
-                <button id="adversaries-bulk-toggle" class="btn btn-ghost icon-only" data-action="adversaries-bulk-toggle" data-i18n-title="adversaries.bulk.enable" aria-label="Bulk edit" title="Bulk edit" disabled><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>
+  <div id="app-view" class="app-layout hidden">
+    <aside class="sidebar glass">
       <div class="sidebar-head">
-                  <button id="adversaries-columns-toggle" class="btn btn-ghost icon-only" data-action="adversaries-columns-toggle" data-i18n-title="common.show_hide_columns" aria-label="View columns" title="View columns"><i class="fa-solid fa-table-columns" aria-hidden="true"></i></button>
+        <div class="sidebar-brand-line">
+          <img class="sidebar-logo" src="/assets/logo-sputnik.png" alt="SPUC logo">
           <h2>SPUC</h2>
         </div>
         <p class="muted" data-i18n="app.tagline">Threat hunting studio</p>
@@ -79,13 +76,13 @@
         </section>
         <section class="nav-section">
           <p class="nav-section-title" data-i18n="nav.section.rules_ops">Workspaces</p>
-          <button class="nav-item" data-route="rules">
-            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 3h10l4 4v14H5V3zm9 1.5V8h3.5L14 4.5zM8 12h8v1.8H8V12zm0 4h8v1.8H8V16z"/></svg></span>
-            <span data-i18n="nav.rules">Rules</span>
-          </button>
           <button class="nav-item" data-route="rulelab">
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3h6v3l3 5.2V13l-4 6H10l-4-6v-1.8L9 6V3zm1.9 8.8L9 15h6l-1.9-3.2-1.1-1.9-1.1 1.9z"/></svg></span>
             <span data-i18n="nav.rulelab">Laboratory</span>
+          </button>
+          <button class="nav-item" data-route="rules">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 3h10l4 4v14H5V3zm9 1.5V8h3.5L14 4.5zM8 12h8v1.8H8V12zm0 4h8v1.8H8V16z"/></svg></span>
+            <span data-i18n="nav.rules">Rules</span>
           </button>
           <button class="nav-item" data-route="adversaries">
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 10a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm7 2a3 3 0 1 1 0-6 3 3 0 0 1 0 6zM3 21v-1.5C3 16.9 5.9 15 9 15s6 1.9 6 4.5V21H3zm11 0v-1.2c0-1.3-.5-2.4-1.3-3.3 2.3.2 4.3 1.8 4.3 3.9V21h-3z"/></svg></span>
@@ -608,7 +605,6 @@
                 </div>
               </div>
             </div>
-            <div id="rulelab-error-box" class="status-box status-error hidden"></div>
             <p class="muted rulelab-doc-link">
               <a href="https://docs.oasis-open.org/cti/stix/v2.1/cs02/stix-v2.1-cs02.html#_e8slinrhxcc9" target="_blank" rel="noreferrer" data-i18n="rulelab.guide">STIX Patterning guide</a>
             </p>
@@ -617,9 +613,12 @@
               <textarea id="rulelab-input" class="rulelab-input" rows="15" spellcheck="false" placeholder="[process:command_line MATCHES '^.*echo.*$']"></textarea>
               <div id="rulelab-autocomplete" class="autocomplete-list" hidden></div>
             </div>
-            <div class="editor-actions rulelab-save-row">
-              <button id="rulelab-save" class="btn btn-success hidden" data-i18n="rulelab.save" disabled>Save Rule</button>
-              <span class="muted">Autosave activo</span>
+            <div class="rulelab-status-row">
+              <div id="rulelab-pattern-status" class="rulelab-pattern-status rulelab-pattern-status-empty">
+                <span class="rulelab-pattern-status-label" data-i18n="rulelab.pattern_status.label">Rule status</span>
+                <span id="rulelab-pattern-status-text" class="rulelab-pattern-status-value" data-i18n="rulelab.pattern_status.empty">No pattern entered</span>
+              </div>
+              <button id="rulelab-save" class="btn btn-success" data-i18n="rulelab.save" disabled>Save Rule</button>
             </div>
             <div class="compatibility-inline">
               <header class="compatibility-header">
@@ -655,18 +654,18 @@
             <p class="muted" data-i18n="adversaries.welcome.subtitle">Choose if you want to explore existing adversaries or create a new one.</p>
           </header>
           <div class="welcome-stack rules-welcome-actions">
-            <button class="welcome-action welcome-action-row" data-action="welcome-nav" data-route="adversaries-catalog">
-              <span class="welcome-icon" aria-hidden="true">🧭</span>
-              <span class="welcome-copy">
-                <strong data-i18n="adversaries.welcome.catalog.title">Explore adversaries</strong>
-                <span class="muted" data-i18n="adversaries.welcome.catalog.desc">Search, filter and export existing adversaries.</span>
-              </span>
-            </button>
             <button class="welcome-action welcome-action-row" data-action="welcome-nav" data-route="adversaries-create">
               <span class="welcome-icon" aria-hidden="true">⚙️</span>
               <span class="welcome-copy">
                 <strong data-i18n="adversaries.welcome.create.title">Create new adversary</strong>
                 <span class="muted" data-i18n="adversaries.welcome.create.desc">Create a new adversary from cataloged abilities.</span>
+              </span>
+            </button>
+            <button class="welcome-action welcome-action-row" data-action="welcome-nav" data-route="adversaries-catalog">
+              <span class="welcome-icon" aria-hidden="true">🧭</span>
+              <span class="welcome-copy">
+                <strong data-i18n="adversaries.welcome.catalog.title">Explore adversaries</strong>
+                <span class="muted" data-i18n="adversaries.welcome.catalog.desc">Search, filter and export existing adversaries.</span>
               </span>
             </button>
           </div>
@@ -929,8 +928,12 @@
           </label>
         </section>
         <div class="dialog-actions modal-actions-split">
-          <button type="button" id="indicates-cancel" class="btn btn-danger" data-i18n="common.cancel">Cancel</button>
-          <button type="submit" class="btn btn-success" data-i18n="rules.indicates.add">Add relation</button>
+          <div class="modal-actions-left">
+            <button type="button" id="indicates-cancel" class="btn btn-danger" data-i18n="common.cancel">Cancel</button>
+          </div>
+          <div class="modal-actions-right">
+            <button type="submit" class="btn btn-success" data-i18n="rules.indicates.add">Add relation</button>
+          </div>
         </div>
       </form>
     </article>
@@ -987,8 +990,10 @@
           </article>
         </section>
         <div class="dialog-actions modal-actions-split">
-          <button type="button" id="adversary-cancel" class="btn btn-danger" data-i18n="common.cancel">Cancel</button>
-          <div class="adversary-dialog-actions-right">
+          <div class="modal-actions-left">
+            <button type="button" id="adversary-cancel" class="btn btn-danger" data-i18n="common.cancel">Cancel</button>
+          </div>
+          <div class="modal-actions-right adversary-dialog-actions-right">
             <button type="button" class="btn btn-primary" data-action="adversary-open-ability-picker">Anadir habilidades</button>
             <div id="adversary-export-inline" class="detail-copy-emulation hidden">
               <div class="rule-export-combo">
@@ -996,8 +1001,8 @@
                 <select id="adversary-export-inline-target" class="rule-export-select"></select>
               </div>
             </div>
+            <button type="submit" id="adversary-submit" class="btn btn-success" data-i18n="adversaries.create.submit">Create new adversary</button>
           </div>
-          <button type="submit" id="adversary-submit" class="btn btn-success" data-i18n="adversaries.create.submit">Create new adversary</button>
         </div>
       </form>
     </article>
@@ -1074,8 +1079,12 @@
       </header>
       <p id="confirm-message" class="muted"></p>
       <div class="dialog-actions modal-actions-split">
-        <button type="button" id="confirm-cancel" class="btn btn-danger" data-i18n="common.cancel">Cancel</button>
-        <button type="button" id="confirm-accept" class="btn btn-primary" data-i18n="common.confirm">Confirm</button>
+        <div class="modal-actions-left">
+          <button type="button" id="confirm-cancel" class="btn btn-danger" data-i18n="common.cancel">Cancel</button>
+        </div>
+        <div class="modal-actions-right">
+          <button type="button" id="confirm-accept" class="btn btn-primary" data-i18n="common.confirm">Confirm</button>
+        </div>
       </div>
     </article>
   </dialog>
@@ -1097,8 +1106,12 @@
         <p class="muted" data-i18n="rules.indicates.example">Example: STIX ID malware--01234567-89ab-4def-8abc-0123456789ab, object name Emotet.</p>
         <p class="muted" data-i18n="rules.indicates.hint">SPUC validates STIX ID structure before saving the relation.</p>
         <div class="dialog-actions modal-actions-split">
-          <button type="button" id="stix-object-cancel" class="btn btn-danger" data-i18n="common.cancel">Cancel</button>
-          <button type="submit" class="btn btn-success" data-i18n="common.save">Save</button>
+          <div class="modal-actions-left">
+            <button type="button" id="stix-object-cancel" class="btn btn-danger" data-i18n="common.cancel">Cancel</button>
+          </div>
+          <div class="modal-actions-right">
+            <button type="submit" class="btn btn-success" data-i18n="common.save">Save</button>
+          </div>
         </div>
       </form>
     </article>

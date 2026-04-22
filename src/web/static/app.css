@@ -2002,9 +2002,78 @@ tr:hover td {
   justify-content: flex-end;
 }
 
-.rulelab-save-row {
-  margin-top: 10px;
-  justify-content: flex-end;
+.rulelab-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.rulelab-pattern-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  font-size: 0.82rem;
+  font-weight: 500;
+  background: rgba(11, 20, 34, 0.36);
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  align-self: flex-start;
+}
+
+.rulelab-pattern-status-label {
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.rulelab-pattern-status-label::after {
+  content: ":";
+}
+
+.rulelab-pattern-status-value {
+  font-weight: 600;
+}
+
+.rulelab-pattern-status-empty {
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.rulelab-pattern-status-empty .rulelab-pattern-status-value {
+  color: var(--muted);
+}
+
+.rulelab-pattern-status-valid {
+  border-color: rgba(57, 196, 122, 0.45);
+  background: rgba(57, 196, 122, 0.1);
+  color: #8af0b7;
+}
+
+.rulelab-pattern-status-valid .rulelab-pattern-status-label {
+  color: rgba(138, 240, 183, 0.75);
+}
+
+.rulelab-pattern-status-valid .rulelab-pattern-status-value {
+  color: #8af0b7;
+}
+
+.rulelab-pattern-status-error {
+  border-color: rgba(239, 100, 97, 0.48);
+  background: rgba(239, 100, 97, 0.1);
+  color: #ffb2b0;
+}
+
+.rulelab-pattern-status-error .rulelab-pattern-status-label {
+  color: rgba(255, 178, 176, 0.72);
+}
+
+.rulelab-pattern-status-error .rulelab-pattern-status-value {
+  color: #ffb2b0;
 }
 
 .rulelab-doc-link {
@@ -3411,11 +3480,24 @@ tr:hover td {
   align-items: center;
 }
 
-.adversary-dialog-actions-right {
+.modal-actions-left,
+.modal-actions-right {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.modal-actions-left {
+  justify-content: flex-start;
+}
+
+.modal-actions-right {
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.adversary-dialog-actions-right {
   justify-content: flex-end;
 }
 
@@ -3714,7 +3796,9 @@ tr:hover td {
     justify-content: flex-start;
   }
 
-  .rulelab-save-row {
+  .rulelab-status-row {
+    flex-direction: column;
+    align-items: flex-start;
     justify-content: flex-start;
   }
 

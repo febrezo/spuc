@@ -4,11 +4,21 @@ use serde_yaml::Value;
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::Write;
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-fn spuc_bin() -> &'static str {
-    env!("CARGO_BIN_EXE_spuc")
+fn spuc_bin() -> String {
+    let bin = std::env::var("CARGO_BIN_EXE_spuc")
+        .unwrap_or_else(|_| "target/debug/spuc".to_string());
+    if !Path::new(&bin).exists() {
+        let status = Command::new("cargo")
+            .args(["build", "-q", "-p", "spuc-server", "--bin", "spuc"])
+            .status()
+            .expect("failed to build spuc binary for tests");
+        assert!(status.success(), "failed to build spuc binary for tests");
+    }
+    bin
 }
 
 fn temp_config_root() -> std::path::PathBuf {
@@ -208,7 +218,7 @@ fn plan_intrusion_set_from_catalog_and_persist_manifest() {
 
     let out_dir = root.join("intrusion_sets");
     let out_path =
-        out_dir.join("spuc-intrusion_set-linux-validation_intrusion_set-spuc-agent.yaml");
+        out_dir.join("spuc-intrusion-set-linux-validation_intrusion_set-spuc-agent.yaml");
     let out = Command::new(spuc_bin())
         .env("SPUC_CONFIG_DIR", &root)
         .args([
@@ -262,7 +272,7 @@ fn plan_order_accepts_mixed_id_and_index_tokens() {
     let ability_3 = run_save_ability(&root, "[directory:path MATCHES '^/tmp/.*$']");
 
     let out_dir = root.join("intrusion_sets");
-    let out_path = out_dir.join("spuc-intrusion_set-linux-mixed_order-spuc-agent.yaml");
+    let out_path = out_dir.join("spuc-intrusion-set-linux-mixed_order-spuc-agent.yaml");
     let out = Command::new(spuc_bin())
         .env("SPUC_CONFIG_DIR", &root)
         .args([
@@ -315,7 +325,7 @@ fn guided_plan_console_supports_set_search_select_and_build() {
     let _tmp_ability = run_save_ability(&root, "[file:name MATCHES '^.*\\\\.tmp$']");
 
     let out_dir = root.join("intrusion_sets");
-    let out_path = out_dir.join("spuc-intrusion_set-linux-guided_intrusion_set-spuc-agent.yaml");
+    let out_path = out_dir.join("spuc-intrusion-set-linux-guided_intrusion_set-spuc-agent.yaml");
     let mut cmd = Command::new(spuc_bin())
         .env("SPUC_CONFIG_DIR", &root)
         .args([
@@ -440,7 +450,7 @@ fn plan_default_output_filename_is_representative() {
     let ability_id = run_save_ability(&root, "[process:command_line MATCHES '^.*echo.*$']");
     let expected_path = root
         .join("intrusion_sets")
-        .join("spuc-intrusion_set-any-blue_team_validation-spuc-agent.yaml");
+        .join("spuc-intrusion-set-any-blue_team_validation-spuc-agent.yaml");
 
     let out = Command::new(spuc_bin())
         .env("SPUC_CONFIG_DIR", &root)
@@ -507,7 +517,7 @@ fn plan_supports_dummy_abilities_and_build_artifacts() {
 
     let out_path = root
         .join("intrusion_sets")
-        .join("spuc-intrusion_set-any-dummy_flow-spuc-agent.yaml");
+        .join("spuc-intrusion-set-any-dummy_flow-spuc-agent.yaml");
     let raw = fs::read_to_string(&out_path).expect("dummy flow manifest missing");
     let manifest: Value = serde_yaml::from_str(&raw).expect("invalid dummy flow yaml");
     let steps = manifest["steps"]
@@ -648,7 +658,7 @@ fn plan_builds_materialized_file_artifacts_for_powershell_spuc_agent_and_bash() 
 fn guided_plan_can_add_dummy_abilities_and_build() {
     let root = temp_config_root();
     let out_dir = root.join("intrusion_sets");
-    let out_path = out_dir.join("spuc-intrusion_set-any-guided_dummy-spuc-agent.yaml");
+    let out_path = out_dir.join("spuc-intrusion-set-any-guided_dummy-spuc-agent.yaml");
 
     let mut cmd = Command::new(spuc_bin())
         .env("SPUC_CONFIG_DIR", &root)

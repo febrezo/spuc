@@ -67,14 +67,15 @@ Last updated: 2026-03-15
 ## Intrusion Set Persistence
 
 - Intrusion-set manifests default to YAML and are generated per platform + executor:
-  - `<config_root>/intrusion_sets/spuc-intrusion_set-<platform>-<snake_case_name>-<executor>.yaml`
+  - `<config_root>/intrusion_sets/spuc-intrusion-set-<platform>-<snake_case_name>-<executor>.yaml`
 - Build also writes executor artifacts per ability in the same directory.
 - Manifest format is intentionally fixed to YAML in current interactive workflow.
 
 ## Interactive UX
 
-- Browser entry: `spuc web`.
-- Standalone entry: `spuc` (desktop window with `desktop-tauri` feature; otherwise local no-login web mode).
+- Browser/server entry: `spuc web` (`spuc-server` crate), localhost-only.
+- Desktop entry: `spuc-desktop` (Tauri app) running `spuc web` as sidecar.
+- Shared reusable library package: repository root crate `spuc-core` (library name `spuc`).
 
 ## CLI Source Layout
 
@@ -139,8 +140,9 @@ Last updated: 2026-03-15
 
 ## Web Interface
 
-- Running `spuc` with no command launches standalone mode: native desktop window with `desktop-tauri` (if compiled) or local no-login web mode on `http://127.0.0.1:8090/`.
-- `spuc web` runs a localhost-only HTTP interface.
+- Running `spuc` with no command launches local no-login web mode on `http://127.0.0.1:8090/`.
+- `spuc web` runs a localhost-only HTTP interface and exposes `GET /healthz` for sidecar readiness checks.
+- `spuc-desktop` wraps the web UI in a native window and manages sidecar lifecycle.
 - The web interface is localized in English and Spanish only.
 - Authentication supports local username/password users persisted in `web_users.json`.
 - Google/GitHub sign-in uses authorization-code callback flow with environment bootstrap plus explicit admin authorization flags per provider.

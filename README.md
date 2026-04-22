@@ -95,6 +95,8 @@ Commands:
 
 ```bash
 cargo test
+cargo test -p spuc-core
+cargo test -p spuc-server
 ```
 
 ## Docker + sigma
@@ -111,10 +113,10 @@ Use `spuc sigma update-config` to force a fresh runtime discovery and overwrite 
 
 ## Web Interface
 
-- Running `spuc` with no command starts standalone mode.
-- For native GUI window mode (no browser), run: `cargo run --bin spuc --features desktop-tauri`
-- Without the desktop feature, `spuc` still starts local web mode (`--no-login`) on `http://127.0.0.1:8090/`.
-- Linux desktop prerequisites for `desktop-tauri`: install WebKitGTK and JavaScriptCoreGTK development packages (for example `webkit2gtk-4.1` and `javascriptcoregtk-4.1` development headers).
+- `spuc` is provided by crate `spuc-server` and runs the current CLI, including `spuc web`.
+- `spuc web` binds to `127.0.0.1` only, supports `--no-login`, does not open an external browser, and exposes `GET /healthz`.
+- `spuc-desktop` is a separate Tauri app that starts `spuc web` as a sidecar, waits for readiness, and loads the local URL in a native window.
+- Linux desktop prerequisites: install WebKitGTK and JavaScriptCoreGTK development packages (for example `webkit2gtk-4.1` and `javascriptcoregtk-4.1` development headers, or distro equivalent package names).
 - `spuc web --port 8090 --admin-user admin --admin-password <password>` starts the localized web UI on localhost.
 - `spuc web --no-login` disables the login screen, enters directly as local administrator and hides logout (desktop/standalone mode).
 - If `--admin-password` is omitted, SPUC generates a 25-character password and prints it in startup logs.
@@ -141,7 +143,9 @@ curl -X POST 'http://127.0.0.1:8080/rpc' \
 
 ## Source Layout
 
-- `src/main.rs`: thin entrypoint
+- repository root package `spuc-core`: reusable core library package (`lib` name `spuc`, entrypoint at `src/lib.rs`)
+- `crates/spuc-server/`: `spuc` and `spuc-agent` binaries
+- `crates/spuc-desktop/`: Tauri desktop app (`spuc-desktop`) that manages `spuc web` sidecar lifecycle
 - `src/core/`: technical core namespace (`ast`, `ir`, `parser`, `normalize`, `emitters`)
 - `src/domain/`: product-domain namespace (`catalog`, emulation-facing integration points)
 - `src/app/`: application runner and shared services/cases (`run`, `services/*`)
@@ -164,11 +168,29 @@ This repository is prepared for automated builds in GitHub Actions:
 - `.github/workflows/ci.yml`
   - runs `cargo fmt --check`, `cargo check -q`, and `cargo test -q` on push/PR.
 - `.github/workflows/release.yml`
-  - builds release binaries for Linux, macOS, and Windows.
+  - builds `spuc` server binaries for Linux, macOS, and Windows.
+  - builds `spuc-desktop` binaries for Linux, macOS, and Windows.
+  - desktop artifacts include the `spuc` sidecar binary required at runtime.
   - includes ARM targets for Raspberry Pi (`aarch64-unknown-linux-gnu` and `armv7-unknown-linux-gnueabihf`) plus `x86_64-unknown-linux-musl`.
   - packages artifacts with the current app version in filename (`spuc-v<version>-<target>.tar.gz` / `.zip`).
   - uploads build artifacts on each run.
   - publishes GitHub Release assets automatically when pushing a tag like `v0.1.1`.
+
+## Development Commands
+
+```bash
+# Build server CLI binary (`spuc`)
+cargo build -p spuc-server --bin spuc
+
+# Run web server mode
+cargo run -p spuc-server --bin spuc -- web --port 8090 --no-login
+
+# Build desktop app
+cargo build -p spuc-desktop
+
+# Run desktop app (expects `spuc` in PATH or SPUC_SERVER_BIN set)
+cargo run -p spuc-desktop
+```
 
 Release flow:
 
