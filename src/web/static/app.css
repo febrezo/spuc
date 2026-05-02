@@ -608,6 +608,23 @@ textarea {
   box-shadow: 0 0 0 2px rgba(77, 141, 255, 0.22);
 }
 
+body.theme-light .welcome-action {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.84);
+  border-color: rgba(55, 96, 166, 0.22);
+}
+
+body.theme-light .welcome-action:hover {
+  background: rgba(238, 245, 255, 0.96);
+  border-color: rgba(51, 93, 205, 0.38);
+}
+
+body.theme-light .welcome-action.active {
+  background: rgba(226, 239, 255, 0.98);
+  border-color: rgba(51, 93, 205, 0.52);
+  box-shadow: 0 0 0 2px rgba(51, 93, 205, 0.16);
+}
+
 .welcome-stack {
   display: grid;
   gap: 10px;

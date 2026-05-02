@@ -282,6 +282,14 @@ mod tests {
     }
 
     #[test]
+    fn app_css_gives_light_theme_welcome_actions_light_surfaces() {
+        assert!(APP_CSS.contains("body.theme-light .welcome-action {"));
+        assert!(APP_CSS.contains("background: rgba(255, 255, 255, 0.84);"));
+        assert!(APP_CSS.contains("body.theme-light .welcome-action:hover"));
+        assert!(APP_CSS.contains("body.theme-light .welcome-action.active"));
+    }
+
+    #[test]
     fn rulelab_hides_copy_prompt_button() {
         assert!(!INDEX_HTML.contains("id=\"rulelab-copy-prompt\""));
     }
