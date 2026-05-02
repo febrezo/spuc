@@ -1,23 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "SPUC Desktop",
-  "version": "0.2.0",
+  "version": "0.5.0",
   "identifier": "com.felixbrezo.spuc.desktop",
   "build": {
     "frontendDist": "."
   },
   "app": {
-    "windows": [
-      {
-        "label": "main",
-        "title": "SPUC Desktop",
-        "width": 1440,
-        "height": 900,
-        "minWidth": 1200,
-        "minHeight": 760,
-        "resizable": true
-      }
-    ]
+    "windows": []
   },
   "bundle": {
     "active": false

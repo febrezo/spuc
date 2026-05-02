@@ -1,4 +1,5 @@
 /target
+crates/spuc-desktop/gen/
 ./logs
 ./out
 *pyc

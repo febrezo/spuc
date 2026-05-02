@@ -331,9 +331,13 @@ textarea {
 }
 
 .sidebar {
+  position: sticky;
+  top: 18px;
+  height: calc(100vh - 36px);
+  min-height: 0;
   padding: 20px 16px;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 18px;
 }
 
@@ -344,7 +348,7 @@ textarea {
 
 .sidebar-brand-line {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
 }
 
@@ -362,7 +366,7 @@ textarea {
   font-family: var(--font-brand);
   text-transform: uppercase;
   font-size: 1.2rem;
-  line-height: 1;
+  line-height: 1.1;
 }
 
 .sidebar-head p {
@@ -373,6 +377,9 @@ textarea {
   display: grid;
   gap: 14px;
   align-content: start;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .nav-item {
@@ -424,6 +431,8 @@ textarea {
   gap: 6px;
   text-align: center;
   justify-items: center;
+  align-self: end;
+  background: linear-gradient(180deg, transparent 0%, rgba(17, 28, 46, 0.82) 18%);
 }
 
 .sidebar-foot p {
@@ -649,8 +658,8 @@ textarea {
 }
 
 .home-logo {
-  width: min(264px, 58vw);
-  height: min(264px, 58vw);
+  width: min(284px, 58vw);
+  height: min(284px, 58vw);
   margin: 0 auto 4px;
   object-fit: contain;
 }
@@ -669,7 +678,8 @@ textarea {
 }
 
 .home-welcome-card {
-  max-width: 1080px;
+  max-width: 1160px;
+  padding: 28px;
 }
 
 .home-welcome-card h2 {
@@ -687,12 +697,12 @@ textarea {
 }
 
 .workspace-chooser-card {
-  width: min(1060px, 100%);
+  width: min(1140px, 100%);
   text-align: center;
 }
 
 .panel.workspace-center-mode {
-  min-height: max(56vh, 420px);
+  min-height: max(62vh, 520px);
   align-content: center;
   justify-items: center;
 }
@@ -3735,6 +3745,7 @@ tr:hover td {
     left: -320px;
     width: min(300px, 88vw);
     height: 100vh;
+    min-height: 0;
     z-index: 10;
     transition: left 0.22s ease;
     border-radius: 0;

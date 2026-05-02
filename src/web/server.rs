@@ -13,6 +13,7 @@ pub(crate) fn run(
     admin_user: &str,
     admin_password: Option<&str>,
     no_login: bool,
+    open_browser: bool,
 ) -> Result<()> {
     let listener = TcpListener::bind(("127.0.0.1", port))?;
     let generated = admin_password.is_none();
@@ -37,8 +38,11 @@ pub(crate) fn run(
         "OAuth providers are read from environment variables (Google/GitHub). If missing, local login is used.",
     );
 
-    // Open browser automatically
-    let _ = open::that(&url);
+    if open_browser {
+        let _ = open::that(&url);
+    } else {
+        log_info("Browser auto-open disabled by --no-open.");
+    }
 
     start(listener, state)
 }

@@ -114,9 +114,9 @@ Use `spuc sigma update-config` to force a fresh runtime discovery and overwrite 
 ## Web Interface
 
 - `spuc` is provided by crate `spuc-server` and runs the current CLI, including `spuc web`.
-- `spuc web` binds to `127.0.0.1` only, supports `--no-login`, does not open an external browser, and exposes `GET /healthz`.
-- `spuc-desktop` is a separate Tauri app that starts `spuc web` as a sidecar, waits for readiness, and loads the local URL in a native window.
-- Linux desktop prerequisites: install WebKitGTK and JavaScriptCoreGTK development packages (for example `webkit2gtk-4.1` and `javascriptcoregtk-4.1` development headers, or distro equivalent package names).
+- `spuc web` binds to `127.0.0.1` only, supports `--no-login`, opens the system browser by default, supports `--no-open` for sidecar/embedded use, and exposes `GET /healthz`.
+- `spuc-desktop` is a separate Tauri app that starts `spuc web --no-login --no-open` as a sidecar on an available localhost port, shows a local SPUC loading screen while the sidecar becomes ready, and then loads the local URL in a native window.
+- Linux desktop prerequisites: install WebKitGTK, JavaScriptCoreGTK, GTK and GLib development packages. On Fedora: `sudo dnf install glib2-devel gtk3-devel webkit2gtk4.1-devel javascriptcoregtk4.1-devel libappindicator-gtk3-devel librsvg2-devel libxdo-devel pkgconf-pkg-config`. On Ubuntu/WSL: install `libwebkit2gtk-4.1-dev`, `libjavascriptcoregtk-4.1-dev`, `libgtk-3-dev`, `libglib2.0-dev`, `libappindicator3-dev`, `librsvg2-dev`, `libxdo-dev`, and `pkg-config`.
 - `spuc web --port 8090 --admin-user admin --admin-password <password>` starts the localized web UI on localhost.
 - `spuc web --no-login` disables the login screen, enters directly as local administrator and hides logout (desktop/standalone mode).
 - If `--admin-password` is omitted, SPUC generates a 25-character password and prints it in startup logs.
@@ -184,6 +184,7 @@ cargo build -p spuc-server --bin spuc
 
 # Run web server mode
 cargo run -p spuc-server --bin spuc -- web --port 8090 --no-login
+cargo run -p spuc-server --bin spuc -- web --port 8090 --no-login --no-open
 
 # Build desktop app
 cargo build -p spuc-desktop

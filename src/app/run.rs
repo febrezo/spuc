@@ -89,7 +89,14 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             admin_user,
             admin_password,
             no_login,
-        } => commands::web::run(*port, admin_user, admin_password.as_deref(), *no_login)?,
+            no_open,
+        } => commands::web::run(
+            *port,
+            admin_user,
+            admin_password.as_deref(),
+            *no_login,
+            !*no_open,
+        )?,
         Commands::Version {} => commands::version::run()?,
         Commands::Sigma { command } => match command {
             SigmaCommands::Status => commands::sigma::status()?,
@@ -106,7 +113,7 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
 }
 
 fn run_standalone_web_mode() -> Result<()> {
-    commands::web::run(STANDALONE_WEB_PORT, "admin", None, true)
+    commands::web::run(STANDALONE_WEB_PORT, "admin", None, true, true)
 }
 
 pub(crate) fn resolve_output_blocks(

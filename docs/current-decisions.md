@@ -141,8 +141,8 @@ Last updated: 2026-03-15
 ## Web Interface
 
 - Running `spuc` with no command launches local no-login web mode on `http://127.0.0.1:8090/`.
-- `spuc web` runs a localhost-only HTTP interface and exposes `GET /healthz` for sidecar readiness checks.
-- `spuc-desktop` wraps the web UI in a native window and manages sidecar lifecycle.
+- `spuc web` runs a localhost-only HTTP interface, opens the system browser by default, supports `--no-open` for embedded/sidecar use, and exposes `GET /healthz` for readiness checks.
+- `spuc-desktop` wraps the web UI in a native window, starts `spuc web --no-login --no-open` on an available localhost port, shows a local loading screen until `/healthz` is ready, and manages sidecar lifecycle.
 - The web interface is localized in English and Spanish only.
 - Authentication supports local username/password users persisted in `web_users.json`.
 - Google/GitHub sign-in uses authorization-code callback flow with environment bootstrap plus explicit admin authorization flags per provider.

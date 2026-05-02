@@ -264,6 +264,24 @@ mod tests {
     }
 
     #[test]
+    fn app_css_keeps_sidebar_footer_visible_and_brand_aligned() {
+        assert!(APP_CSS.contains("height: calc(100vh - 36px);"));
+        assert!(APP_CSS.contains("grid-template-rows: auto minmax(0, 1fr) auto;"));
+        assert!(APP_CSS.contains(".sidebar-brand-line {"));
+        assert!(APP_CSS.contains("align-items: center;"));
+        assert!(APP_CSS.contains("overflow-y: auto;"));
+        assert!(APP_CSS.contains("align-self: end;"));
+    }
+
+    #[test]
+    fn app_css_expands_home_workspace_card() {
+        assert!(APP_CSS.contains("max-width: 1160px;"));
+        assert!(APP_CSS.contains("width: min(1140px, 100%);"));
+        assert!(APP_CSS.contains("min-height: max(62vh, 520px);"));
+        assert!(APP_CSS.contains("width: min(284px, 58vw);"));
+    }
+
+    #[test]
     fn rulelab_hides_copy_prompt_button() {
         assert!(!INDEX_HTML.contains("id=\"rulelab-copy-prompt\""));
     }

@@ -8,13 +8,18 @@ Last updated: 2026-03-15
 spuc
 spuc web --port 8090 --admin-user admin --admin-password "change-me"
 spuc web --port 8090 --no-login
+spuc web --port 8090 --no-login --no-open
 ```
 
 `spuc` without subcommands starts standalone mode:
 - it falls back to local web mode on `http://127.0.0.1:8090/` with `--no-login`.
 - `spuc web` binds to `127.0.0.1` and exposes `GET /healthz` for sidecar readiness checks.
+- `spuc web` opens the system browser by default; use `--no-open` when another shell, desktop wrapper, or test harness will load the URL.
+- `spuc-desktop` starts `spuc web --no-login --no-open` on an available localhost port, shows a centered SPUC loading screen while the sidecar becomes ready, and then shows it in a native Tauri window.
 - desktop build command: `cargo run -p spuc-desktop`
-- Linux desktop prerequisites: WebKitGTK and JavaScriptCoreGTK development packages (`webkit2gtk-4.1` and `javascriptcoregtk-4.1` headers, or distro equivalent).
+- Linux desktop prerequisites: WebKitGTK, JavaScriptCoreGTK, GTK and GLib development packages.
+- Fedora: `sudo dnf install glib2-devel gtk3-devel webkit2gtk4.1-devel javascriptcoregtk4.1-devel libappindicator-gtk3-devel librsvg2-devel libxdo-devel pkgconf-pkg-config`.
+- Ubuntu/WSL: install `libwebkit2gtk-4.1-dev`, `libjavascriptcoregtk-4.1-dev`, `libgtk-3-dev`, `libglib2.0-dev`, `libappindicator3-dev`, `librsvg2-dev`, `libxdo-dev`, and `pkg-config`.
 
 If `--admin-password` is omitted, SPUC generates a random 25-character administrator password and prints it in startup logs.
 When `--admin-password` is provided explicitly, SPUC keeps that credential synchronized for the configured admin user at startup.

@@ -169,6 +169,9 @@ pub enum Commands {
         /// Disable login screen and enter directly as local administrator
         #[arg(long = "no-login", default_value_t = false)]
         no_login: bool,
+        /// Do not open the system browser after starting the local web server
+        #[arg(long = "no-open", default_value_t = false)]
+        no_open: bool,
     },
 }
 
