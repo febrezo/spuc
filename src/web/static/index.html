@@ -60,7 +60,7 @@
           <img class="sidebar-logo" src="/assets/logo-sputnik.png" alt="SPUC logo">
           <h2>SPUC</h2>
         </div>
-        <p class="muted" data-i18n="app.tagline">Threat hunting studio</p>
+        <p class="muted" data-i18n="app.tagline">Behavioral IOC mapping lab</p>
       </div>
       <nav class="nav-list">
         <section class="nav-section">
@@ -113,11 +113,6 @@
         </section>
       </nav>
 
-      <div class="sidebar-foot muted">
-        <p>Coded with ❤️ by febrezo</p>
-        <p><a href="https://github.com/febrezo/spuc" target="_blank" rel="noreferrer" data-i18n="common.github_project">GitHub Project</a></p>
-        <p><span data-i18n="common.license">License</span>: <a href="https://github.com/febrezo/spuc/blob/main/LICENSE.md" target="_blank" rel="noreferrer" data-i18n="common.license_sspl">Server Side Public License</a></p>
-      </div>
     </aside>
 
     <div id="sidebar-backdrop" class="sidebar-backdrop hidden"></div>
@@ -766,17 +761,19 @@
         </article>
         <article class="learning-toolbar glass">
           <input id="learning-search" type="search" data-i18n-placeholder="learning.search.placeholder" placeholder="Search exercises...">
-          <label class="learning-toggle">
-            <span data-i18n="learning.paths.label">Learning path</span>
-            <select id="learning-path">
-              <option value="" data-i18n="learning.paths.all">All paths</option>
-            </select>
-          </label>
-          <label class="learning-toggle">
-            <input id="learning-only-pending" type="checkbox">
-            <span data-i18n="learning.only_pending">Only pending</span>
-          </label>
-          <span id="learning-progress" class="badge success">0/0</span>
+          <div class="learning-toolbar-controls">
+            <label class="learning-toggle learning-path-toggle">
+              <span data-i18n="learning.paths.label">Learning path</span>
+              <select id="learning-path">
+                <option value="" data-i18n="learning.paths.all">All paths</option>
+              </select>
+            </label>
+            <label class="learning-toggle learning-pending-toggle">
+              <input id="learning-only-pending" type="checkbox">
+              <span data-i18n="learning.only_pending">Only pending</span>
+            </label>
+            <span id="learning-progress" class="badge success">0/0</span>
+          </div>
         </article>
         <div class="challenges-scroll">
           <section class="learning-grid challenges-grid" id="challenges-grid"></section>
@@ -855,6 +852,12 @@
         </div>
       </section>
     </section>
+
+    <footer class="app-floating-footer muted">
+      <span>Coded with ❤️ by febrezo</span>
+      <a href="https://github.com/febrezo/spuc" target="_blank" rel="noreferrer" data-i18n="common.github_project">GitHub Project</a>
+      <span><span data-i18n="common.license">License</span>: <a href="https://github.com/febrezo/spuc/blob/main/LICENSE.md" target="_blank" rel="noreferrer" data-i18n="common.license_sspl">Server Side Public License</a></span>
+    </footer>
   </div>
 
   <dialog id="detail-dialog" class="detail-dialog">

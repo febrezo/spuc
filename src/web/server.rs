@@ -383,6 +383,32 @@ mod tests {
     }
 
     #[test]
+    fn no_login_mode_hides_admin_routes() {
+        with_test_config_dir("no_login_admin_hidden", || {
+            let listener = match TcpListener::bind(("127.0.0.1", 0)) {
+                Ok(listener) => listener,
+                Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return,
+                Err(error) => panic!("listener: {error}"),
+            };
+            let port = listener.local_addr().expect("addr").port();
+            let state =
+                Arc::new(WebState::new("admin", "secret-pass", false, true).expect("state"));
+            let state_for_thread = Arc::clone(&state);
+            std::thread::spawn(move || {
+                start(listener, state_for_thread).expect("server");
+            });
+            std::thread::sleep(Duration::from_millis(120));
+
+            let admin_users = send_raw(
+                port,
+                "GET /api/admin/users HTTP/1.1\r\nHost: localhost\r\n\r\n",
+            );
+            assert!(admin_users.contains("404 Not Found"));
+            assert!(admin_users.contains("\"code\": \"no_login_mode\""));
+        });
+    }
+
+    #[test]
     fn admin_can_toggle_oauth_provider_authorization() {
         with_test_config_dir("oauth_toggle", || {
             let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener");

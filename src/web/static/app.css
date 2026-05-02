@@ -327,17 +327,17 @@ textarea {
   display: grid;
   grid-template-columns: 280px 1fr;
   gap: 18px;
-  padding: 18px;
+  padding: 18px 18px 46px;
 }
 
 .sidebar {
   position: sticky;
   top: 18px;
-  height: calc(100vh - 36px);
+  height: calc(100vh - 64px);
   min-height: 0;
   padding: 20px 16px;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 18px;
 }
 
@@ -350,6 +350,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 44px;
 }
 
 .sidebar-logo {
@@ -365,8 +366,9 @@ textarea {
   letter-spacing: 0.09em;
   font-family: var(--font-brand);
   text-transform: uppercase;
-  font-size: 1.2rem;
-  line-height: 1.1;
+  font-size: 1.18rem;
+  line-height: 1;
+  transform: translateY(1px);
 }
 
 .sidebar-head p {
@@ -423,28 +425,41 @@ textarea {
   fill: currentColor;
 }
 
-.sidebar-foot {
-  font-size: 0.82rem;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
-  display: grid;
-  gap: 6px;
+.app-floating-footer {
+  position: fixed;
+  left: 50%;
+  bottom: 10px;
+  z-index: 30;
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  max-width: min(920px, calc(100vw - 32px));
+  padding: 6px 12px;
+  border: 1px solid rgba(128, 163, 216, 0.16);
+  border-radius: 999px;
+  background: rgba(8, 13, 23, 0.72);
+  box-shadow: 0 12px 34px rgba(2, 8, 20, 0.32);
+  backdrop-filter: blur(12px);
+  font-size: calc(0.82rem - 2px);
+  line-height: 1.25;
   text-align: center;
-  justify-items: center;
-  align-self: end;
-  background: linear-gradient(180deg, transparent 0%, rgba(17, 28, 46, 0.82) 18%);
+  white-space: nowrap;
 }
 
-.sidebar-foot p {
-  margin: 0;
+body.theme-light .app-floating-footer {
+  background: rgba(255, 255, 255, 0.76);
+  border-color: rgba(55, 96, 166, 0.18);
+  box-shadow: 0 12px 30px rgba(27, 55, 94, 0.12);
 }
 
-.sidebar-foot a {
+.app-floating-footer a {
   color: #8dbbff;
   text-decoration: none;
 }
 
-.sidebar-foot a:hover {
+.app-floating-footer a:hover {
   text-decoration: underline;
 }
 
@@ -675,15 +690,15 @@ body.theme-light .welcome-action.active {
 }
 
 .home-logo {
-  width: min(284px, 58vw);
-  height: min(284px, 58vw);
-  margin: 0 auto 4px;
+  width: min(190px, 24vh, 48vw);
+  height: min(190px, 24vh, 48vw);
+  margin: 0 auto;
   object-fit: contain;
 }
 
 .home-actions {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   justify-items: center;
 }
 
@@ -696,7 +711,10 @@ body.theme-light .welcome-action.active {
 
 .home-welcome-card {
   max-width: 1160px;
-  padding: 28px;
+  padding: clamp(16px, 2.2vh, 24px);
+  display: grid;
+  gap: clamp(7px, 1.3vh, 12px);
+  max-height: calc(100vh - 166px);
 }
 
 .home-welcome-card h2 {
@@ -706,7 +724,7 @@ body.theme-light .welcome-action.active {
 }
 
 .home-welcome-card p {
-  margin: 6px 0 0;
+  margin: 0;
   text-align: center;
   max-width: 72ch;
   margin-left: auto;
@@ -719,9 +737,13 @@ body.theme-light .welcome-action.active {
 }
 
 .panel.workspace-center-mode {
-  min-height: max(62vh, 520px);
+  min-height: min(680px, calc(100vh - 150px));
   align-content: center;
   justify-items: center;
+}
+
+.home-actions .welcome-action-row {
+  padding: 9px 14px;
 }
 
 .kpi-grid {
@@ -2734,11 +2756,20 @@ tr:hover td {
 
 .learning-toolbar {
   display: grid;
-  grid-template-columns: 1.1fr auto auto auto;
+  grid-template-columns: minmax(280px, 1fr) minmax(0, auto);
   gap: 10px;
   align-items: center;
   padding: 12px;
   margin-bottom: 10px;
+}
+
+.learning-toolbar-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
 }
 
 .learning-toggle {
@@ -2746,6 +2777,27 @@ tr:hover td {
   align-items: center;
   gap: 8px;
   font-size: 0.9rem;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.learning-path-toggle {
+  flex: 0 1 270px;
+}
+
+.learning-path-toggle select {
+  min-width: 176px;
+}
+
+.learning-pending-toggle {
+  flex: 0 0 auto;
+  min-width: 132px;
+}
+
+#learning-progress {
+  min-width: 118px;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .challenges-scroll {
@@ -3730,6 +3782,10 @@ tr:hover td {
     align-items: start;
   }
 
+  .learning-toolbar-controls {
+    justify-content: flex-start;
+  }
+
   .detail-copy-emulation {
     width: 100%;
     flex-wrap: wrap;
@@ -3766,6 +3822,17 @@ tr:hover td {
     z-index: 10;
     transition: left 0.22s ease;
     border-radius: 0;
+  }
+
+  .app-floating-footer {
+    left: 12px;
+    right: 12px;
+    transform: none;
+    max-width: none;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    border-radius: 14px;
+    white-space: normal;
   }
 
   body.sidebar-open .sidebar {

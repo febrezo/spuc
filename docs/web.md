@@ -27,11 +27,11 @@ When `--admin-password` is provided explicitly, SPUC keeps that credential synch
 ## Authentication modes
 
 - Local login (username and password) backed by a local user store.
-- `--no-login` mode for standalone local sessions: no login view, implicit administrator role, and logout hidden in UI.
+- `--no-login` mode for standalone local sessions: no login view, implicit administrator role, and logout plus user-management controls hidden in UI.
 - Optional Google/GitHub provider bootstrap from environment variables (authorization code callback flow enabled).
 - OAuth providers must also be authorized by an administrator in `User management` before they can be used in the login screen.
 - Login/start view uses centered layout with SPUC logo, app title/subtitle, login panel, and footer links (project, license, coded-with-love).
-- In `--no-login`, the sidebar identity is presented as `Local user` (no admin credentials shown in UI text).
+- In `--no-login`, the sidebar identity is presented as `Local user` (no admin credentials shown in UI text) and admin/user-management routes are unavailable.
 
 ## OAuth provider bootstrap
 

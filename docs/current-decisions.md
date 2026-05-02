@@ -146,6 +146,6 @@ Last updated: 2026-03-15
 - The web interface is localized in English and Spanish only.
 - Authentication supports local username/password users persisted in `web_users.json`.
 - Google/GitHub sign-in uses authorization-code callback flow with environment bootstrap plus explicit admin authorization flags per provider.
-- `spuc web --no-login` is supported for local standalone mode (implicit admin principal, no logout).
+- `spuc web --no-login` is supported for local standalone mode (implicit admin principal, no logout, no user-management UI/routes).
 - Login/start view is centered and branded with the SPUC logo, app title/subtitle and footer links for project/license attribution.
 - The web interface reuses the same local catalog and intrusion-set persistence as CLI/console flows.

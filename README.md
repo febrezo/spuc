@@ -118,7 +118,7 @@ Use `spuc sigma update-config` to force a fresh runtime discovery and overwrite 
 - `spuc-desktop` is a separate Tauri app that starts `spuc web --no-login --no-open` as a sidecar on an available localhost port, shows a local SPUC loading screen while the sidecar becomes ready, and then loads the local URL in a native window.
 - Linux desktop prerequisites: install WebKitGTK, JavaScriptCoreGTK, GTK and GLib development packages. On Fedora: `sudo dnf install glib2-devel gtk3-devel webkit2gtk4.1-devel javascriptcoregtk4.1-devel libappindicator-gtk3-devel librsvg2-devel libxdo-devel pkgconf-pkg-config`. On Ubuntu/WSL: install `libwebkit2gtk-4.1-dev`, `libjavascriptcoregtk-4.1-dev`, `libgtk-3-dev`, `libglib2.0-dev`, `libappindicator3-dev`, `librsvg2-dev`, `libxdo-dev`, and `pkg-config`.
 - `spuc web --port 8090 --admin-user admin --admin-password <password>` starts the localized web UI on localhost.
-- `spuc web --no-login` disables the login screen, enters directly as local administrator and hides logout (desktop/standalone mode).
+- `spuc web --no-login` disables the login screen, enters directly as local administrator, and hides logout plus user-management controls (desktop/standalone mode).
 - If `--admin-password` is omitted, SPUC generates a 25-character password and prints it in startup logs.
 - Authentication supports local user/password accounts persisted in `<config_root>/web_users.json`.
 - Google/GitHub OAuth login supports authorization code callback flow configured by environment variables (`SPUC_WEB_GOOGLE_CLIENT_ID`, `SPUC_WEB_GOOGLE_CLIENT_SECRET`, `SPUC_WEB_GOOGLE_REDIRECT_URI`, `SPUC_WEB_GITHUB_CLIENT_ID`, `SPUC_WEB_GITHUB_CLIENT_SECRET`, `SPUC_WEB_GITHUB_REDIRECT_URI`).

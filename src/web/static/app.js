@@ -2066,7 +2066,7 @@ function applyNavSelection(route) {
 
 function setRoute(route) {
   if (!ROUTE_META[route]) route = "home";
-  if (route === "admin" && state.principal?.role !== "admin") {
+  if (route === "admin" && (state.bootstrap?.auth?.no_login || state.principal?.role !== "admin")) {
     route = "home";
   }
   state.route = route;
@@ -2155,7 +2155,7 @@ async function bootstrap() {
   document.getElementById("logout-button").classList.toggle("hidden", !state.bootstrap.auth.show_logout);
 
   const adminNavSection = document.getElementById("admin-nav-section");
-  if (!state.principal || state.principal.role !== "admin") {
+  if (state.bootstrap.auth.no_login || !state.principal || state.principal.role !== "admin") {
     document.querySelector('[data-route="admin"]')?.classList.add("hidden");
     adminNavSection?.classList.add("hidden");
   } else {

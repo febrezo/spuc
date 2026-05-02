@@ -1160,6 +1160,16 @@ pub(crate) fn route(request: HttpRequest, state: &WebState) -> Result<HttpRespon
         );
     };
 
+    if state.no_login_enabled() && matches!(segments.as_slice(), ["api", "admin", ..]) {
+        return HttpResponse::json(
+            404,
+            &serde_json::json!({
+                "error": "admin_unavailable",
+                "code": "no_login_mode"
+            }),
+        );
+    }
+
     match (request.method.as_str(), segments.as_slice()) {
         ("GET", ["api", "overview"]) => overview_response(),
         ("GET", ["api", "rules"]) => list_rules(&request),

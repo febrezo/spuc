@@ -14,7 +14,7 @@ pub(crate) const TRANSLATIONS_JSON: &str = r#"{
     "login.license": "License",
     "login.coded_with_love": "Coded with love",
 
-    "app.tagline": "Threat hunting studio",
+    "app.tagline": "Behavioral IOC mapping lab",
 
     "nav.dashboard": "Dashboard",
     "nav.home": "Home",
@@ -557,7 +557,7 @@ pub(crate) const TRANSLATIONS_JSON: &str = r#"{
     "login.license": "Licencia",
     "login.coded_with_love": "Hecho con cariño",
 
-    "app.tagline": "Estudio de caza de amenazas",
+    "app.tagline": "Laboratorio de mapeo IOC conductual",
 
     "nav.dashboard": "Visión general",
     "nav.home": "Inicio",

@@ -242,9 +242,13 @@ mod tests {
     }
 
     #[test]
-    fn app_js_allows_admin_route_in_no_login_mode() {
-        assert!(APP_JS.contains("if (route === \"admin\" && state.principal?.role !== \"admin\")"));
-        assert!(!APP_JS.contains("if (route === \"admin\" && (state.bootstrap?.auth?.no_login || state.principal?.role !== \"admin\"))"));
+    fn app_js_hides_admin_route_in_no_login_mode() {
+        assert!(APP_JS.contains(
+            "if (route === \"admin\" && (state.bootstrap?.auth?.no_login || state.principal?.role !== \"admin\"))"
+        ));
+        assert!(APP_JS.contains(
+            "if (state.bootstrap.auth.no_login || !state.principal || state.principal.role !== \"admin\")"
+        ));
     }
 
     #[test]
@@ -264,21 +268,26 @@ mod tests {
     }
 
     #[test]
-    fn app_css_keeps_sidebar_footer_visible_and_brand_aligned() {
-        assert!(APP_CSS.contains("height: calc(100vh - 36px);"));
-        assert!(APP_CSS.contains("grid-template-rows: auto minmax(0, 1fr) auto;"));
+    fn app_css_keeps_floating_footer_visible_and_brand_aligned() {
+        assert!(INDEX_HTML.contains("class=\"app-floating-footer muted\""));
+        assert!(APP_CSS.contains("height: calc(100vh - 64px);"));
+        assert!(APP_CSS.contains("grid-template-rows: auto minmax(0, 1fr);"));
         assert!(APP_CSS.contains(".sidebar-brand-line {"));
         assert!(APP_CSS.contains("align-items: center;"));
+        assert!(APP_CSS.contains("transform: translateY(1px);"));
         assert!(APP_CSS.contains("overflow-y: auto;"));
-        assert!(APP_CSS.contains("align-self: end;"));
+        assert!(APP_CSS.contains(".app-floating-footer {"));
+        assert!(APP_CSS.contains("position: fixed;"));
+        assert!(APP_CSS.contains("font-size: calc(0.82rem - 2px);"));
     }
 
     #[test]
-    fn app_css_expands_home_workspace_card() {
+    fn app_css_compacts_home_workspace_card_to_fit_viewport() {
         assert!(APP_CSS.contains("max-width: 1160px;"));
         assert!(APP_CSS.contains("width: min(1140px, 100%);"));
-        assert!(APP_CSS.contains("min-height: max(62vh, 520px);"));
-        assert!(APP_CSS.contains("width: min(284px, 58vw);"));
+        assert!(APP_CSS.contains("min-height: min(680px, calc(100vh - 150px));"));
+        assert!(APP_CSS.contains("width: min(190px, 24vh, 48vw);"));
+        assert!(APP_CSS.contains("max-height: calc(100vh - 166px);"));
     }
 
     #[test]
@@ -287,6 +296,19 @@ mod tests {
         assert!(APP_CSS.contains("background: rgba(255, 255, 255, 0.84);"));
         assert!(APP_CSS.contains("body.theme-light .welcome-action:hover"));
         assert!(APP_CSS.contains("body.theme-light .welcome-action.active"));
+    }
+
+    #[test]
+    fn learning_toolbar_keeps_pending_toggle_and_progress_separated() {
+        assert!(INDEX_HTML.contains("class=\"learning-toolbar-controls\""));
+        assert!(INDEX_HTML.contains("class=\"learning-toggle learning-pending-toggle\""));
+        assert!(APP_CSS.contains(".learning-toolbar-controls {"));
+        assert!(APP_CSS.contains("flex-wrap: wrap;"));
+        assert!(APP_CSS.contains(".learning-pending-toggle {"));
+        assert!(APP_CSS.contains("min-width: 132px;"));
+        assert!(APP_CSS.contains("#learning-progress {"));
+        assert!(APP_CSS.contains("min-width: 118px;"));
+        assert!(APP_CSS.contains("white-space: nowrap;"));
     }
 
     #[test]
