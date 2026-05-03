@@ -74,7 +74,7 @@ Last updated: 2026-03-15
 ## Interactive UX
 
 - Browser/server entry: `spuc web` (`spuc-cli` crate), localhost-only.
-- Desktop entry: `spuc-gui` (Tauri app) running `spuc web` as sidecar, with localized native title selected from environment locale.
+- Desktop entry: `spuc-gui` (Tauri app) running `spuc web` as sidecar, with localized native title and initial web locale selected from environment locale.
 - Shared reusable library package: repository root crate `spuc-core` (library name `spuc`).
 
 ## CLI Source Layout
@@ -142,7 +142,7 @@ Last updated: 2026-03-15
 
 - Running `spuc` with no command launches local no-login web mode on `http://127.0.0.1:8090/`.
 - `spuc web` runs a localhost-only HTTP interface, opens the system browser by default, supports `--no-open` for embedded/sidecar use, and exposes `GET /healthz` for readiness checks.
-- `spuc-gui` wraps the web UI in a native window titled `SPUC: A behavioural IOC mapping lab` or the Spanish equivalent, starts `spuc web --no-login --no-open` on an available localhost port, shows a local loading screen until `/healthz` is ready, and manages sidecar lifecycle.
+- `spuc-gui` wraps the web UI in a native window titled `SPUC: A behavioural IOC mapping lab` or the Spanish equivalent, starts `spuc web --no-login --no-open` on an available localhost port, shows a local loading screen until `/healthz` is ready, passes its detected system locale to the embedded web UI, and manages sidecar lifecycle.
 - `spuc-gui` keeps local SPUC navigation in the webview and opens external links in the system browser.
 - If the GUI cannot start the `spuc` sidecar, it exits before opening the window and reports how to build or point `SPUC_SERVER_BIN` at the CLI binary.
 - The web interface is localized in English and Spanish only.
@@ -150,4 +150,5 @@ Last updated: 2026-03-15
 - Google/GitHub sign-in uses authorization-code callback flow with environment bootstrap plus explicit admin authorization flags per provider.
 - `spuc web --no-login` is supported for local standalone mode (implicit admin principal, no logout, no user-management UI/routes).
 - Login/start view is centered and branded with the SPUC logo, app title/subtitle and footer links for project/license attribution.
+- The app shell sidebar keeps only the SPUC logo/name and navigation; product tagline text is intentionally omitted there.
 - The web interface reuses the same local catalog and intrusion-set persistence as CLI/console flows.

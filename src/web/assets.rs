@@ -264,7 +264,13 @@ mod tests {
         ));
         assert!(APP_JS.contains("function detectInitialLocale()"));
         assert!(APP_JS.contains("navigator.languages"));
+        assert!(APP_JS.contains("spuc-locale"));
         assert!(APP_JS.contains("document.title = t(\"app.title\");"));
+    }
+
+    #[test]
+    fn sidebar_omits_product_tagline() {
+        assert!(!INDEX_HTML.contains("data-i18n=\"app.tagline\""));
     }
 
     #[test]
@@ -338,6 +344,17 @@ mod tests {
         assert!(APP_CSS.contains(".learning-paths-summary {"));
         assert!(APP_CSS.contains(".learning-exercise-row {"));
         assert!(!APP_CSS.contains("grid-auto-flow: column;"));
+    }
+
+    #[test]
+    fn rule_detail_uses_collapsed_target_accordions_with_conversion_confidence() {
+        assert!(APP_JS.contains("<details class=\"rule-tech-card rule-tech-accordion"));
+        assert!(APP_JS.contains("class=\"rule-tech-summary-metrics\""));
+        assert!(APP_JS.contains("if (node instanceof HTMLDetailsElement) node.open = true;"));
+        assert!(TRANSLATIONS_JSON
+            .contains("\"detail.rule.tech.target_confidence_short\": \"Conversion confidence\""));
+        assert!(TRANSLATIONS_JSON
+            .contains("\"detail.rule.tech.target_confidence_short\": \"Confianza de conversión\""));
     }
 
     #[test]

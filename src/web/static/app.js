@@ -1,6 +1,8 @@
 function detectInitialLocale() {
   const stored = localStorage.getItem("spuc-web-locale");
   if (stored === "es" || stored === "en") return stored;
+  const requested = new URLSearchParams(window.location.search).get("spuc-locale");
+  if (requested === "es" || requested === "en") return requested;
   const browserLanguages = [navigator.language, ...(navigator.languages || [])];
   return browserLanguages.some((language) => String(language || "").toLowerCase().startsWith("es"))
     ? "es"
@@ -1215,15 +1217,27 @@ function renderRuleTechCard(entry, item, family) {
   const comments = compactConverterComments(item);
   const hasOutput = Boolean(rawOutput);
   const guideId = `rule-tech-guide-${family}-${normalizedTarget.replace(/[^a-z0-9_-]/g, "-")}`;
+  const ruleConfidence = normalizeConfidenceValue(entry?.confidence);
+  const conversionConfidence = normalizeConfidenceValue(targetConfidence);
+  const confidenceSummary = (label, value, fallback) => `
+    <span class="rule-tech-summary-metric">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value == null ? fallback : `${value}/100`)}</strong>
+    </span>
+  `;
   return `
-    <article class="rule-tech-card status-${statusBucket(status)}" data-rule-tech-target="${escapeHtml(normalizedTarget)}">
-      <div class="rule-tech-head">
-        <h4>${escapeHtml(heading)}</h4>
-        <span class="badge ${statusClass(status)}">${escapeHtml(statusLabel(status))}</span>
-      </div>
-      <p class="muted">${escapeHtml(targetSummaryText(normalizedTarget, family))}</p>
-      ${renderConfidenceWidget(entry, targetConfidence)}
+    <details class="rule-tech-card rule-tech-accordion status-${statusBucket(status)}" data-rule-tech-target="${escapeHtml(normalizedTarget)}">
+      <summary class="rule-tech-summary">
+        <span class="rule-tech-summary-title">${escapeHtml(heading)}</span>
+        <span class="rule-tech-summary-metrics">
+          <span class="badge ${statusClass(status)}">${escapeHtml(statusLabel(status))}</span>
+          ${confidenceSummary(t("detail.rule.tech.rule_confidence_short"), ruleConfidence, "-")}
+          ${confidenceSummary(t("detail.rule.tech.target_confidence_short"), conversionConfidence, targetConfidence)}
+        </span>
+      </summary>
       <div class="rule-tech-body">
+        <p class="muted">${escapeHtml(targetSummaryText(normalizedTarget, family))}</p>
+        ${renderConfidenceWidget(entry, targetConfidence)}
         ${comments.length
     ? `<div class="rule-tech-comments"><h5>${escapeHtml(t("detail.converter.comments"))}</h5><ul class="hint-steps compact-list">${comments.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul></div>`
     : ""}
@@ -1250,7 +1264,7 @@ function renderRuleTechCard(entry, item, family) {
           </div>
         </div>
       </div>
-    </article>
+    </details>
   `;
 }
 
@@ -1275,6 +1289,7 @@ function setRuleDetailTab(tab) {
     ? Array.from(pane.querySelectorAll("[data-rule-tech-target]")).find((item) => item.getAttribute("data-rule-tech-target") === focusTarget)
     : null;
   if (node) {
+    if (node instanceof HTMLDetailsElement) node.open = true;
     node.classList.add("rule-tech-card-focus");
     node.scrollIntoView({ behavior: "smooth", block: "center" });
     window.setTimeout(() => node.classList.remove("rule-tech-card-focus"), 1200);

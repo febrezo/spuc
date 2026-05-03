@@ -16,7 +16,7 @@ spuc web --port 8090 --no-login --no-open
 - `spuc web` binds to `127.0.0.1` and exposes `GET /healthz` for sidecar readiness checks.
 - `spuc web` opens the system browser by default; use `--no-open` when another shell, desktop wrapper, or test harness will load the URL.
 - `spuc-gui` starts `spuc web --no-login --no-open` on an available localhost port, shows a centered SPUC loading screen while the sidecar becomes ready, and then shows it in a native Tauri window titled `SPUC: A behavioural IOC mapping lab` or the Spanish equivalent.
-- `spuc-gui` reads `SPUC_LOCALE`, `LC_ALL`, `LC_MESSAGES`, or `LANG` to choose the native window title language at startup. The web UI detects browser Spanish on first load when no saved language preference exists, and keeps the page title synchronized with the language selector.
+- `spuc-gui` reads `SPUC_LOCALE`, `LC_ALL`, `LC_MESSAGES`, or `LANG` to choose the native window title language at startup and passes that default locale to the embedded web UI. Browser mode uses the browser language when no saved language preference exists, and the page title stays synchronized with the language selector.
 - In `spuc-gui`, local SPUC navigation remains inside the webview and external links open in the system browser.
 - If `spuc-gui` cannot start the `spuc` sidecar, startup fails fast with guidance to build `spuc`, place it beside `spuc-gui`/in `PATH`, or set `SPUC_SERVER_BIN`.
 - desktop build command: `cargo run -p spuc-gui`
@@ -78,12 +78,10 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Rules table with per-target output/emulation status chips (`exact/lossy/unsupported`) and click-through detail popovers.
 - Rules explorer supports two compact modes (`cards` by default and `table`), selectable from left-side icon controls with tooltips.
 - Rule cards enumerate observable types, place copy-rule as an inline icon next to STIX content, and keep per-target detection/emulation chips clickable.
-- Clicking a target chip (from cards or table) opens a unified rule modal with dedicated tabs for `Detection rules` and `Emulation rules`, each listing target technologies, reliability context, output text, and an expandable `How to use this output` guide.
+- Clicking a target chip (from cards or table) opens a unified rule modal with dedicated tabs for `Detection rules` and `Emulation rules`, each listing target technologies, status, rule confidence, conversion confidence, output text, and an expandable `How to use this output` guide.
 - In rule detail tabs, each target technology block is rendered as an accordion card with status-colored borders (`exact`/`lossy`/`unsupported`) for quick scanning.
-- Rule detail technology accordions start collapsed by default and surface a compact summary preview (converter comments + first lines of output) directly in the collapsed header area.
-- Summary previews use a subtle fade and `Ver más` hint when comments/output exceed preview length.
-- Rule detail technology summaries include a compact confidence widget (0-100 style) for rule confidence and target reliability above converter comments.
-- Output previews keep copy action visible in the summary; when no output exists a compact inline notice is shown instead of an expanded block.
+- Rule detail technology accordions start collapsed by default and keep collapsed headers limited to status, rule confidence and conversion confidence.
+- Rule detail technology descriptions, converter comments, output text, copy actions and usage guidance are shown only after expanding the accordion.
 - Rule technology accordions display converter comments as compact bullet lists and localize common converter notes/cause text to Spanish when UI locale is `es`.
 - Rule technology command and reference-link guidance is shown directly inside each opened accordion body (no extra nested toggle required).
 - Rule detail `Overview` includes direct `Edit rule` action that opens the selected STIX pattern in `Laboratory` prefilled fields (rule, metadata, TLP/PAP, confidence, TTP).

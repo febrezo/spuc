@@ -20,7 +20,10 @@ struct AppState {
 fn main() -> Result<()> {
     let server_port = choose_available_port()?;
     let sidecar = spawn_server_sidecar(server_port)?;
-    let target_url = format!("http://{SERVER_HOST}:{server_port}/");
+    let target_url = format!(
+        "http://{SERVER_HOST}:{server_port}/?spuc-locale={}",
+        system_locale_code()
+    );
 
     tauri::Builder::default()
         .manage(AppState {
@@ -146,6 +149,14 @@ fn server_binary_name() -> &'static str {
 }
 
 fn localized_window_title() -> &'static str {
+    if system_locale_code() == "es" {
+        WINDOW_TITLE_ES
+    } else {
+        WINDOW_TITLE_EN
+    }
+}
+
+fn system_locale_code() -> &'static str {
     let locale = std::env::var("SPUC_LOCALE")
         .ok()
         .or_else(|| std::env::var("LC_ALL").ok())
@@ -155,9 +166,9 @@ fn localized_window_title() -> &'static str {
         .to_lowercase();
 
     if locale.starts_with("es") {
-        WINDOW_TITLE_ES
+        "es"
     } else {
-        WINDOW_TITLE_EN
+        "en"
     }
 }
 
@@ -190,7 +201,7 @@ fn shutdown_sidecar(state: tauri::State<'_, AppState>) {
 mod tests {
     use super::{
         choose_available_port, is_allowed_in_app_url, localized_window_title, server_binary_name,
-        SERVER_HOST, WINDOW_TITLE_EN, WINDOW_TITLE_ES,
+        system_locale_code, SERVER_HOST, WINDOW_TITLE_EN, WINDOW_TITLE_ES,
     };
     use std::net::TcpListener;
 
@@ -227,8 +238,10 @@ mod tests {
     fn localized_window_title_follows_spanish_locale_override() {
         std::env::set_var("SPUC_LOCALE", "es_ES.UTF-8");
         assert_eq!(localized_window_title(), WINDOW_TITLE_ES);
+        assert_eq!(system_locale_code(), "es");
         std::env::set_var("SPUC_LOCALE", "en_US.UTF-8");
         assert_eq!(localized_window_title(), WINDOW_TITLE_EN);
+        assert_eq!(system_locale_code(), "en");
         std::env::remove_var("SPUC_LOCALE");
     }
 

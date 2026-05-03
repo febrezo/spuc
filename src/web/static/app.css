@@ -3157,7 +3157,9 @@ tr:hover td {
   cursor: pointer;
   padding: 10px;
   display: grid;
-  gap: 6px;
+  grid-template-columns: minmax(140px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
   border-bottom: 1px solid transparent;
 }
 
@@ -3168,6 +3170,43 @@ tr:hover td {
 .rule-tech-accordion[open] .rule-tech-summary {
   border-bottom-color: rgba(88, 117, 153, 0.26);
   background: rgba(12, 21, 38, 0.56);
+}
+
+.rule-tech-summary-title {
+  min-width: 0;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rule-tech-summary-metrics {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rule-tech-summary-metric {
+  min-width: 132px;
+  border: 1px solid rgba(88, 117, 153, 0.24);
+  border-radius: 999px;
+  padding: 5px 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: rgba(7, 14, 25, 0.44);
+  color: var(--muted);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.rule-tech-summary-metric strong {
+  color: #d8e8ff;
+  font-size: 0.78rem;
 }
 
 .rule-tech-body {
@@ -3304,6 +3343,15 @@ tr:hover td {
 @media (max-width: 740px) {
   .rule-confidence-grid {
     grid-template-columns: 1fr;
+  }
+
+  .rule-tech-summary {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .rule-tech-summary-metrics {
+    justify-content: flex-start;
   }
 }
 
