@@ -5,6 +5,8 @@ pub(crate) const LOGO_SPUTNIK_PNG: &[u8] = include_bytes!("../../kb/assets/logo-
 
 #[cfg(test)]
 mod tests {
+    use crate::web::i18n::TRANSLATIONS_JSON;
+
     use super::{APP_CSS, APP_JS, INDEX_HTML};
 
     #[test]
@@ -249,6 +251,19 @@ mod tests {
         assert!(APP_JS.contains(
             "if (state.bootstrap.auth.no_login || !state.principal || state.principal.role !== \"admin\")"
         ));
+    }
+
+    #[test]
+    fn app_title_is_localized_and_browser_locale_detected() {
+        assert!(INDEX_HTML.contains("<title>SPUC: A behavioural IOC mapping lab</title>"));
+        assert!(
+            TRANSLATIONS_JSON.contains("\"app.title\": \"SPUC: A behavioural IOC mapping lab\"")
+        );
+        assert!(TRANSLATIONS_JSON
+            .contains("\"app.title\": \"SPUC: un laboratorio de mapeo de IOC conductuales\""));
+        assert!(APP_JS.contains("function detectInitialLocale()"));
+        assert!(APP_JS.contains("navigator.languages"));
+        assert!(APP_JS.contains("document.title = t(\"app.title\");"));
     }
 
     #[test]

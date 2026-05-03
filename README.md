@@ -115,7 +115,9 @@ Use `spuc sigma update-config` to force a fresh runtime discovery and overwrite 
 
 - `spuc` is provided by crate `spuc-cli` and runs the current CLI, including `spuc web`.
 - `spuc web` binds to `127.0.0.1` only, supports `--no-login`, opens the system browser by default, supports `--no-open` for sidecar/embedded use, and exposes `GET /healthz`.
-- `spuc-gui` is a separate Tauri app that starts `spuc web --no-login --no-open` as a sidecar on an available localhost port, shows a local SPUC loading screen while the sidecar becomes ready, and then loads the local URL in a native window.
+- `spuc-gui` is a separate Tauri app titled `SPUC: A behavioural IOC mapping lab` that starts `spuc web --no-login --no-open` as a sidecar on an available localhost port, shows a local SPUC loading screen while the sidecar becomes ready, and then loads the local URL in a native window.
+- `spuc-gui` uses `SPUC_LOCALE`, `LC_ALL`, `LC_MESSAGES`, or `LANG` to choose the native window title language at startup; the web UI also detects browser language when no saved language preference exists.
+- If `spuc-gui` cannot start the `spuc` sidecar, it exits with a clear error. Build `spuc` first with `cargo build -p spuc-cli --bin spuc`, keep both binaries together, put `spuc` in `PATH`, or set `SPUC_SERVER_BIN=/path/to/spuc`.
 - Linux desktop prerequisites: install WebKitGTK, JavaScriptCoreGTK, GTK and GLib development packages. On Fedora: `sudo dnf install glib2-devel gtk3-devel webkit2gtk4.1-devel javascriptcoregtk4.1-devel libappindicator-gtk3-devel librsvg2-devel libxdo-devel pkgconf-pkg-config`. On Ubuntu/WSL: install `libwebkit2gtk-4.1-dev`, `libjavascriptcoregtk-4.1-dev`, `libgtk-3-dev`, `libglib2.0-dev`, `libappindicator3-dev`, `librsvg2-dev`, `libxdo-dev`, and `pkg-config`.
 - `spuc web --port 8090 --admin-user admin --admin-password <password>` starts the localized web UI on localhost.
 - `spuc web --no-login` disables the login screen, enters directly as local administrator, and hides logout plus user-management controls (desktop/standalone mode).
@@ -189,8 +191,11 @@ cargo run -p spuc-cli --bin spuc -- web --port 8090 --no-login --no-open
 # Build desktop app
 cargo build -p spuc-gui
 
-# Run desktop app (expects `spuc` in PATH or SPUC_SERVER_BIN set)
+# Run desktop app (expects `spuc` next to `spuc-gui`, in PATH, or SPUC_SERVER_BIN set)
 cargo run -p spuc-gui
+
+# Force Spanish native window title for a local GUI run
+SPUC_LOCALE=es cargo run -p spuc-gui
 ```
 
 Release flow:

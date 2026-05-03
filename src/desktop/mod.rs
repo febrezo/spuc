@@ -8,7 +8,7 @@ use tauri::{WebviewUrl, WebviewWindowBuilder};
 use crate::web::api::{WebState, generate_secret};
 
 const WINDOW_LABEL: &str = "main";
-const WINDOW_TITLE: &str = "SPUC";
+const WINDOW_TITLE: &str = "SPUC: A behavioural IOC mapping lab";
 
 pub(crate) fn run(preferred_port: u16) -> Result<()> {
     let web_url = start_local_web(preferred_port)?;

@@ -14,7 +14,8 @@ pub(crate) const TRANSLATIONS_JSON: &str = r#"{
     "login.license": "License",
     "login.coded_with_love": "Coded with love",
 
-    "app.tagline": "Behavioral IOC mapping lab",
+    "app.title": "SPUC: A behavioural IOC mapping lab",
+    "app.tagline": "A behavioural IOC mapping lab",
 
     "nav.dashboard": "Dashboard",
     "nav.home": "Home",
@@ -557,7 +558,8 @@ pub(crate) const TRANSLATIONS_JSON: &str = r#"{
     "login.license": "Licencia",
     "login.coded_with_love": "Hecho con cariño",
 
-    "app.tagline": "Laboratorio de mapeo IOC conductual",
+    "app.title": "SPUC: un laboratorio de mapeo de IOC conductuales",
+    "app.tagline": "Un laboratorio de mapeo de IOC conductuales",
 
     "nav.dashboard": "Visión general",
     "nav.home": "Inicio",

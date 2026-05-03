@@ -15,7 +15,9 @@ spuc web --port 8090 --no-login --no-open
 - it falls back to local web mode on `http://127.0.0.1:8090/` with `--no-login`.
 - `spuc web` binds to `127.0.0.1` and exposes `GET /healthz` for sidecar readiness checks.
 - `spuc web` opens the system browser by default; use `--no-open` when another shell, desktop wrapper, or test harness will load the URL.
-- `spuc-gui` starts `spuc web --no-login --no-open` on an available localhost port, shows a centered SPUC loading screen while the sidecar becomes ready, and then shows it in a native Tauri window.
+- `spuc-gui` starts `spuc web --no-login --no-open` on an available localhost port, shows a centered SPUC loading screen while the sidecar becomes ready, and then shows it in a native Tauri window titled `SPUC: A behavioural IOC mapping lab` or the Spanish equivalent.
+- `spuc-gui` reads `SPUC_LOCALE`, `LC_ALL`, `LC_MESSAGES`, or `LANG` to choose the native window title language at startup. The web UI detects browser Spanish on first load when no saved language preference exists, and keeps the page title synchronized with the language selector.
+- If `spuc-gui` cannot start the `spuc` sidecar, startup fails fast with guidance to build `spuc`, place it beside `spuc-gui`/in `PATH`, or set `SPUC_SERVER_BIN`.
 - desktop build command: `cargo run -p spuc-gui`
 - Linux desktop prerequisites: WebKitGTK, JavaScriptCoreGTK, GTK and GLib development packages.
 - Fedora: `sudo dnf install glib2-devel gtk3-devel webkit2gtk4.1-devel javascriptcoregtk4.1-devel libappindicator-gtk3-devel librsvg2-devel libxdo-devel pkgconf-pkg-config`.

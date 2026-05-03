@@ -8,7 +8,8 @@ use std::time::{Duration, Instant};
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 const WINDOW_LABEL: &str = "main";
-const WINDOW_TITLE: &str = "SPUC";
+const WINDOW_TITLE_EN: &str = "SPUC: A behavioural IOC mapping lab";
+const WINDOW_TITLE_ES: &str = "SPUC: un laboratorio de mapeo de IOC conductuales";
 const SERVER_HOST: &str = "127.0.0.1";
 const READY_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -31,7 +32,7 @@ fn main() -> Result<()> {
                 WINDOW_LABEL,
                 WebviewUrl::App("loading.html".into()),
             )
-            .title(WINDOW_TITLE)
+            .title(localized_window_title())
             .inner_size(1560.0, 980.0)
             .min_inner_size(1280.0, 820.0)
             .resizable(true)
@@ -77,7 +78,7 @@ fn spawn_server_sidecar(port: u16) -> Result<Child> {
         .spawn()
         .with_context(|| {
             format!(
-                "cannot start sidecar '{}'; ensure spuc is available",
+                "cannot start sidecar '{}'; build it with 'cargo build -p spuc-cli --bin spuc' or set SPUC_SERVER_BIN to the spuc binary path",
                 server_bin.display()
             )
         })
@@ -132,6 +133,22 @@ fn server_binary_name() -> &'static str {
     }
 }
 
+fn localized_window_title() -> &'static str {
+    let locale = std::env::var("SPUC_LOCALE")
+        .ok()
+        .or_else(|| std::env::var("LC_ALL").ok())
+        .or_else(|| std::env::var("LC_MESSAGES").ok())
+        .or_else(|| std::env::var("LANG").ok())
+        .unwrap_or_default()
+        .to_lowercase();
+
+    if locale.starts_with("es") {
+        WINDOW_TITLE_ES
+    } else {
+        WINDOW_TITLE_EN
+    }
+}
+
 fn shutdown_sidecar(state: tauri::State<'_, AppState>) {
     let mut guard = state.sidecar.lock().expect("sidecar mutex poisoned");
     let Some(mut child) = guard.take() else {
@@ -143,7 +160,10 @@ fn shutdown_sidecar(state: tauri::State<'_, AppState>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{choose_available_port, server_binary_name, SERVER_HOST};
+    use super::{
+        choose_available_port, localized_window_title, server_binary_name, SERVER_HOST,
+        WINDOW_TITLE_EN, WINDOW_TITLE_ES,
+    };
     use std::net::TcpListener;
 
     #[test]
@@ -173,5 +193,14 @@ mod tests {
         } else {
             assert_eq!(server_binary_name(), "spuc");
         }
+    }
+
+    #[test]
+    fn localized_window_title_follows_spanish_locale_override() {
+        std::env::set_var("SPUC_LOCALE", "es_ES.UTF-8");
+        assert_eq!(localized_window_title(), WINDOW_TITLE_ES);
+        std::env::set_var("SPUC_LOCALE", "en_US.UTF-8");
+        assert_eq!(localized_window_title(), WINDOW_TITLE_EN);
+        std::env::remove_var("SPUC_LOCALE");
     }
 }

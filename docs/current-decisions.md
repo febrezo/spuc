@@ -74,7 +74,7 @@ Last updated: 2026-03-15
 ## Interactive UX
 
 - Browser/server entry: `spuc web` (`spuc-cli` crate), localhost-only.
-- Desktop entry: `spuc-gui` (Tauri app) running `spuc web` as sidecar.
+- Desktop entry: `spuc-gui` (Tauri app) running `spuc web` as sidecar, with localized native title selected from environment locale.
 - Shared reusable library package: repository root crate `spuc-core` (library name `spuc`).
 
 ## CLI Source Layout
@@ -142,7 +142,8 @@ Last updated: 2026-03-15
 
 - Running `spuc` with no command launches local no-login web mode on `http://127.0.0.1:8090/`.
 - `spuc web` runs a localhost-only HTTP interface, opens the system browser by default, supports `--no-open` for embedded/sidecar use, and exposes `GET /healthz` for readiness checks.
-- `spuc-gui` wraps the web UI in a native window, starts `spuc web --no-login --no-open` on an available localhost port, shows a local loading screen until `/healthz` is ready, and manages sidecar lifecycle.
+- `spuc-gui` wraps the web UI in a native window titled `SPUC: A behavioural IOC mapping lab` or the Spanish equivalent, starts `spuc web --no-login --no-open` on an available localhost port, shows a local loading screen until `/healthz` is ready, and manages sidecar lifecycle.
+- If the GUI cannot start the `spuc` sidecar, it exits before opening the window and reports how to build or point `SPUC_SERVER_BIN` at the CLI binary.
 - The web interface is localized in English and Spanish only.
 - Authentication supports local username/password users persisted in `web_users.json`.
 - Google/GitHub sign-in uses authorization-code callback flow with environment bootstrap plus explicit admin authorization flags per provider.

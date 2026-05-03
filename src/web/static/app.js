@@ -1,5 +1,14 @@
+function detectInitialLocale() {
+  const stored = localStorage.getItem("spuc-web-locale");
+  if (stored === "es" || stored === "en") return stored;
+  const browserLanguages = [navigator.language, ...(navigator.languages || [])];
+  return browserLanguages.some((language) => String(language || "").toLowerCase().startsWith("es"))
+    ? "es"
+    : "en";
+}
+
 const state = {
-  locale: localStorage.getItem("spuc-web-locale") || "en",
+  locale: detectInitialLocale(),
   theme: localStorage.getItem("spuc-web-theme") || "dark",
   translations: {},
   bootstrap: null,
@@ -409,6 +418,7 @@ function setTheme(theme) {
 
 function applyTranslations() {
   document.documentElement.lang = state.locale;
+  document.title = t("app.title");
   document.querySelectorAll("[data-i18n]").forEach((node) => {
     node.textContent = t(node.dataset.i18n);
   });
