@@ -5385,24 +5385,89 @@ function filteredLearningChallenges() {
   });
 }
 
+function learningPathSummaries() {
+  const summaries = new Map();
+  state.learning.challenges.forEach((entry) => {
+    const pathId = String(entry.path_id || "core").trim() || "core";
+    const summary = summaries.get(pathId) || { pathId, total: 0, completed: 0 };
+    summary.total += 1;
+    if (state.completedChallenges.has(entry.id)) summary.completed += 1;
+    summaries.set(pathId, summary);
+  });
+  return [...summaries.values()].sort((a, b) => a.pathId.localeCompare(b.pathId));
+}
+
+function renderLearningPathSummary() {
+  const root = document.getElementById("learning-paths-summary");
+  if (!root) return;
+  const summaries = learningPathSummaries();
+  const allCompleted = state.learning.challenges.filter((entry) => state.completedChallenges.has(entry.id)).length;
+  const allTotal = state.learning.challenges.length;
+  const allActive = !state.learning.pathFilter;
+  root.innerHTML = [
+    { pathId: "", total: allTotal, completed: allCompleted },
+    ...summaries,
+  ]
+    .map((summary) => {
+      const percent = summary.total > 0 ? Math.round((summary.completed / summary.total) * 100) : 0;
+      const active = summary.pathId ? state.learning.pathFilter === summary.pathId : allActive;
+      const title = summary.pathId ? learningPathLabel(summary.pathId) : t("learning.paths.all");
+      return `
+        <button class="learning-path-chip glass ${active ? "active" : ""}" data-action="learning-path-filter" data-path="${escapeHtml(summary.pathId)}">
+          <span class="learning-path-chip-title">${escapeHtml(title)}</span>
+          <span class="learning-path-chip-count">${escapeHtml(t("learning.progress").replace("{done}", String(summary.completed)).replace("{total}", String(summary.total)))}</span>
+          <span class="learning-path-chip-meter" aria-hidden="true"><span style="width: ${percent}%"></span></span>
+        </button>
+      `;
+    })
+    .join("");
+}
+
 function renderLearningChallenges() {
   const entries = filteredLearningChallenges();
+  const grouped = new Map();
+  entries.forEach((entry) => {
+    const pathId = String(entry.path_id || "core").trim() || "core";
+    if (!grouped.has(pathId)) grouped.set(pathId, []);
+    grouped.get(pathId).push(entry);
+  });
+
   document.getElementById("challenges-grid").innerHTML = entries
-    .map(
-      (entry) => `
-      <article class="learning-card glass ${state.completedChallenges.has(entry.id) ? "completed-card" : ""}">
-        <div class="learning-card-head">
-          <h3>${escapeHtml(entry.title)}</h3>
-          <button class="btn btn-primary" data-action="learning-select" data-id="${entry.id}">${escapeHtml(t("learning.start"))}</button>
-        </div>
-        <p class="muted">${escapeHtml(entry.goal)}</p>
-      </article>
-    `,
-    )
+    .length === 0
+    ? `<div class="empty-state muted">${escapeHtml(t("common.no_data"))}</div>`
+    : [...grouped.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([pathId, pathEntries]) => `
+        <section class="learning-path-section">
+          <header class="learning-path-section-head">
+            <h3>${escapeHtml(learningPathLabel(pathId))}</h3>
+            <span class="muted">${pathEntries.length} ${escapeHtml(t("common.entries"))}</span>
+          </header>
+          <div class="learning-exercise-rows">
+            ${pathEntries.map((entry) => {
+              const completed = state.completedChallenges.has(entry.id);
+              const selected = state.selectedChallenge?.id === entry.id;
+              return `
+                <article class="learning-exercise-row glass ${completed ? "completed-card" : ""} ${selected ? "active" : ""}">
+                  <button class="learning-exercise-main" data-action="learning-select" data-id="${escapeHtml(entry.id)}">
+                    <span class="learning-exercise-status ${completed ? "completed" : "pending"}" aria-hidden="true">${completed ? "✓" : ""}</span>
+                    <span class="learning-exercise-copy">
+                      <strong>${escapeHtml(entry.title)}</strong>
+                      <span class="muted">${escapeHtml(entry.goal)}</span>
+                    </span>
+                  </button>
+                  <button class="btn btn-primary" data-action="learning-select" data-id="${escapeHtml(entry.id)}">${escapeHtml(t(completed ? "common.view" : "learning.start"))}</button>
+                </article>
+              `;
+            }).join("")}
+          </div>
+        </section>
+      `)
     .join("");
 
   const completed = state.learning.challenges.filter((entry) => state.completedChallenges.has(entry.id)).length;
   document.getElementById("learning-progress").textContent = t("learning.progress").replace("{done}", String(completed)).replace("{total}", String(state.learning.challenges.length));
+  renderLearningPathSummary();
 }
 
 async function loadLearning() {
@@ -5413,6 +5478,7 @@ async function loadLearning() {
   renderLearningPathOptions();
   document.getElementById("learning-only-pending").checked = state.learning.onlyPending;
   renderLearningGuides();
+  renderLearningPathSummary();
   renderLearningChallenges();
 
   if (state.selectedChallenge) {
@@ -6608,6 +6674,11 @@ function installEventHandlers() {
         applyLearningAutocomplete(Number(target.dataset.index || "0"));
       } else if (action === "learning-select") {
         mountLearningPractice(target.dataset.id);
+      } else if (action === "learning-path-filter") {
+        state.learning.pathFilter = target.dataset.path || "";
+        const select = document.getElementById("learning-path");
+        if (select instanceof HTMLSelectElement) select.value = state.learning.pathFilter;
+        renderLearningChallenges();
       } else if (action === "admin-delete-user") {
         const confirmDelete = confirm(t("admin.delete_confirm"));
         if (!confirmDelete) return;

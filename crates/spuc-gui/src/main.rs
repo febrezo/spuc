@@ -5,7 +5,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{webview::NewWindowResponse, Manager, WebviewUrl, WebviewWindowBuilder};
 
 const WINDOW_LABEL: &str = "main";
 const WINDOW_TITLE_EN: &str = "SPUC: A behavioural IOC mapping lab";
@@ -33,6 +33,18 @@ fn main() -> Result<()> {
                 WebviewUrl::App("loading.html".into()),
             )
             .title(localized_window_title())
+            .on_navigation(|url| {
+                if is_allowed_in_app_url(url) {
+                    true
+                } else {
+                    open_external_url(url);
+                    false
+                }
+            })
+            .on_new_window(|url, _features| {
+                open_external_url(&url);
+                NewWindowResponse::Deny
+            })
             .inner_size(1560.0, 980.0)
             .min_inner_size(1280.0, 820.0)
             .resizable(true)
@@ -149,6 +161,22 @@ fn localized_window_title() -> &'static str {
     }
 }
 
+fn is_allowed_in_app_url(url: &tauri::Url) -> bool {
+    match url.scheme() {
+        "tauri" | "asset" => true,
+        "http" | "https" => url.host_str() == Some(SERVER_HOST),
+        _ => false,
+    }
+}
+
+fn open_external_url(url: &tauri::Url) {
+    if matches!(url.scheme(), "http" | "https" | "mailto") {
+        if let Err(error) = open::that(url.as_str()) {
+            eprintln!("cannot open external URL '{}': {error}", url);
+        }
+    }
+}
+
 fn shutdown_sidecar(state: tauri::State<'_, AppState>) {
     let mut guard = state.sidecar.lock().expect("sidecar mutex poisoned");
     let Some(mut child) = guard.take() else {
@@ -161,8 +189,8 @@ fn shutdown_sidecar(state: tauri::State<'_, AppState>) {
 #[cfg(test)]
 mod tests {
     use super::{
-        choose_available_port, localized_window_title, server_binary_name, SERVER_HOST,
-        WINDOW_TITLE_EN, WINDOW_TITLE_ES,
+        choose_available_port, is_allowed_in_app_url, localized_window_title, server_binary_name,
+        SERVER_HOST, WINDOW_TITLE_EN, WINDOW_TITLE_ES,
     };
     use std::net::TcpListener;
 
@@ -202,5 +230,18 @@ mod tests {
         std::env::set_var("SPUC_LOCALE", "en_US.UTF-8");
         assert_eq!(localized_window_title(), WINDOW_TITLE_EN);
         std::env::remove_var("SPUC_LOCALE");
+    }
+
+    #[test]
+    fn navigation_policy_keeps_local_app_inside_gui() {
+        assert!(is_allowed_in_app_url(
+            &"tauri://localhost/loading.html".parse().unwrap()
+        ));
+        assert!(is_allowed_in_app_url(
+            &"http://127.0.0.1:40423/".parse().unwrap()
+        ));
+        assert!(!is_allowed_in_app_url(
+            &"https://github.com/febrezo/spuc".parse().unwrap()
+        ));
     }
 }

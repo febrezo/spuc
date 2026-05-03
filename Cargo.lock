@@ -3505,6 +3505,7 @@ name = "spuc-gui"
 version = "0.5.0"
 dependencies = [
  "anyhow",
+ "open",
  "tauri",
  "tauri-build",
  "ureq",

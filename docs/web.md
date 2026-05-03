@@ -17,6 +17,7 @@ spuc web --port 8090 --no-login --no-open
 - `spuc web` opens the system browser by default; use `--no-open` when another shell, desktop wrapper, or test harness will load the URL.
 - `spuc-gui` starts `spuc web --no-login --no-open` on an available localhost port, shows a centered SPUC loading screen while the sidecar becomes ready, and then shows it in a native Tauri window titled `SPUC: A behavioural IOC mapping lab` or the Spanish equivalent.
 - `spuc-gui` reads `SPUC_LOCALE`, `LC_ALL`, `LC_MESSAGES`, or `LANG` to choose the native window title language at startup. The web UI detects browser Spanish on first load when no saved language preference exists, and keeps the page title synchronized with the language selector.
+- In `spuc-gui`, local SPUC navigation remains inside the webview and external links open in the system browser.
 - If `spuc-gui` cannot start the `spuc` sidecar, startup fails fast with guidance to build `spuc`, place it beside `spuc-gui`/in `PATH`, or set `SPUC_SERVER_BIN`.
 - desktop build command: `cargo run -p spuc-gui`
 - Linux desktop prerequisites: WebKitGTK, JavaScriptCoreGTK, GTK and GLib development packages.
@@ -132,7 +133,7 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Adversary catalog uses auto-applied filters (search, single platform combobox, min emulability) and bulk operations consistent with rules: shift-range selection, select/deselect all, bulk edit for TLP/PAP/emulability confidence, and bulk delete.
 - Adversary bulk metadata updates persist TLP/PAP values with each adversary and expose them in catalog API responses.
 - Learning panel fed by challenge and guidance endpoints.
-- Learning exercises run in an embedded STIX practice editor with realtime challenge validation, horizontal two-row challenge lanes, search + learning-path filters, hint-first UX, and completion counters.
+- Learning exercises run in an embedded STIX practice editor with realtime challenge validation, compact learning-path progress chips, grouped exercise rows, search + learning-path filters, hint-first UX, and completion counters.
 - User Management panel for user creation, role/enabled edits, revocation, deletion, and password change.
 - Destructive actions (bulk deletions and user deletion) use an in-app confirmation modal instead of browser-native confirmation popups.
 

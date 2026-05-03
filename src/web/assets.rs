@@ -318,12 +318,25 @@ mod tests {
         assert!(INDEX_HTML.contains("class=\"learning-toolbar-controls\""));
         assert!(INDEX_HTML.contains("class=\"learning-toggle learning-pending-toggle\""));
         assert!(APP_CSS.contains(".learning-toolbar-controls {"));
-        assert!(APP_CSS.contains("flex-wrap: wrap;"));
+        assert!(APP_CSS.contains("flex-wrap: nowrap;"));
+        assert!(APP_CSS.contains("min-width: max-content;"));
         assert!(APP_CSS.contains(".learning-pending-toggle {"));
-        assert!(APP_CSS.contains("min-width: 132px;"));
+        assert!(APP_CSS.contains("min-width: 150px;"));
         assert!(APP_CSS.contains("#learning-progress {"));
-        assert!(APP_CSS.contains("min-width: 118px;"));
+        assert!(APP_CSS.contains("min-width: 158px;"));
         assert!(APP_CSS.contains("white-space: nowrap;"));
+    }
+
+    #[test]
+    fn learning_uses_compact_path_summary_and_exercise_rows() {
+        assert!(INDEX_HTML.contains("id=\"learning-paths-summary\""));
+        assert!(INDEX_HTML.contains("class=\"learning-exercise-list\""));
+        assert!(APP_JS.contains("function renderLearningPathSummary()"));
+        assert!(APP_JS.contains("data-action=\"learning-path-filter\""));
+        assert!(APP_JS.contains("class=\"learning-exercise-row glass"));
+        assert!(APP_CSS.contains(".learning-paths-summary {"));
+        assert!(APP_CSS.contains(".learning-exercise-row {"));
+        assert!(!APP_CSS.contains("grid-auto-flow: column;"));
     }
 
     #[test]
