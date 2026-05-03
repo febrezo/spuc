@@ -672,12 +672,7 @@ function toQuery(params) {
 }
 
 function renderDetailActions(rightHtml = "") {
-  return `
-    <div class="detail-actions-left">
-      <button class="btn btn-danger" data-action="detail-cancel">${escapeHtml(t("common.cancel"))}</button>
-    </div>
-    <div class="detail-actions-right">${rightHtml || ""}</div>
-  `;
+  return rightHtml ? `<div class="detail-actions-right">${rightHtml}</div>` : "";
 }
 
 function configureDetailTabs(mode = "json") {
@@ -1437,12 +1432,14 @@ async function openRuleDetail(entry, options = {}) {
             <button class="btn btn-primary" data-action="rule-open-in-lab" data-id="${escapeHtml(entry.id || "")}">${escapeHtml(t("rules.edit"))}</button>
           </div>
         </div>
-        <div class="detail-grid">
+        <div class="detail-grid rule-summary-grid">
           <div class="detail-kv"><span class="label">${escapeHtml(t("rules.col.name"))}</span><code>${escapeHtml(entry.name || "-")}</code></div>
           <div class="detail-kv"><span class="label">${escapeHtml(t("common.id"))}</span><code>${escapeHtml(entry.id || "-")}</code></div>
           <div class="detail-kv detail-kv-confidence"><span class="label">${escapeHtml(t("rules.col.confidence"))}</span>${renderConfidenceBar(entry.confidence, { variant: "rule" })}</div>
-          <div class="detail-kv"><span class="label">TLP</span>${trafficBadge(entry.tlp, "tlp")}</div>
-          <div class="detail-kv"><span class="label">PAP</span>${trafficBadge(entry.pap, "pap")}</div>
+          <div class="detail-kv rule-summary-levels">
+            <div class="detail-kv"><span class="label">TLP</span>${trafficBadge(entry.tlp, "tlp")}</div>
+            <div class="detail-kv"><span class="label">PAP</span>${trafficBadge(entry.pap, "pap")}</div>
+          </div>
           <div class="detail-kv"><span class="label">TTP</span><code>${escapeHtml(entry.ttp || "-")}</code></div>
         </div>
       </section>

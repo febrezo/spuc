@@ -85,6 +85,7 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Rule technology accordions display converter comments as compact bullet lists and localize common converter notes/cause text to Spanish when UI locale is `es`.
 - Rule technology command and reference-link guidance is shown directly inside each opened accordion body (no extra nested toggle required).
 - Rule detail `Overview` includes direct `Edit rule` action that opens the selected STIX pattern in `Laboratory` prefilled fields (rule, metadata, TLP/PAP, confidence, TTP).
+- Rule detail `Overview` keeps TLP and PAP aligned as a paired marking block, and detail dialogs close from the top-right `X` control instead of a bottom-left cancel action.
 - Rule detail `Detection rules` and `Emulation rules` tabs include a wider split export control (button + inline target dropdown) at the bottom of each tab to avoid cramped labels.
 - Rules workspace toolbar uses explicit Font Awesome icons for view mode, select all, bulk edit, column chooser, export selected, and delete selected actions.
 - Rules bulk export uses two direct actions (`CSV` in green and `STIX` in yellow) that download immediately without intermediate preview dialogs.

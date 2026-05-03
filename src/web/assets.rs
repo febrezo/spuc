@@ -358,6 +358,19 @@ mod tests {
     }
 
     #[test]
+    fn rule_detail_summary_aligns_tlp_pap_and_uses_top_close_button() {
+        assert!(INDEX_HTML.contains("class=\"icon-btn detail-close-btn\""));
+        assert!(APP_JS.contains("class=\"detail-grid rule-summary-grid\""));
+        assert!(APP_JS.contains("class=\"detail-kv rule-summary-levels\""));
+        assert!(APP_CSS.contains(".rule-summary-grid {"));
+        assert!(APP_CSS.contains(".rule-summary-levels {"));
+        assert!(APP_JS.contains(
+            "return rightHtml ? `<div class=\"detail-actions-right\">${rightHtml}</div>` : \"\";"
+        ));
+        assert!(!APP_JS.contains("data-action=\"detail-cancel\""));
+    }
+
+    #[test]
     fn rulelab_hides_copy_prompt_button() {
         assert!(!INDEX_HTML.contains("id=\"rulelab-copy-prompt\""));
     }

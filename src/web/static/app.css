@@ -3084,8 +3084,13 @@ tr:hover td {
   color: #ffc1bf;
 }
 
-#detail-close {
-  display: none;
+.detail-close-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  color: #d9e6fb;
 }
 
 .detail-tabs {
@@ -3599,6 +3604,17 @@ tr:hover td {
   font-family: var(--font-mono);
 }
 
+.rule-summary-grid {
+  grid-template-columns: minmax(170px, 1fr) minmax(170px, 1fr) minmax(210px, 1.2fr) minmax(220px, 1.3fr);
+}
+
+.rule-summary-levels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 8px;
+}
+
 .detail-code-wrap {
   display: grid;
   gap: 8px;
@@ -3654,7 +3670,7 @@ tr:hover td {
 }
 
 #detail-actions {
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
 }
 
