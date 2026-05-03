@@ -71,12 +71,12 @@ jobs:
           elif [ "${{ matrix.target }}" = "x86_64-unknown-linux-musl" ]; then
             export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc
           fi
-          cargo build --release --target "${{ matrix.target }}" -p spuc-server --bin spuc
+          cargo build --release --target "${{ matrix.target }}" -p spuc-cli --bin spuc
 
       - name: Build release binary (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: cargo build --release --target ${{ matrix.target }} -p spuc-server --bin spuc
+        run: cargo build --release --target ${{ matrix.target }} -p spuc-cli --bin spuc
 
       - name: Package (Linux/macOS)
         if: runner.os != 'Windows'
@@ -171,15 +171,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo build --release --target "${{ matrix.target }}" -p spuc-server --bin spuc
-          cargo build --release --target "${{ matrix.target }}" -p spuc-desktop
+          cargo build --release --target "${{ matrix.target }}" -p spuc-cli --bin spuc
+          cargo build --release --target "${{ matrix.target }}" -p spuc-gui
 
       - name: Build desktop binary (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          cargo build --release --target ${{ matrix.target }} -p spuc-server --bin spuc
-          cargo build --release --target ${{ matrix.target }} -p spuc-desktop
+          cargo build --release --target ${{ matrix.target }} -p spuc-cli --bin spuc
+          cargo build --release --target ${{ matrix.target }} -p spuc-gui
 
       - name: Upload desktop artifacts (Linux / macOS)
         if: runner.os != 'Windows'
@@ -187,7 +187,7 @@ jobs:
         with:
           name: tauri-${{ matrix.name }}
           path: |
-            target/${{ matrix.target }}/release/spuc-desktop
+            target/${{ matrix.target }}/release/spuc-gui
             target/${{ matrix.target }}/release/spuc
 
       - name: Upload desktop artifacts (Windows)
@@ -196,7 +196,7 @@ jobs:
         with:
           name: tauri-${{ matrix.name }}
           path: |
-            target/${{ matrix.target }}/release/spuc-desktop.exe
+            target/${{ matrix.target }}/release/spuc-gui.exe
             target/${{ matrix.target }}/release/spuc.exe
 
   publish:

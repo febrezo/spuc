@@ -26,7 +26,7 @@ jobs:
         run: cargo check -q
 
       - name: Build server binaries for integration tests
-        run: cargo build -q -p spuc-server --bins
+        run: cargo build -q -p spuc-cli --bins
 
       - name: Cargo test
         run: cargo test -q

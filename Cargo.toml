@@ -7,12 +7,12 @@ autobins = false
 [workspace]
 members = [
 	".",
-	"crates/spuc-server",
-	"crates/spuc-desktop",
+	"crates/spuc-cli",
+	"crates/spuc-gui",
 ]
 default-members = [
 	".",
-	"crates/spuc-server",
+	"crates/spuc-cli",
 ]
 resolver = "2"
 

@@ -10,7 +10,7 @@ fn spuc_agent_bin() -> String {
         .unwrap_or_else(|_| "target/debug/spuc-agent".to_string());
     if !Path::new(&bin).exists() {
         let status = Command::new("cargo")
-            .args(["build", "-q", "-p", "spuc-server", "--bin", "spuc-agent"])
+            .args(["build", "-q", "-p", "spuc-cli", "--bin", "spuc-agent"])
             .status()
             .expect("failed to build spuc-agent binary for tests");
         assert!(

@@ -1,5 +1,5 @@
 [package]
-name = "spuc-server"
+name = "spuc-cli"
 version = "0.5.0"
 edition = "2024"
 

@@ -3471,6 +3471,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "spuc-cli"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "serde_json",
+ "spuc-core",
+]
+
+[[package]]
 name = "spuc-core"
 version = "0.5.0"
 dependencies = [
@@ -3491,23 +3501,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "spuc-desktop"
+name = "spuc-gui"
 version = "0.5.0"
 dependencies = [
  "anyhow",
  "tauri",
  "tauri-build",
  "ureq",
-]
-
-[[package]]
-name = "spuc-server"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "clap",
- "serde_json",
- "spuc-core",
 ]
 
 [[package]]

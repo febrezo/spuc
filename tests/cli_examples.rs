@@ -8,7 +8,7 @@ fn spuc_bin() -> String {
         std::env::var("CARGO_BIN_EXE_spuc").unwrap_or_else(|_| "target/debug/spuc".to_string());
     if !Path::new(&bin).exists() {
         let status = Command::new("cargo")
-            .args(["build", "-q", "-p", "spuc-server", "--bin", "spuc"])
+            .args(["build", "-q", "-p", "spuc-cli", "--bin", "spuc"])
             .status()
             .expect("failed to build spuc binary for tests");
         assert!(status.success(), "failed to build spuc binary for tests");

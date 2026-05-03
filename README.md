@@ -96,7 +96,7 @@ Commands:
 ```bash
 cargo test
 cargo test -p spuc-core
-cargo test -p spuc-server
+cargo test -p spuc-cli
 ```
 
 ## Docker + sigma
@@ -113,9 +113,9 @@ Use `spuc sigma update-config` to force a fresh runtime discovery and overwrite 
 
 ## Web Interface
 
-- `spuc` is provided by crate `spuc-server` and runs the current CLI, including `spuc web`.
+- `spuc` is provided by crate `spuc-cli` and runs the current CLI, including `spuc web`.
 - `spuc web` binds to `127.0.0.1` only, supports `--no-login`, opens the system browser by default, supports `--no-open` for sidecar/embedded use, and exposes `GET /healthz`.
-- `spuc-desktop` is a separate Tauri app that starts `spuc web --no-login --no-open` as a sidecar on an available localhost port, shows a local SPUC loading screen while the sidecar becomes ready, and then loads the local URL in a native window.
+- `spuc-gui` is a separate Tauri app that starts `spuc web --no-login --no-open` as a sidecar on an available localhost port, shows a local SPUC loading screen while the sidecar becomes ready, and then loads the local URL in a native window.
 - Linux desktop prerequisites: install WebKitGTK, JavaScriptCoreGTK, GTK and GLib development packages. On Fedora: `sudo dnf install glib2-devel gtk3-devel webkit2gtk4.1-devel javascriptcoregtk4.1-devel libappindicator-gtk3-devel librsvg2-devel libxdo-devel pkgconf-pkg-config`. On Ubuntu/WSL: install `libwebkit2gtk-4.1-dev`, `libjavascriptcoregtk-4.1-dev`, `libgtk-3-dev`, `libglib2.0-dev`, `libappindicator3-dev`, `librsvg2-dev`, `libxdo-dev`, and `pkg-config`.
 - `spuc web --port 8090 --admin-user admin --admin-password <password>` starts the localized web UI on localhost.
 - `spuc web --no-login` disables the login screen, enters directly as local administrator, and hides logout plus user-management controls (desktop/standalone mode).
@@ -144,8 +144,8 @@ curl -X POST 'http://127.0.0.1:8080/rpc' \
 ## Source Layout
 
 - repository root package `spuc-core`: reusable core library package (`lib` name `spuc`, entrypoint at `src/lib.rs`)
-- `crates/spuc-server/`: `spuc` and `spuc-agent` binaries
-- `crates/spuc-desktop/`: Tauri desktop app (`spuc-desktop`) that manages `spuc web` sidecar lifecycle
+- `crates/spuc-cli/`: `spuc` and `spuc-agent` binaries
+- `crates/spuc-gui/`: Tauri desktop app (`spuc-gui`) that manages `spuc web` sidecar lifecycle
 - `src/core/`: technical core namespace (`ast`, `ir`, `parser`, `normalize`, `emitters`)
 - `src/domain/`: product-domain namespace (`catalog`, emulation-facing integration points)
 - `src/app/`: application runner and shared services/cases (`run`, `services/*`)
@@ -169,7 +169,7 @@ This repository is prepared for automated builds in GitHub Actions:
   - runs `cargo fmt --check`, `cargo check -q`, and `cargo test -q` on push/PR.
 - `.github/workflows/release.yml`
   - builds `spuc` server binaries for Linux, macOS, and Windows.
-  - builds `spuc-desktop` binaries for Linux, macOS, and Windows.
+  - builds `spuc-gui` binaries for Linux, macOS, and Windows.
   - desktop artifacts include the `spuc` sidecar binary required at runtime.
   - includes ARM targets for Raspberry Pi (`aarch64-unknown-linux-gnu` and `armv7-unknown-linux-gnueabihf`) plus `x86_64-unknown-linux-musl`.
   - packages artifacts with the current app version in filename (`spuc-v<version>-<target>.tar.gz` / `.zip`).
@@ -180,17 +180,17 @@ This repository is prepared for automated builds in GitHub Actions:
 
 ```bash
 # Build server CLI binary (`spuc`)
-cargo build -p spuc-server --bin spuc
+cargo build -p spuc-cli --bin spuc
 
 # Run web server mode
-cargo run -p spuc-server --bin spuc -- web --port 8090 --no-login
-cargo run -p spuc-server --bin spuc -- web --port 8090 --no-login --no-open
+cargo run -p spuc-cli --bin spuc -- web --port 8090 --no-login
+cargo run -p spuc-cli --bin spuc -- web --port 8090 --no-login --no-open
 
 # Build desktop app
-cargo build -p spuc-desktop
+cargo build -p spuc-gui
 
 # Run desktop app (expects `spuc` in PATH or SPUC_SERVER_BIN set)
-cargo run -p spuc-desktop
+cargo run -p spuc-gui
 ```
 
 Release flow:
