@@ -558,8 +558,8 @@ pub(crate) const TRANSLATIONS_JSON: &str = r#"{
     "login.license": "Licencia",
     "login.coded_with_love": "Hecho con cariño",
 
-    "app.title": "SPUC: un laboratorio de mapeo de IOC conductuales",
-    "app.tagline": "Un laboratorio de mapeo de IOC conductuales",
+    "app.title": "SPUC: Laboratorio de mapeo de comportamientos adversarios",
+    "app.tagline": "Laboratorio de mapeo de comportamientos adversarios",
 
     "nav.dashboard": "Visión general",
     "nav.home": "Inicio",

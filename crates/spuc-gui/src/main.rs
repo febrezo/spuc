@@ -9,7 +9,7 @@ use tauri::{webview::NewWindowResponse, Manager, WebviewUrl, WebviewWindowBuilde
 
 const WINDOW_LABEL: &str = "main";
 const WINDOW_TITLE_EN: &str = "SPUC: A behavioural IOC mapping lab";
-const WINDOW_TITLE_ES: &str = "SPUC: un laboratorio de mapeo de IOC conductuales";
+const WINDOW_TITLE_ES: &str = "SPUC: Laboratorio de mapeo de comportamientos adversarios";
 const SERVER_HOST: &str = "127.0.0.1";
 const READY_TIMEOUT: Duration = Duration::from_secs(15);
 

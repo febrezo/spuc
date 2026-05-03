@@ -259,8 +259,9 @@ mod tests {
         assert!(
             TRANSLATIONS_JSON.contains("\"app.title\": \"SPUC: A behavioural IOC mapping lab\"")
         );
-        assert!(TRANSLATIONS_JSON
-            .contains("\"app.title\": \"SPUC: un laboratorio de mapeo de IOC conductuales\""));
+        assert!(TRANSLATIONS_JSON.contains(
+            "\"app.title\": \"SPUC: Laboratorio de mapeo de comportamientos adversarios\""
+        ));
         assert!(APP_JS.contains("function detectInitialLocale()"));
         assert!(APP_JS.contains("navigator.languages"));
         assert!(APP_JS.contains("document.title = t(\"app.title\");"));
