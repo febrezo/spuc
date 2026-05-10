@@ -169,7 +169,7 @@ Deletion requires manual confirmation typed in the terminal.
 
 For rules, `show` prints the rule body, confidence, emulability and observed catalog activity.
 
-For adversaries, `show` prints the analyst-facing adversary id, the persisted `intrusion_set_id`, platforms, confidence, description and referenced `ability_ref` ids.
+For adversaries, `show` prints the analyst-facing adversary id, the persisted STIX `intrusion_set_id` (`intrusion-set--<uuid>` for newly created plans, with legacy ids still accepted), platforms, confidence, description and referenced `ability_ref` ids.
 
 ## Export Semantics
 

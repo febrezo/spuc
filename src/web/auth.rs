@@ -119,6 +119,7 @@ impl OAuthConfig {
         views
     }
 
+    #[allow(dead_code)]
     pub(crate) fn bootstrap_views(&self) -> Vec<ProviderBootstrap> {
         let mut views = self.providers.values().cloned().collect::<Vec<_>>();
         views.sort_by(|a, b| a.id.cmp(b.id));

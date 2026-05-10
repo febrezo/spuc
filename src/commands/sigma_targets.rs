@@ -26,6 +26,7 @@ pub(crate) fn target_to_backend(label: &str) -> Option<String> {
     Some(backend)
 }
 
+#[allow(dead_code)]
 pub(crate) fn is_dynamic_target_available(label: &str) -> bool {
     let Some(backend) = target_to_backend(label) else {
         return false;

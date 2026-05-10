@@ -133,8 +133,9 @@ impl AbilityCatalog {
                 continue;
             }
             let raw = fs::read_to_string(&path)?;
-            let ability: Ability = serde_json::from_str(&raw)?;
-            out.push(ability);
+            if let Ok(ability) = serde_json::from_str::<Ability>(&raw) {
+                out.push(ability);
+            }
         }
         out.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(out)
@@ -395,6 +396,26 @@ mod tests {
         catalog
             .save(&sample_ability("abl-1", "linux", "echo test"))
             .expect("save");
+        let items = catalog.list().expect("list");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, "abl-1");
+    }
+
+    #[test]
+    fn list_skips_invalid_catalog_json_entries() {
+        let root = std::env::temp_dir().join(format!(
+            "spuc_catalog_test_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        let catalog = AbilityCatalog::from_root(root.clone()).expect("catalog");
+        catalog
+            .save(&sample_ability("abl-1", "linux", "echo test"))
+            .expect("save");
+        fs::write(root.join("broken.json"), "{ invalid json").expect("broken catalog entry");
+
         let items = catalog.list().expect("list");
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].id, "abl-1");

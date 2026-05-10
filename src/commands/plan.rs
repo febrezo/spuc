@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use anyhow::{anyhow, Result};
-use chrono::Utc;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -624,7 +623,7 @@ fn build_catalog_rule_entries(
                 }
             }
             CatalogRuleEntry {
-                rule_id: format!("rule-{}", short_catalog_token(&stable_token)),
+                rule_id: catalog_indicator_id(&stable_token),
                 ability_id: ability.map(|item| item.id.clone()),
                 name: ability
                     .map(|item| item.name.clone())
@@ -1171,14 +1170,49 @@ fn short_catalog_token(input: &str) -> String {
     input.chars().take(12).collect()
 }
 
+fn catalog_indicator_id(stable_token: &str) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut left = DefaultHasher::new();
+    "indicator".hash(&mut left);
+    stable_token.hash(&mut left);
+    let left = left.finish();
+
+    let mut right = DefaultHasher::new();
+    stable_token.hash(&mut right);
+    "spuc-catalog-rule".hash(&mut right);
+    let right = right.finish();
+
+    let mut bytes = [0u8; 16];
+    bytes[..8].copy_from_slice(&left.to_be_bytes());
+    bytes[8..].copy_from_slice(&right.to_be_bytes());
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    format!(
+        "indicator--{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        bytes[0],
+        bytes[1],
+        bytes[2],
+        bytes[3],
+        bytes[4],
+        bytes[5],
+        bytes[6],
+        bytes[7],
+        bytes[8],
+        bytes[9],
+        bytes[10],
+        bytes[11],
+        bytes[12],
+        bytes[13],
+        bytes[14],
+        bytes[15],
+    )
+}
+
 fn catalog_adversary_id(intrusion_set_id: &str) -> String {
-    if intrusion_set_id.starts_with("adversary-") {
-        intrusion_set_id.to_string()
-    } else if let Some(suffix) = intrusion_set_id.strip_prefix("intrusion-set-") {
-        format!("adversary-{suffix}")
-    } else {
-        format!("adversary-{intrusion_set_id}")
-    }
+    emu_campaign::catalog_adversary_id(intrusion_set_id)
 }
 
 fn join_or_dash(values: &[String]) -> String {
@@ -1348,7 +1382,7 @@ impl CampaignConsoleState {
                 selected_ids = reordered;
             }
         }
-        let intrusion_set_id = format!("intrusion-set-{}", Utc::now().timestamp_millis());
+        let intrusion_set_id = emu_campaign::generate_intrusion_set_stix_id();
         let normalized_name = if name.trim().is_empty() {
             String::new()
         } else {
@@ -2196,7 +2230,7 @@ fn handle_campaign_unset(state: &mut CampaignConsoleState, key: &str) -> Result<
             refresh_campaign_output_path(state);
         }
         "INTRUSION_SET_ID" => {
-            state.intrusion_set_id = format!("intrusion-set-{}", Utc::now().timestamp_millis());
+            state.intrusion_set_id = emu_campaign::generate_intrusion_set_stix_id();
             refresh_campaign_output_path(state);
         }
         "FORMAT" => {

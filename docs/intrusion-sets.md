@@ -10,7 +10,7 @@ This is an MVP for defensive emulation planning, not a runtime orchestration eng
 Current intrusion-set schema:
 
 - `schema_version`
-- `intrusion_set_id`
+- `intrusion_set_id` (`intrusion-set--<uuid>` for newly generated plans; legacy `intrusion-set-...` ids remain readable)
 - `name`
 - `description`
 - `confidence`

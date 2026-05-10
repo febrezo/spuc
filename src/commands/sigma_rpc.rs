@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// HTTP client for the sigma-jsonrpc external service.
 ///
 /// When `SIGMA_RPC_URL` is set SPUC will try to discover Sigma backends

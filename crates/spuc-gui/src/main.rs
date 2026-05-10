@@ -20,10 +20,7 @@ struct AppState {
 fn main() -> Result<()> {
     let server_port = choose_available_port()?;
     let sidecar = spawn_server_sidecar(server_port)?;
-    let target_url = format!(
-        "http://{SERVER_HOST}:{server_port}/?spuc-locale={}",
-        system_locale_code()
-    );
+    let target_url = desktop_web_url(server_port);
 
     tauri::Builder::default()
         .manage(AppState {
@@ -97,6 +94,13 @@ fn spawn_server_sidecar(port: u16) -> Result<Child> {
                 server_bin.display()
             )
         })
+}
+
+fn desktop_web_url(port: u16) -> String {
+    format!(
+        "http://{SERVER_HOST}:{port}/?spuc-locale={}&spuc-mode=gui",
+        system_locale_code()
+    )
 }
 
 fn choose_available_port() -> Result<u16> {
@@ -200,8 +204,8 @@ fn shutdown_sidecar(state: tauri::State<'_, AppState>) {
 #[cfg(test)]
 mod tests {
     use super::{
-        choose_available_port, is_allowed_in_app_url, localized_window_title, server_binary_name,
-        system_locale_code, SERVER_HOST, WINDOW_TITLE_EN, WINDOW_TITLE_ES,
+        choose_available_port, desktop_web_url, is_allowed_in_app_url, localized_window_title,
+        server_binary_name, system_locale_code, SERVER_HOST, WINDOW_TITLE_EN, WINDOW_TITLE_ES,
     };
     use std::net::TcpListener;
 
@@ -243,6 +247,13 @@ mod tests {
         assert_eq!(localized_window_title(), WINDOW_TITLE_EN);
         assert_eq!(system_locale_code(), "en");
         std::env::remove_var("SPUC_LOCALE");
+    }
+
+    #[test]
+    fn desktop_web_url_marks_gui_mode_and_locale() {
+        let url = desktop_web_url(40423);
+        assert!(url.starts_with("http://127.0.0.1:40423/?spuc-locale="));
+        assert!(url.ends_with("&spuc-mode=gui"));
     }
 
     #[test]

@@ -5,13 +5,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SPUC: A behavioural IOC mapping lab</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <div class="ambient ambient-a"></div>
   <div class="ambient ambient-b"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-  <main id="login-view" class="login-layout">
+  <main id="boot-view" class="boot-layout">
+    <section class="boot-shell glass">
+      <img class="boot-logo" src="/assets/logo-sputnik.png" alt="SPUC logo">
+      <h1>SPUC</h1>
+      <p class="muted" data-i18n="about.subtitle">Local-first platform for STIX objects, rules and defensive emulation.</p>
+      <p id="boot-message" class="muted boot-message hidden" data-i18n="boot.message"></p>
+      <button id="boot-enter-button" type="button" class="btn btn-primary hidden" data-action="local-login" data-i18n="boot.enter">Start SPUC</button>
+    </section>
+
+    <footer class="login-footer auth-footer muted">
+      <span>Coded with ❤️ by febrezo</span>
+      <a id="footer-project-link-boot" href="https://github.com/febrezo/spuc" target="_blank" rel="noreferrer" data-i18n="common.github_project">GitHub Project</a>
+      <span><span data-i18n="common.license">License</span>: <a id="footer-license-link-boot" href="https://github.com/febrezo/spuc/blob/main/LICENSE.md" target="_blank" rel="noreferrer" data-i18n="common.license_sspl">Server Side Public License</a></span>
+    </footer>
+  </main>
+
+  <main id="login-view" class="login-layout hidden">
     <section class="login-shell">
       <header class="login-brand">
         <div class="login-brand-line">
@@ -35,20 +53,18 @@
         <div class="oauth-group">
           <p class="muted" data-i18n="login.oauth">Or continue with</p>
           <div class="oauth-actions">
-            <button type="button" class="btn btn-ghost" data-provider="google">Google</button>
-            <button type="button" class="btn btn-ghost" data-provider="github">GitHub</button>
+            <button type="button" class="btn btn-ghost" data-provider="google" disabled>Google</button>
+            <button type="button" class="btn btn-ghost" data-provider="github" disabled>GitHub</button>
           </div>
         </div>
 
         <p id="login-error" class="error" hidden></p>
       </section>
 
-      <footer class="login-footer muted">
-        <span id="footer-copyright"></span>
-        <a id="footer-project-link" href="#" target="_blank" rel="noreferrer" data-i18n="login.project">Project</a>
-        <a id="footer-license-link" href="#" target="_blank" rel="noreferrer"></a>
-        <span data-i18n="login.coded_with_love">Coded with love</span>
-        <span id="footer-version"></span>
+      <footer class="login-footer auth-footer muted">
+        <span>Coded with ❤️ by febrezo</span>
+        <a id="footer-project-link" href="https://github.com/febrezo/spuc" target="_blank" rel="noreferrer" data-i18n="common.github_project">GitHub Project</a>
+        <span><span data-i18n="common.license">License</span>: <a id="footer-license-link" href="https://github.com/febrezo/spuc/blob/main/LICENSE.md" target="_blank" rel="noreferrer" data-i18n="common.license_sspl">Server Side Public License</a></span>
       </footer>
     </section>
   </main>
@@ -57,9 +73,9 @@
     <aside class="sidebar glass">
       <div class="sidebar-head">
         <div class="sidebar-brand-line">
-          <img class="sidebar-logo" src="/assets/logo-sputnik.png" alt="SPUC logo">
-          <h2>SPUC</h2>
+          <img class="sidebar-logo" src="/assets/logo-sputnik.png" alt="SPUC logo" title="SPUC: A behavioural IOC mapping lab">
         </div>
+        <hr class="sidebar-separator">
       </div>
       <nav class="nav-list">
         <section class="nav-section">
@@ -83,13 +99,17 @@
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 3h10l4 4v14H5V3zm9 1.5V8h3.5L14 4.5zM8 12h8v1.8H8V12zm0 4h8v1.8H8V16z"/></svg></span>
             <span data-i18n="nav.rules">Rules</span>
           </button>
-          <button class="nav-item" data-route="adversaries">
-            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 10a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm7 2a3 3 0 1 1 0-6 3 3 0 0 1 0 6zM3 21v-1.5C3 16.9 5.9 15 9 15s6 1.9 6 4.5V21H3zm11 0v-1.2c0-1.3-.5-2.4-1.3-3.3 2.3.2 4.3 1.8 4.3 3.9V21h-3z"/></svg></span>
-            <span data-i18n="nav.adversaries">Emulation</span>
+          <button class="nav-item" data-route="adversaries-payloads">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 4h10l3 3v13H4V4h3zm0 2v3h10V6H7zm0 5v6h10v-6H7z"/></svg></span>
+            <span data-i18n="nav.payloads">Payloads</span>
           </button>
           <button class="nav-item" data-route="stix-objects">
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2l8 4.5v9L12 20l-8-4.5v-9L12 2zm0 2.2L6 7l6 3.4L18 7l-6-2.8zm-6 4.8v5.2l5 2.8v-5.2L6 9zm7 8l5-2.8V9l-5 2.8V17z"/></svg></span>
             <span data-i18n="nav.stix_objects">STIX objects</span>
+          </button>
+          <button class="nav-item" data-route="adversaries">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 10a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm7 2a3 3 0 1 1 0-6 3 3 0 0 1 0 6zM3 21v-1.5C3 16.9 5.9 15 9 15s6 1.9 6 4.5V21H3zm11 0v-1.2c0-1.3-.5-2.4-1.3-3.3 2.3.2 4.3 1.8 4.3 3.9V21h-3z"/></svg></span>
+            <span data-i18n="nav.adversaries">Adversaries</span>
           </button>
         </section>
         <section class="nav-section">
@@ -112,6 +132,12 @@
         </section>
       </nav>
 
+      <footer class="sidebar-footer">
+        <button type="button" class="sidebar-about-link" data-action="open-support">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h14a3 3 0 0 1 0 6H5v3h13a3 3 0 0 1 0 6H4V5zm2 2v2h12a1 1 0 0 0 0-2H6zm0 9v2h12a1 1 0 0 0 0-2H6z"/></svg></span>
+          <span data-i18n="nav.about">About SPUC</span>
+        </button>
+      </footer>
     </aside>
 
     <div id="sidebar-backdrop" class="sidebar-backdrop hidden"></div>
@@ -119,7 +145,10 @@
     <section class="main-shell">
       <header class="topbar glass">
         <div>
-          <h1 id="route-title">Dashboard</h1>
+          <h1 id="route-title" class="route-title">
+            <span id="route-title-icon" class="route-title-icon" aria-hidden="true"></span>
+            <span id="route-title-text">Dashboard</span>
+          </h1>
           <p id="route-subtitle" class="muted"></p>
         </div>
         <div class="topbar-actions">
@@ -136,7 +165,6 @@
 
       <section id="panel-home" class="panel active workspace-center-mode">
           <article class="glass rules-welcome-card workspace-chooser-card home-welcome-card">
-            <img class="home-logo" src="/assets/logo-sputnik.png" alt="SPUC logo">
             <h2 data-i18n="home.title">Welcome to SPUC</h2>
             <p class="muted" data-i18n="home.subtitle">Choose the main workflow to begin.</p>
             <div class="welcome-stack rules-welcome-actions home-actions">
@@ -157,7 +185,7 @@
               <button class="welcome-action welcome-action-row" data-action="welcome-nav" data-route="adversaries-catalog">
                 <span class="welcome-icon" aria-hidden="true">🛰️</span>
                 <span class="welcome-copy">
-                  <strong data-i18n="home.action.adversaries">Adversary catalog</strong>
+                  <strong data-i18n="home.action.adversaries">Adversaries</strong>
                   <span class="muted" data-i18n="welcome.adv.desc">Review adversary compositions and exports.</span>
                 </span>
               </button>
@@ -168,13 +196,13 @@
                   <span class="muted" data-i18n="welcome.learn.desc">Practice with guided STIX challenges.</span>
                 </span>
               </button>
-              <a class="welcome-action welcome-action-row home-link" href="https://github.com/sponsors/febrezo" target="_blank" rel="noreferrer">
-                <span class="welcome-icon" aria-hidden="true">❤️</span>
+              <button class="welcome-action welcome-action-row home-link" data-action="open-support" data-support-section="donate">
+                <span class="welcome-icon" aria-hidden="true">☕</span>
                 <span class="welcome-copy">
                   <strong data-i18n="home.action.donate">Donate</strong>
                   <span class="muted" data-i18n="home.action.donate.desc">Support ongoing SPUC development.</span>
                 </span>
-              </a>
+              </button>
             </div>
           </article>
       </section>
@@ -211,33 +239,15 @@
       </section>
 
       <section id="panel-rules" class="panel">
-        <article id="rules-welcome-card" class="glass rules-welcome-card workspace-chooser-card">
-          <header>
+        <article id="rules-welcome-card" class="glass adversaries-empty-state">
+          <div class="adversaries-empty-body">
             <h3 data-i18n="rules.welcome.title">Rule Catalog Welcome</h3>
             <p class="muted" data-i18n="rules.welcome.subtitle">Choose a main flow to start working with catalog rules.</p>
-          </header>
-          <div class="welcome-stack rules-welcome-actions">
-            <button class="welcome-action welcome-action-row" data-action="welcome-nav" data-route="rulelab">
-              <span class="welcome-icon" aria-hidden="true">🧪</span>
-              <span class="welcome-copy">
-                <strong data-i18n="rules.welcome.new.title">Add new rule</strong>
-                <span class="muted" data-i18n="rules.welcome.new.desc">Write one STIX rule and save it to the catalog.</span>
-              </span>
-            </button>
-            <button class="welcome-action welcome-action-row" data-action="welcome-nav" data-route="rules-import">
-              <span class="welcome-icon" aria-hidden="true">📥</span>
-              <span class="welcome-copy">
-                <strong data-i18n="rules.welcome.file.title">Import rules from file</strong>
-                <span class="muted" data-i18n="rules.welcome.file.desc">Load many STIX rules from a file in one action.</span>
-              </span>
-            </button>
-            <button class="welcome-action welcome-action-row" data-action="welcome-nav" data-route="rules-catalog">
-              <span class="welcome-icon" aria-hidden="true">🧭</span>
-              <span class="welcome-copy">
-                <strong data-i18n="rules.welcome.explore.title">Explore rules</strong>
-                <span class="muted" data-i18n="rules.welcome.explore.desc">Use filters and outputs to review the catalog.</span>
-              </span>
-            </button>
+            <div class="adversaries-empty-actions">
+              <button class="btn btn-primary" data-action="welcome-nav" data-route="rulelab" data-i18n="rules.welcome.new.title">Add new rule</button>
+              <button class="btn btn-ghost" data-action="welcome-nav" data-route="rules-import" data-i18n="rules.welcome.file.title">Import rules from file</button>
+              <button class="btn btn-ghost" data-action="welcome-nav" data-route="rules-catalog" data-i18n="rules.welcome.explore.title">Explore rules</button>
+            </div>
           </div>
         </article>
 
@@ -323,117 +333,107 @@
             </label>
             <label>
               <div class="meta-head">
-                <span>TTP (ATT&CK)</span>
-                <span class="help-tip" tabindex="0" aria-label="Info about TTP">
+                <span data-i18n="rulelab.stix_relations">Related STIX objects</span>
+                <span class="help-tip" tabindex="0" aria-label="Info about STIX relations">
                   <span class="help-tip-icon">?</span>
                   <span class="help-tip-content">
-                    <span>Optional technique id such as T1059 or T1047 to attach to generated emulations.</span>
+                    <span>Associate the imported rules with a STIX object (attack-pattern, malware, etc.).</span>
                   </span>
                 </span>
               </div>
-              <input id="rules-new-ttp" list="ttp-options" placeholder="T1059">
+              <select id="rules-new-ttp" list="ttp-options">
+                <option value="">— None —</option>
+              </select>
             </label>
             <button id="rules-new-save" class="btn btn-success" data-i18n="rules.save_many">Save rule(s)</button>
           </div>
         </article>
 
         <section id="rules-explore-shell">
-          <div class="toolbar-card glass rules-toolbar-modern">
-            <label class="rules-filter-field">
-              <span data-i18n="rules.search">Search rules</span>
-              <input id="rules-search" type="search" data-i18n-placeholder="rules.search" placeholder="Buscar regla por nombre..." list="rules-name-options">
-              <datalist id="rules-name-options"></datalist>
+          <article id="rules-empty-state" class="glass adversaries-empty-state hidden">
+            <div class="adversaries-empty-body">
+              <h3>Aun no hay reglas creadas</h3>
+              <p class="muted">Todavia no tienes reglas en el catalogo. Crea o importa la primera para empezar a trabajar.</p>
+              <div class="adversaries-empty-actions">
+                <button class="btn btn-primary" data-action="rules-open-lab" data-i18n="rules.welcome.new.title">Add new rule</button>
+                <button class="btn btn-primary btn-import" data-action="rules-import-stix" data-i18n="rules.welcome.file.title">Import rules from file</button>
+              </div>
+            </div>
+          </article>
+          <article id="rules-catalog-main" class="table-card glass">
+          <div class="rules-top-row">
+            <label class="stix-search-wrap rules-search-wrap" for="rules-search" aria-label="Search rules">
+              <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+              <input id="rules-search" type="search" data-i18n-placeholder="rules.search" placeholder="Buscar reglas" list="rules-name-options">
             </label>
-            <label class="rules-filter-field">
-              <span class="meta-head">
-                <span data-i18n="rules.min_confidence">Min confidence</span>
-                <span class="help-tip" tabindex="0" aria-label="Info about confidence">
-                  <span class="help-tip-icon">?</span>
-                  <span class="help-tip-content">
-                    <span data-i18n="help.confidence.filter">Filter rules by analyst-defined minimum detection confidence.</span>
+            <datalist id="rules-name-options"></datalist>
+            <div class="rules-actions-inline">
+              <button id="rules-filters-toggle" class="btn btn-ghost icon-only" data-action="rules-filters-toggle" data-i18n-title="rules.filters.toggle" aria-label="Filters" title="Filters" aria-expanded="false"><i class="fa-solid fa-sliders" aria-hidden="true"></i></button>
+              <div class="rules-view-mode" role="group" aria-label="Rule view mode">
+                <button id="rules-view-cards" class="btn btn-ghost icon-only active" data-action="rules-view-mode" data-mode="cards" data-i18n-title="rules.view.cards" aria-label="Cards" title="Cards"><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i></button>
+                <button id="rules-view-table" class="btn btn-ghost icon-only" data-action="rules-view-mode" data-mode="table" data-i18n-title="rules.view.table" aria-label="Table" title="Table"><i class="fa-solid fa-table-list" aria-hidden="true"></i></button>
+              </div>
+              <button id="rules-open-lab" class="btn btn-primary icon-only" data-action="rules-open-lab" data-i18n-title="rules.welcome.new.title" aria-label="Add new rule" title="Add new rule"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
+              <button id="rules-import-stix" class="btn btn-primary btn-import icon-only" data-action="rules-import-stix" data-i18n-title="rules.welcome.file.title" aria-label="Import rules from file" title="Import rules from file"><i class="fa-solid fa-file-import" aria-hidden="true"></i></button>
+              <button id="rules-export-selected-csv" class="btn btn-success icon-only" data-action="rules-export-selected-csv" data-i18n-title="rules.export_selected.download_csv" aria-label="CSV" title="CSV" disabled><i class="fa-solid fa-file-csv" aria-hidden="true"></i></button>
+              <button id="rules-export-selected-stix" class="btn btn-warning icon-only" data-action="rules-export-selected-stix" data-i18n-title="rules.export_selected.download_bundle" aria-label="STIX" title="STIX" disabled><i class="fa-solid fa-file-code" aria-hidden="true"></i></button>
+              <button id="rules-duplicate-selected" class="btn btn-ghost icon-only" data-action="rules-duplicate-selected" aria-label="Duplicate selected" title="Duplicate selected" disabled><i class="fa-regular fa-clone" aria-hidden="true"></i></button>
+              <button id="rules-delete-selected" class="btn btn-danger icon-only" data-i18n-title="rules.bulk.delete_selected" aria-label="Delete selected" title="Delete selected" disabled><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
+              <input id="rules-import-file-shortcut" type="file" accept=".txt,.stix,.patterns,.md,.csv,.jsonl" class="hidden">
+            </div>
+          </div>
+          <div id="rules-filters-revealer" class="rules-filters-revealer">
+            <div class="rules-filters-revealer-inner toolbar-card glass">
+              <label class="rules-filter-field">
+                <span class="meta-head">
+                  <span data-i18n="rules.min_confidence">Min confidence</span>
+                  <span class="help-tip" tabindex="0" aria-label="Info about confidence">
+                    <span class="help-tip-icon">?</span>
+                    <span class="help-tip-content">
+                      <span data-i18n="help.confidence.filter">Filter rules by analyst-defined minimum detection confidence.</span>
+                    </span>
                   </span>
                 </span>
-              </span>
-              <input id="rules-min-confidence" type="number" min="0" max="100" value="0" aria-label="min confidence">
-            </label>
-            <label class="rules-filter-field rules-filter-group">
-              <span data-i18n="rules.filter_by_type">Filter by type:</span>
-              <div class="rules-type-row">
-                <button class="btn btn-ghost active" data-action="rules-type-toggle" data-type="siem">SIEM</button>
-                <button class="btn btn-ghost active" data-action="rules-type-toggle" data-type="ids">IDS</button>
-                <button class="btn btn-ghost active" data-action="rules-type-toggle" data-type="content" data-i18n="rules.type.content">Content</button>
-              </div>
-            </label>
-            <label class="rules-filter-field">
-              <span data-i18n="rules.filter_by_observable">Filter by observable type:</span>
-              <select id="rules-filter-observable">
-                <option value="" data-i18n="common.all">All</option>
-              </select>
-            </label>
-            <label class="rules-filter-field">
-              <span>TLP</span>
-              <select id="rules-filter-tlp" class="level-select tlp-select level-clear">
-                <option value="ALL" selected data-i18n="common.all">All</option>
-                <option value="TLP:CLEAR">TLP:CLEAR</option>
-                <option value="TLP:GREEN">TLP:GREEN</option>
-                <option value="TLP:AMBER">TLP:AMBER</option>
-                <option value="TLP:AMBER+STRICT">TLP:AMBER+STRICT</option>
-                <option value="TLP:RED">TLP:RED</option>
-              </select>
-            </label>
-            <label class="rules-filter-field">
-              <span>PAP</span>
-              <select id="rules-filter-pap" class="level-select pap-select level-clear">
-                <option value="ALL" selected data-i18n="common.all">All</option>
-                <option value="PAP:CLEAR">PAP:CLEAR</option>
-                <option value="PAP:GREEN">PAP:GREEN</option>
-                <option value="PAP:AMBER">PAP:AMBER</option>
-                <option value="PAP:RED">PAP:RED</option>
-              </select>
-            </label>
-          </div>
-          <article class="table-card glass">
-            <div class="rules-bulk-actions">
-              <div id="rules-bulk-edit" class="rules-bulk-edit hidden">
-                <span id="rules-bulk-count" class="muted"></span>
-                <select id="rules-bulk-tlp" class="level-select tlp-select level-clear">
-                  <option value="KEEP" data-i18n="rules.bulk.tlp_keep">TLP (No change)</option>
+                <input id="rules-min-confidence" type="number" min="0" max="100" value="0" aria-label="min confidence">
+              </label>
+              <label class="rules-filter-field rules-filter-group">
+                <span data-i18n="rules.filter_by_type">Filter by type:</span>
+                <div class="rules-type-row">
+                  <button class="btn btn-ghost active" data-action="rules-type-toggle" data-type="siem">SIEM</button>
+                  <button class="btn btn-ghost active" data-action="rules-type-toggle" data-type="ids">IDS</button>
+                  <button class="btn btn-ghost active" data-action="rules-type-toggle" data-type="content" data-i18n="rules.type.content">Content</button>
+                </div>
+              </label>
+              <label class="rules-filter-field">
+                <span data-i18n="rules.filter_by_observable">Filter by observable type:</span>
+                <select id="rules-filter-observable">
+                  <option value="" data-i18n="common.all">All</option>
+                </select>
+              </label>
+              <label class="rules-filter-field">
+                <span>TLP</span>
+                <select id="rules-filter-tlp" class="level-select tlp-select level-clear">
+                  <option value="ALL" selected data-i18n="common.all">All</option>
                   <option value="TLP:CLEAR">TLP:CLEAR</option>
                   <option value="TLP:GREEN">TLP:GREEN</option>
                   <option value="TLP:AMBER">TLP:AMBER</option>
                   <option value="TLP:AMBER+STRICT">TLP:AMBER+STRICT</option>
                   <option value="TLP:RED">TLP:RED</option>
                 </select>
-                <select id="rules-bulk-pap" class="level-select pap-select level-clear">
-                  <option value="KEEP" data-i18n="rules.bulk.pap_keep">PAP (No change)</option>
+              </label>
+              <label class="rules-filter-field">
+                <span>PAP</span>
+                <select id="rules-filter-pap" class="level-select pap-select level-clear">
+                  <option value="ALL" selected data-i18n="common.all">All</option>
                   <option value="PAP:CLEAR">PAP:CLEAR</option>
                   <option value="PAP:GREEN">PAP:GREEN</option>
                   <option value="PAP:AMBER">PAP:AMBER</option>
                   <option value="PAP:RED">PAP:RED</option>
                 </select>
-                <input id="rules-bulk-confidence" type="number" min="0" max="100" data-i18n-placeholder="rules.bulk.confidence.placeholder" placeholder="Confidence">
-                <button id="rules-bulk-apply" class="btn btn-primary" data-i18n="rules.bulk.apply">Apply to selected</button>
-                <button id="rules-bulk-cancel" class="btn btn-danger" data-action="rules-bulk-cancel" data-i18n="rules.bulk.cancel">Abort</button>
-              </div>
-              <div class="rules-actions-left">
-                <div class="rules-view-mode" role="group" aria-label="Rule view mode">
-                  <button id="rules-view-cards" class="btn btn-ghost icon-only active" data-action="rules-view-mode" data-mode="cards" data-i18n-title="rules.view.cards" aria-label="Cards" title="Cards"><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i></button>
-                  <button id="rules-view-table" class="btn btn-ghost icon-only" data-action="rules-view-mode" data-mode="table" data-i18n-title="rules.view.table" aria-label="Table" title="Table"><i class="fa-solid fa-table-list" aria-hidden="true"></i></button>
-                </div>
-                <button id="rules-select-all-toggle" class="btn btn-ghost icon-only" data-action="rules-select-all-toggle" data-i18n-title="rules.bulk.select_all" aria-label="Select all" title="Select all"><i class="fa-regular fa-square" aria-hidden="true"></i></button>
-                <button id="rules-bulk-toggle" class="btn btn-ghost icon-only" data-action="rules-bulk-toggle" data-i18n-title="rules.bulk.enable" aria-label="Bulk edit" title="Bulk edit" disabled><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>
-                <div class="column-picker">
-                  <button id="rules-columns-toggle" class="btn btn-ghost icon-only" data-action="rules-columns-toggle" data-i18n-title="common.show_hide_columns" aria-label="View columns" title="View columns"><i class="fa-solid fa-table-columns" aria-hidden="true"></i></button>
-                  <div id="rules-columns-menu" class="column-menu hidden"></div>
-                </div>
-              </div>
-              <div class="rules-actions-right">
-                <button id="rules-export-selected-csv" class="btn btn-success" data-action="rules-export-selected-csv" data-i18n-title="rules.export_selected.download_csv" aria-label="CSV" title="CSV" disabled><i class="fa-solid fa-file-csv" aria-hidden="true"></i> CSV</button>
-                <button id="rules-export-selected-stix" class="btn btn-warning" data-action="rules-export-selected-stix" data-i18n-title="rules.export_selected.download_bundle" aria-label="STIX" title="STIX" disabled><i class="fa-solid fa-file-code" aria-hidden="true"></i> STIX</button>
-                <button id="rules-duplicate-selected" class="btn btn-ghost icon-only" data-action="rules-duplicate-selected" aria-label="Duplicate selected" title="Duplicate selected" disabled><i class="fa-regular fa-clone" aria-hidden="true"></i></button>
-                <button id="rules-delete-selected" class="btn btn-danger icon-only" data-i18n-title="rules.bulk.delete_selected" aria-label="Delete selected" title="Delete selected" disabled><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
-              </div>
+              </label>
             </div>
+          </div>
+          <article class="table-card glass">
             <div class="table-meta" id="rules-meta"></div>
             <div class="table-wrap" id="rules-table-wrap"><table id="rules-table"></table></div>
             <div id="rules-cards" class="rules-cards hidden"></div>
@@ -443,55 +443,39 @@
       </section>
 
       <section id="panel-stix-objects" class="panel">
-        <article id="stix-objects-welcome-card" class="glass rules-welcome-card workspace-chooser-card">
-          <header>
-            <h3 data-i18n="stix_objects.welcome.title">STIX Objects workspace</h3>
-            <p class="muted" data-i18n="stix_objects.welcome.subtitle">Choose how you want to work with cataloged STIX objects.</p>
-          </header>
-          <div class="welcome-stack rules-welcome-actions">
-            <button class="welcome-action welcome-action-row" data-action="stix-create-open">
-              <span class="welcome-icon" aria-hidden="true">➕</span>
-              <span class="welcome-copy">
-                <strong data-i18n="stix_objects.welcome.create.title">Create new</strong>
-                <span class="muted" data-i18n="stix_objects.welcome.create.desc">Add a STIX object manually with ID and name.</span>
-              </span>
-            </button>
-            <button class="welcome-action welcome-action-row" data-action="welcome-nav" data-route="stix-objects-catalog">
-              <span class="welcome-icon" aria-hidden="true">🧭</span>
-              <span class="welcome-copy">
-                <strong data-i18n="stix_objects.welcome.catalog.title">Explore STIX objects</strong>
-                <span class="muted" data-i18n="stix_objects.welcome.catalog.desc">Review object ID, type and name from the local catalog.</span>
-              </span>
-            </button>
-            <button class="welcome-action welcome-action-row" data-action="welcome-nav" data-route="rules-catalog">
-              <span class="welcome-icon" aria-hidden="true">🔗</span>
-              <span class="welcome-copy">
-                <strong data-i18n="stix_objects.welcome.link_rules.title">Link from rules</strong>
-                <span class="muted" data-i18n="stix_objects.welcome.link_rules.desc">Use the rule catalog to add indicates relationships against cataloged objects.</span>
-              </span>
-            </button>
+        <article id="stix-objects-welcome-card" class="glass adversaries-empty-state">
+          <div class="adversaries-empty-body">
+            <h3>Aun no hay objetos creados</h3>
+            <p class="muted">Todavia no tienes objetos STIX en el catalogo. Crea o importa el primero para empezar a relacionar reglas.</p>
+            <div class="adversaries-empty-actions">
+              <button class="btn btn-primary" data-action="stix-create-open" data-i18n="stix_objects.welcome.create.title">Create new STIX object</button>
+              <button class="btn btn-ghost" data-action="stix-import-open" data-i18n="stix_objects.welcome.import.title">Import STIX objects</button>
+              <a class="btn btn-ghost" href="https://docs.oasis-open.org/cti/stix/v2.1/cs02/stix-v2.1-cs02.html" target="_blank" rel="noreferrer" data-i18n="stix_objects.welcome.standard.title">Consult STIX standard</a>
+            </div>
           </div>
         </article>
         <section id="stix-objects-catalog-shell" class="stack">
           <article class="table-card glass stix-objects-card">
             <div class="rules-bulk-actions stix-bulk-actions">
+              <div class="stix-actions-left">
+                <label class="stix-search-wrap" for="stix-objects-search">
+                  <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                  <input id="stix-objects-search" type="search" data-action="stix-search" data-i18n-placeholder="stix_objects.search.placeholder" placeholder="Search by name, ID or description">
+                </label>
+              </div>
               <div id="stix-bulk-edit" class="rules-bulk-edit hidden">
                 <span id="stix-bulk-count" class="muted"></span>
                 <button id="stix-bulk-clear" class="btn btn-danger" data-action="stix-bulk-clear" data-i18n="common.clear_selection">Clear selection</button>
                 <button id="stix-bulk-cancel" class="btn btn-danger" data-action="stix-bulk-cancel" data-i18n="rules.bulk.cancel">Abort</button>
               </div>
-              <div class="stix-actions-left">
-                <button id="stix-select-all-toggle" class="btn btn-ghost" data-action="stix-select-all-toggle" data-i18n="rules.bulk.select_all">Select all</button>
-                <button id="stix-bulk-toggle" class="btn btn-ghost" data-action="stix-bulk-toggle" data-i18n="rules.bulk.enable" disabled>Bulk edit</button>
-                <div class="column-picker">
-                  <button id="stix-columns-toggle" class="btn btn-ghost" data-action="stix-columns-toggle" data-i18n="common.show_hide_columns">View columns</button>
-                  <div id="stix-columns-menu" class="column-menu hidden"></div>
-                </div>
-              </div>
               <div class="stix-actions-right">
-                <button id="stix-create-open" class="btn btn-success" data-action="stix-create-open" data-i18n="stix_objects.create">Create new</button>
-                <button id="stix-export-selected" class="btn btn-success" data-action="stix-export-selected" data-i18n="rules.bulk.export_selected" disabled>Export selected</button>
-                <button id="stix-delete-selected" class="btn btn-danger" data-action="stix-delete-selected" data-i18n="rules.bulk.delete_selected" disabled>Delete selected</button>
+                <button id="stix-create-open-table" class="btn btn-primary icon-only" data-action="stix-create-open" data-i18n-title="stix_objects.create" aria-label="Create" title="Create"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
+                <label class="btn btn-primary btn-import icon-only stix-import-label" data-i18n-title="stix_objects.import" aria-label="Import STIX objects" title="Import STIX objects">
+                  <i class="fa-solid fa-file-import" aria-hidden="true"></i>
+                  <input id="stix-import-file" type="file" accept=".json" class="hidden">
+                </label>
+                <button id="stix-export-selected" class="btn btn-success icon-only" data-action="stix-export-selected" data-i18n-title="rules.bulk.export_selected" aria-label="Export selected" title="Export selected" disabled><i class="fa-solid fa-file-export" aria-hidden="true"></i></button>
+                <button id="stix-delete-selected" class="btn btn-danger icon-only" data-action="stix-delete-selected" data-i18n-title="rules.bulk.delete_selected" aria-label="Delete selected" title="Delete selected" disabled><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
               </div>
             </div>
             <div class="table-meta" id="stix-objects-meta"></div>
@@ -503,105 +487,17 @@
       <section id="panel-rulelab" class="panel">
         <div class="rulelab-grid">
           <article class="editor-card glass">
-            <header>
+            <header class="rulelab-head">
               <h3 data-i18n="rulelab.editor.title">STIX Pattern Editor</h3>
-            </header>
-            <div class="rulelab-toolbar">
-              <div class="metadata-grid">
-                <label>
-                  <span data-i18n="rulelab.title">Rule title</span>
-                  <input
-                    id="rulelab-title"
-                    data-i18n-placeholder="rulelab.title.placeholder"
-                    placeholder="Rule title for catalog"
-                    value="SPUC Web Lab rule"
-                  >
-                </label>
-                <label>
-                  <span data-i18n="rulelab.description_md">Rich description (Markdown)</span>
-                  <div class="markdown-editor" data-md-editor="rulelab-description">
-                    <div class="markdown-editor-tabs">
-                      <button type="button" class="btn btn-ghost active" data-action="markdown-tab" data-editor="rulelab-description" data-tab="edit" data-i18n="markdown.edit">Edit</button>
-                      <button type="button" class="btn btn-ghost" data-action="markdown-tab" data-editor="rulelab-description" data-tab="preview" data-i18n="markdown.preview">Preview</button>
-                    </div>
-                    <textarea
-                      id="rulelab-description"
-                      class="markdown-editor-input"
-                      rows="3"
-                      data-i18n-placeholder="rulelab.description.placeholder"
-                      placeholder="Describe the objective, context and expected telemetry in Markdown."
-                    ></textarea>
-                    <article id="rulelab-description-preview" class="markdown-preview hidden"></article>
-                  </div>
-                </label>
-                <div class="trust-row">
-                  <div class="trust-item">
-                    <div class="meta-head">
-                      <span>TLP</span>
-                      <span class="help-tip" tabindex="0" aria-label="Info about TLP">
-                        <span class="help-tip-icon">?</span>
-                        <span class="help-tip-content">
-                          <span data-i18n="help.tlp.body">Traffic Light Protocol (TLP) defines how information is shared.</span>
-                          <a href="https://www.first.org/tlp/" target="_blank" rel="noreferrer" data-i18n="help.official_doc">Official documentation</a>
-                        </span>
-                      </span>
-                    </div>
-                    <select id="rulelab-tlp" class="level-select tlp-select level-green" data-action="level-select">
-                      <option value="TLP:CLEAR">TLP:CLEAR</option>
-                      <option value="TLP:GREEN" selected>TLP:GREEN</option>
-                      <option value="TLP:AMBER">TLP:AMBER</option>
-                      <option value="TLP:AMBER+STRICT">TLP:AMBER+STRICT</option>
-                      <option value="TLP:RED">TLP:RED</option>
-                    </select>
-                  </div>
-                  <div class="trust-item">
-                    <div class="meta-head">
-                      <span>PAP</span>
-                      <span class="help-tip" tabindex="0" aria-label="Info about PAP">
-                        <span class="help-tip-icon">?</span>
-                        <span class="help-tip-content">
-                          <span data-i18n="help.pap.body">Permissible Actions Protocol (PAP) defines the allowed actions for shared information.</span>
-                          <a href="https://www.cisa.gov/resources-tools/resources/tlp-and-pap-overview" target="_blank" rel="noreferrer" data-i18n="help.official_doc">Official documentation</a>
-                        </span>
-                      </span>
-                    </div>
-                    <select id="rulelab-pap" class="level-select pap-select level-green" data-action="level-select">
-                      <option value="PAP:CLEAR">PAP:CLEAR</option>
-                      <option value="PAP:GREEN" selected>PAP:GREEN</option>
-                      <option value="PAP:AMBER">PAP:AMBER</option>
-                      <option value="PAP:RED">PAP:RED</option>
-                    </select>
-                  </div>
-                  <label class="trust-item">
-                    <div class="meta-head">
-                      <span data-i18n="rulelab.confidence">Confidence</span>
-                      <span class="help-tip" tabindex="0" aria-label="Info about detection confidence">
-                        <span class="help-tip-icon">?</span>
-                        <span class="help-tip-content">
-                          <span data-i18n="help.confidence.body">Detection confidence estimates how reliably the rule identifies adversary behavior.</span>
-                        </span>
-                      </span>
-                    </div>
-                    <input id="rulelab-confidence" type="number" min="0" max="100" value="70">
-                  </label>
-                  <label class="trust-item">
-                    <div class="meta-head">
-                      <span>TTP (ATT&CK)</span>
-                      <span class="help-tip" tabindex="0" aria-label="Info about TTP">
-                        <span class="help-tip-icon">?</span>
-                        <span class="help-tip-content">
-                          <span>Optional technique id such as T1059 or T1047, saved with the rule and reused in emulation exports.</span>
-                        </span>
-                      </span>
-                    </div>
-                    <input id="rulelab-ttp" list="ttp-options" placeholder="T1059">
-                  </label>
-                </div>
+              <div class="rulelab-head-actions">
+                <button id="rulelab-export-bundle" class="btn btn-warning icon-only" data-action="rulelab-export-bundle" data-i18n-title="rulelab.export_bundle" aria-label="Export STIX bundle" title="Export STIX bundle" disabled><i class="fa-solid fa-file-export" aria-hidden="true"></i></button>
+                <button id="rulelab-save" class="btn btn-success icon-only" data-i18n-title="rulelab.save" aria-label="Save Rule" title="Save Rule" disabled><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i></button>
               </div>
-            </div>
+            </header>
             <p class="muted rulelab-doc-link">
               <a href="https://docs.oasis-open.org/cti/stix/v2.1/cs02/stix-v2.1-cs02.html#_e8slinrhxcc9" target="_blank" rel="noreferrer" data-i18n="rulelab.guide">STIX Patterning guide</a>
             </p>
+            <div id="rulelab-editing-banner" class="rulelab-editing-banner hidden"></div>
             <div id="rulelab-editor-shell" class="rulelab-editor-shell editor-neutral">
               <pre id="rulelab-highlight" class="syntax-overlay" aria-hidden="true"></pre>
               <textarea id="rulelab-input" class="rulelab-input" rows="15" spellcheck="false" placeholder="[process:command_line MATCHES '^.*echo.*$']"></textarea>
@@ -612,17 +508,10 @@
                 <span class="rulelab-pattern-status-label" data-i18n="rulelab.pattern_status.label">Rule status</span>
                 <span id="rulelab-pattern-status-text" class="rulelab-pattern-status-value" data-i18n="rulelab.pattern_status.empty">No pattern entered</span>
               </div>
-              <button id="rulelab-save" class="btn btn-success" data-i18n="rulelab.save" disabled>Save Rule</button>
             </div>
-            <div class="compatibility-inline">
+            <div class="compatibility-inline is-empty">
               <header class="compatibility-header">
                 <h3 data-i18n="rulelab.compatibility.panel">Target compatibility</h3>
-                <input
-                  id="rulelab-compat-filter"
-                  type="search"
-                  data-i18n-placeholder="rulelab.compatibility.filter.placeholder"
-                  placeholder="Filter outputs by target/status/summary"
-                >
               </header>
               <div id="rulelab-compat-meta" class="muted compatibility-meta"></div>
               <div id="rulelab-status" class="status-box muted" data-i18n="rulelab.status.live">Real-time validation and compatibility.</div>
@@ -644,7 +533,7 @@
       <section id="panel-adversaries" class="panel">
         <article id="adversaries-welcome-card" class="glass rules-welcome-card workspace-chooser-card">
           <header>
-            <h3 data-i18n="adversaries.welcome.title">Adversaries workspace</h3>
+            <h3 data-i18n="adversaries.welcome.title">Adversaries</h3>
             <p class="muted" data-i18n="adversaries.welcome.subtitle">Choose if you want to explore existing adversaries or create a new one.</p>
           </header>
           <div class="welcome-stack rules-welcome-actions">
@@ -662,33 +551,34 @@
                 <span class="muted" data-i18n="adversaries.welcome.catalog.desc">Search, filter and export existing adversaries.</span>
               </span>
             </button>
+            <button class="welcome-action welcome-action-row" data-action="welcome-nav" data-route="adversaries-payloads">
+              <span class="welcome-icon" aria-hidden="true">📦</span>
+              <span class="welcome-copy">
+                <strong data-i18n="adversaries.welcome.payloads.title">Manage payloads</strong>
+                <span class="muted" data-i18n="adversaries.welcome.payloads.desc">View, create and delete reusable payloads for adversary plans.</span>
+              </span>
+            </button>
           </div>
         </article>
 
         <section id="adversaries-catalog-shell" class="stack">
-          <article id="adversaries-safety-toast" class="glass adversary-safety-toast">
-            <div class="adversary-safety-head">
-              <h4 data-i18n="adversaries.tutorial.title">How to use adversaries safely</h4>
-              <button
-                type="button"
-                class="icon-btn"
-                data-action="adversary-safety-dismiss"
-                data-i18n-title="adversaries.tutorial.dismiss"
-                title="Dismiss"
-                aria-label="Dismiss"
-              >✕</button>
+          <article id="adversaries-empty-state" class="glass adversaries-empty-state hidden">
+            <div class="adversaries-empty-body">
+              <h3 data-i18n="adversaries.empty.title">No adversaries created yet</h3>
+              <p class="muted" data-i18n="adversaries.empty.body">You do not have any adversary plan to emulate yet. Create your first adversary to start testing.</p>
+              <div class="adversaries-empty-actions">
+                <button class="btn btn-primary" data-action="adversaries-empty-create" data-i18n="adversaries.empty.create">Create first adversary</button>
+                <button class="btn btn-ghost" data-action="adversaries-help-open" data-i18n="adversaries.help_agent.button">How to test the agent</button>
+              </div>
             </div>
-            <p class="muted" data-i18n="adversaries.tutorial.body">Use adversary plans only in controlled lab systems with explicit authorization and logging enabled.</p>
-            <ol class="hint-steps compact">
-              <li data-i18n="adversaries.tutorial.step1">Prepare isolated hosts/VMs and an approved telemetry stack.</li>
-              <li data-i18n="adversaries.tutorial.step2">Export the required build and execute in your selected runner.</li>
-              <li data-i18n="adversaries.tutorial.step3">Collect evidence, compare detections, and iterate the plan.</li>
-            </ol>
           </article>
-          <article class="glass table-card">
+          <article id="adversaries-catalog-main" class="glass table-card">
             <header class="catalog-head-row catalog-head-row-actions-only">
               <span class="catalog-head-spacer" aria-hidden="true"></span>
-              <button id="adversaries-create-open" class="btn btn-primary icon-only" data-i18n-title="adversaries.create.submit" title="Create new adversary" aria-label="Create new adversary">＋</button>
+              <div class="catalog-head-actions">
+                <button id="adversaries-help-open" class="btn btn-ghost icon-only" data-action="adversaries-help-open" data-i18n-title="adversaries.help_agent.button" title="How to test the agent" aria-label="How to test the agent"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                <button id="adversaries-create-open" class="btn btn-primary icon-only" data-i18n-title="adversaries.create.submit" title="Create new adversary" aria-label="Create new adversary">＋</button>
+              </div>
             </header>
             <div class="toolbar-card adversaries-toolbar-modern">
               <label class="rules-filter-field">
@@ -733,7 +623,6 @@
                   <button id="adversaries-view-cards" class="btn btn-ghost icon-only active" data-action="adversaries-view-mode" data-mode="cards" data-i18n-title="rules.view.cards" aria-label="Cards" title="Cards"><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i></button>
                   <button id="adversaries-view-table" class="btn btn-ghost icon-only" data-action="adversaries-view-mode" data-mode="table" data-i18n-title="rules.view.table" aria-label="Table" title="Table"><i class="fa-solid fa-table-list" aria-hidden="true"></i></button>
                 </div>
-                <button id="adversaries-select-all-toggle" class="btn btn-ghost icon-only" data-action="adversaries-select-all-toggle" data-i18n-title="adversaries.bulk.select_all" aria-label="Select all" title="Select all"><i class="fa-regular fa-square" aria-hidden="true"></i></button>
                 <button id="adversaries-bulk-toggle" class="btn btn-ghost icon-only" data-action="adversaries-bulk-toggle" data-i18n-title="adversaries.bulk.enable" aria-label="Bulk edit" title="Bulk edit" disabled><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>
                 <div class="column-picker">
                   <button id="adversaries-columns-toggle" class="btn btn-ghost icon-only" data-action="adversaries-columns-toggle" data-i18n-title="common.show_hide_columns" aria-label="View columns" title="View columns"><i class="fa-solid fa-table-columns" aria-hidden="true"></i></button>
@@ -751,6 +640,179 @@
             <div class="pager" id="adversaries-pager"></div>
           </article>
         </section>
+
+        <section id="adversaries-payloads-shell" class="stack hidden">
+          <article id="payloads-welcome-card" class="glass adversaries-empty-state hidden">
+            <div class="adversaries-empty-body">
+              <h3>Aun no hay payloads creados</h3>
+              <p class="muted">Todavia no tienes payloads reutilizables en el catalogo. Crea el primero para empezar a probar.</p>
+              <div class="adversaries-empty-actions">
+                <button class="btn btn-primary" data-action="payload-catalog-open-create" data-i18n="adversaries.payload.empty.create">Create first payload</button>
+                <button class="btn btn-ghost" data-action="payload-catalog-open-docs" data-i18n="adversaries.payload.empty.docs">Consult payload documentation</button>
+              </div>
+            </div>
+          </article>
+
+          <section id="payloads-catalog-shell" class="stack hidden">
+            <article class="glass table-card">
+              <div id="payload-catalog-toolbar" class="toolbar-card payloads-toolbar">
+                <div class="payloads-top-row">
+                  <label class="stix-search-wrap payload-search-wrap" for="payload-catalog-search">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                    <input id="payload-catalog-search" type="search" data-i18n-placeholder="adversaries.payload.search" placeholder="Search payloads">
+                  </label>
+                  <div class="payloads-actions-inline">
+                    <button id="payload-catalog-filters-toggle" type="button" class="btn btn-ghost icon-only" data-action="payload-catalog-filters-toggle" data-i18n-title="rules.filters.toggle" title="Filters" aria-label="Filters" aria-expanded="false"><i class="fa-solid fa-sliders" aria-hidden="true"></i></button>
+                    <button id="payload-catalog-create-header" type="button" class="btn btn-primary icon-only" data-action="payload-catalog-open-create" data-i18n-title="adversaries.payload.catalog_create_btn" title="New payload" aria-label="New payload"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
+                    <button id="payload-catalog-delete-selected" type="button" class="btn btn-danger icon-only" data-action="payload-catalog-delete-selected" data-i18n-title="rules.bulk.delete_selected" title="Delete selected" aria-label="Delete selected" disabled><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
+                    <span id="payload-catalog-bulk-count" class="muted payload-bulk-count-inline"></span>
+                  </div>
+                </div>
+                <div id="payload-catalog-filters-revealer" class="payload-filters-revealer">
+                  <div class="payload-filters-revealer-inner">
+                    <div class="payload-filters-row">
+                      <label class="rules-filter-field">
+                        <span data-i18n="adversaries.payload.language">Payload type</span>
+                        <select id="payload-catalog-tech" multiple size="5">
+                          <option value="bash">Bash</option>
+                          <option value="powershell">PowerShell</option>
+                          <option value="python">Python</option>
+                          <option value="javascript">JavaScript</option>
+                          <option value="rubber_ducky">Rubber Ducky / HID</option>
+                        </select>
+                      </label>
+                      <label class="rules-filter-field">
+                        <span data-i18n="adversaries.payload.runner">Runner</span>
+                        <select id="payload-catalog-runner" multiple size="6">
+                          <option value="spuc-agent">spuc-agent</option>
+                          <option value="bash">bash</option>
+                          <option value="powershell">powershell</option>
+                          <option value="python">python</option>
+                          <option value="javascript">javascript</option>
+                          <option value="rubber_ducky">rubber_ducky / HID</option>
+                        </select>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div id="payload-catalog-list" class="payload-catalog-list"></div>
+            </article>
+          </section>
+        </section>
+
+        <section id="adversary-editor-view" class="stack hidden">
+          <article class="glass adversary-editor-hero">
+            <div>
+              <p class="eyebrow" data-i18n="adversaries.editor.eyebrow">Adversary builder</p>
+              <h3 id="adversary-editor-heading" data-i18n="adversaries.editor.new_title">New adversary</h3>
+              <p id="adversary-editor-subtitle" class="muted" data-i18n="adversaries.editor.subtitle">Configure a reproducible plan, validate it, and export only for authorized lab runners.</p>
+            </div>
+            <div class="adversary-editor-actions">
+              <button id="adversary-editor-back" type="button" class="btn btn-ghost" data-action="adversary-back-to-list" data-i18n="adversaries.editor.back">Back to list</button>
+              <button id="adversary-editor-secondary" type="button" class="btn btn-ghost hidden" data-action="adversary-cancel-edit" data-i18n="common.cancel">Cancel</button>
+              <button id="adversary-editor-primary" type="button" class="btn btn-primary hidden" data-action="adversary-enter-edit" data-i18n="common.edit">Edit</button>
+              <button id="adversary-editor-new" type="button" class="btn btn-primary" data-action="adversary-new-inline" data-i18n="adversaries.editor.new">New adversary</button>
+            </div>
+          </article>
+          <div id="adversary-editor-mount"></div>
+        </section>
+      </section>
+
+      <!-- Tabbed Adversary Editor Panel (NEW) -->
+      <section id="panel-adversary-editor" class="panel hidden">
+        <!-- Editor Header -->
+        <article class="glass adversary-editor-header">
+          <div class="adversary-editor-header-title">
+            <div>
+              <h2 id="adversary-editor-title" data-i18n="adversaries.editor.editing_title">Editing adversary</h2>
+              <p id="adversary-editor-description" class="muted" data-i18n="adversaries.editor.subtitle">Configure a reproducible plan, validate it, and export only for authorized lab runners.</p>
+            </div>
+          </div>
+          <div class="adversary-editor-header-actions">
+            <button type="button" id="adversary-editor-back-list" class="btn btn-danger" data-action="adversary-back-to-list" data-i18n="adversaries.editor.back">Back to list</button>
+            <button type="button" id="adversary-editor-plan" class="btn btn-primary" data-action="adversary-editor-plan" data-i18n="adversaries.editor.plan">Plan adversary</button>
+            <div class="adversary-editor-export-menu-wrap">
+              <button type="button" id="adversary-editor-export-toggle" class="btn btn-success" data-action="adversary-editor-export-toggle" data-i18n="adversaries.detail.export" title="Export adversary" aria-label="Export adversary">Export adversary</button>
+              <div id="adversary-editor-export-menu" class="adversary-editor-export-menu hidden"></div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Tab Content Container -->
+        <div id="adversary-editor-tab-content" class="adversary-editor-tab-content">
+          <!-- Overview Tab -->
+          <section id="adversary-editor-overview" class="adversary-editor-tab active">
+            <article class="glass adversary-overview-card">
+              <form id="adversary-editor-form" class="adversary-form-grid">
+                <div class="adversary-form-section">
+                  <label>
+                    <span data-i18n="adversaries.create.name">Name</span>
+                    <input id="adversary-editor-name" type="text" required data-i18n-placeholder="adversaries.create.name" placeholder="Adversary name">
+                  </label>
+                  <label>
+                    <span data-i18n="adversaries.create.confidence">Confidence</span>
+                    <input id="adversary-editor-confidence" type="number" min="0" max="100" value="70">
+                  </label>
+                  <label>
+                    <span data-i18n="adversaries.create.target_platform">Target platform</span>
+                    <select id="adversary-editor-target-platform" required>
+                      <option value="" data-i18n="common.all_platforms">All platforms</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="adversary-form-section">
+                  <label>
+                    <span data-i18n="adversaries.create.description">Description</span>
+                    <textarea id="adversary-editor-description-input" rows="6" placeholder="Describe the adversary behavior..."></textarea>
+                  </label>
+                </div>
+              </form>
+            </article>
+          </section>
+
+          <!-- Adversary Flow Tab -->
+          <section id="adversary-editor-flow" class="adversary-editor-tab hidden">
+            <div class="adversary-flow-layout">
+              <!-- Left Column: Step Sequence -->
+              <aside class="adversary-flow-sequence">
+                <div class="flow-sequence-header">
+                  <h4 data-i18n="adversaries.flow.sequence">Adversary flow</h4>
+                  <div class="flow-sequence-count">
+                    <span class="muted" data-i18n="adversaries.flow.steps_label">Number of steps:</span>
+                    <span id="adversary-flow-count" class="badge success">0</span>
+                  </div>
+                </div>
+                <ol id="adversary-flow-steps" class="flow-steps-list"></ol>
+              </aside>
+
+              <!-- Right Column: Add Behaviors -->
+              <article class="adversary-flow-add-section glass">
+                <div class="flow-add-header">
+                  <div class="flow-add-copy">
+                    <h4 data-i18n="adversaries.flow.add_behaviors">Add behaviors</h4>
+                  </div>
+                  <div class="flow-add-actions">
+                    <button type="button" id="adversary-flow-add-ability" class="btn btn-primary" data-action="adversary-open-ability-picker" data-i18n="adversaries.editor.add_catalog" data-i18n-title="adversaries.flow.add_ability_title" title="Add ability from catalog">
+                      <i class="fa-solid fa-shapes" aria-hidden="true"></i>
+                      <span data-i18n="adversaries.editor.add_catalog">Add catalog ability</span>
+                    </button>
+                    <button type="button" id="adversary-flow-add-payload" class="btn btn-primary" data-action="adversary-open-payload-picker" data-i18n="adversaries.editor.add_payload" data-i18n-title="adversaries.flow.add_payload_title" title="Add payload from catalog">
+                      <i class="fa-solid fa-box-open" aria-hidden="true"></i>
+                      <span data-i18n="adversaries.editor.add_payload">Add payload from catalog</span>
+                    </button>
+                    <button type="button" id="adversary-flow-create-payload" class="btn btn-ghost" data-action="adversary-open-payload-form" data-i18n="adversaries.payload.create_inline" data-i18n-title="adversaries.flow.create_payload_title" title="Create a new payload">
+                      <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                      <span data-i18n="adversaries.payload.create_inline">Create new payload</span>
+                    </button>
+                  </div>
+                </div>
+
+                <section id="adversary-flow-step-detail" class="flow-step-detail"></section>
+              </article>
+            </div>
+          </section>
+        </div>
       </section>
 
       <section id="panel-learning" class="panel">
@@ -762,16 +824,18 @@
           <input id="learning-search" type="search" data-i18n-placeholder="learning.search.placeholder" placeholder="Search exercises...">
           <div class="learning-toolbar-controls">
             <label class="learning-toggle learning-path-toggle">
-              <span data-i18n="learning.paths.label">Learning path</span>
+              <span class="learning-control-label" data-i18n="learning.paths.label">Learning path</span>
               <select id="learning-path">
                 <option value="" data-i18n="learning.paths.all">All paths</option>
               </select>
             </label>
-            <label class="learning-toggle learning-pending-toggle">
-              <input id="learning-only-pending" type="checkbox">
-              <span data-i18n="learning.only_pending">Only pending</span>
-            </label>
-            <span id="learning-progress" class="badge success">0/0</span>
+            <div class="learning-progress-control">
+              <label class="learning-toggle learning-pending-toggle">
+                <input id="learning-only-pending" type="checkbox">
+                <span data-i18n="learning.only_pending">Only pending</span>
+              </label>
+              <span id="learning-progress" class="badge success">0/0</span>
+            </div>
           </div>
         </article>
         <section id="learning-paths-summary" class="learning-paths-summary"></section>
@@ -860,6 +924,22 @@
     </footer>
   </div>
 
+  <dialog id="support-dialog" class="detail-dialog about-dialog">
+    <article class="glass detail-card about-card">
+        <header class="about-card-head">
+          <div class="about-brand">
+            <img class="about-logo" src="/assets/logo-sputnik.png" alt="SPUC logo">
+            <div>
+              <h3 data-i18n="about.title">About SPUC</h3>
+              <p class="muted" data-i18n="about.subtitle">Local-first platform for STIX objects, rules and defensive emulation.</p>
+            </div>
+          </div>
+        <button type="button" class="icon-btn detail-close-btn" data-action="close-support" data-i18n-title="common.close" aria-label="Close" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </header>
+      <div id="about-view" class="about-layout"></div>
+    </article>
+  </dialog>
+
   <dialog id="detail-dialog" class="detail-dialog">
     <article class="glass detail-card">
       <header>
@@ -873,9 +953,14 @@
         </div>
       </header>
       <div id="detail-tabs" class="detail-tabs">
-        <button id="detail-tab-overview" class="btn btn-ghost hidden" data-action="rule-detail-tab" data-tab="overview">Overview</button>
-        <button id="detail-tab-view" class="btn btn-ghost active" data-action="detail-tab" data-tab="view" data-i18n="common.view">View</button>
-        <button id="detail-tab-json" class="btn btn-ghost" data-action="detail-tab" data-tab="json">JSON</button>
+        <div class="detail-tabs-left">
+          <button id="detail-tab-overview" class="btn btn-ghost hidden" data-action="rule-detail-tab" data-tab="overview">Overview</button>
+          <button id="detail-tab-view" class="btn btn-ghost active" data-action="detail-tab" data-tab="view" data-i18n="common.view">View</button>
+          <button id="detail-tab-json" class="btn btn-ghost" data-action="detail-tab" data-tab="json">JSON</button>
+        </div>
+        <div class="detail-tabs-right">
+          <button id="detail-rule-edit-inline" class="btn btn-ghost icon-only hidden" data-action="rule-open-in-lab" data-i18n-title="rules.edit" aria-label="Edit rule" title="Edit rule"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>
+        </div>
       </div>
       <div id="detail-view" class="detail-view"></div>
       <pre id="detail-raw" class="detail-raw hidden"></pre>
@@ -887,19 +972,20 @@
     <article class="glass detail-card">
       <header>
         <h3 data-i18n="rules.indicates.title">Create indicates relation</h3>
-        <div class="detail-head-right">
-          <button
-            type="button"
-            class="icon-btn icon-only"
-            data-action="indicates-create-object"
-            data-i18n-title="stix_objects.create"
-            title="Create new"
-            aria-label="Create new"
-          >＋</button>
-        </div>
+        <button id="indicates-dialog-close" class="icon-btn detail-close-btn" data-i18n-title="common.close" aria-label="Close" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
       </header>
       <form id="indicates-form" class="stack">
         <input id="indicates-rule-id" type="hidden">
+        <div class="indicates-search-row">
+          <input
+            id="indicates-search"
+            type="search"
+            placeholder="Buscar por nombre o ID (ej: T1059, Emotet)..."
+            data-i18n-placeholder="rules.indicates.search"
+            autocomplete="off"
+          >
+        </div>
+        <div id="indicates-search-results" class="indicates-search-results"></div>
         <section id="indicates-existing" class="indicates-existing hidden">
           <h4 data-i18n="rules.indicates.existing">Existing related objects</h4>
           <div id="indicates-existing-list" class="indicates-existing-list"></div>
@@ -910,6 +996,9 @@
             <option value="" data-i18n="rules.indicates.catalog_placeholder">Select one object...</option>
           </select>
         </label>
+        <div class="modal-actions-right">
+          <button type="button" class="btn btn-ghost" data-action="indicates-create-object" data-i18n="stix_objects.create">Create new</button>
+        </div>
         <section id="indicates-new-fields" class="stack">
           <label>
             <span data-i18n="rules.indicates.stix_id">STIX ID</span>
@@ -953,9 +1042,14 @@
           <div id="adversary-emulable-platforms" class="rule-card-tags" aria-label="Emulable platforms"></div>
         </header>
         <p class="muted" data-i18n="adversaries.create.flow_hint">Plan your adversary flow: filter catalog abilities, add ordered steps, and compile outputs.</p>
+        <div class="adversary-editor-tabs" role="tablist" aria-label="Adversary editor sections">
+          <button type="button" class="btn btn-ghost active" data-action="adversary-tab" data-tab="plan" data-i18n="adversaries.editor.tab.plan">Plan</button>
+          <button type="button" class="btn btn-ghost" data-action="adversary-tab" data-tab="criteria" data-i18n="adversaries.editor.tab.validate">Validate and export</button>
+        </div>
         <section class="adversary-planner-grid">
           <article class="planner-card" id="adversary-pane-plan-settings">
             <div class="planner-card-title" data-i18n="adversaries.create.plan">Plan settings</div>
+            <p class="muted" data-i18n="adversaries.editor.config_hint">Define identity, target platform, and confidence before adding steps.</p>
             <div class="planner-meta-row">
               <label>
                 <span data-i18n="adversaries.create.name">Name</span>
@@ -989,18 +1083,71 @@
               <span data-i18n="adversaries.create.selected">Selected steps</span>
               <span id="adversary-selected-count" class="badge success">0</span>
             </div>
+            <div class="planner-card-actions-inline">
+              <button type="button" class="btn btn-primary" data-action="adversary-open-ability-picker" data-i18n="adversaries.editor.add_catalog">Add catalog ability</button>
+            </div>
             <div id="adversary-selected" class="selected-ability-list"></div>
           </article>
+          <article class="planner-card adversary-custom-payload-card" id="adversary-pane-custom-payload">
+            <div class="planner-card-title" data-i18n="adversaries.payload.title">Custom payload</div>
+            <p class="muted" data-i18n="adversaries.payload.safety">SPUC does not execute payloads from the UI. Export only for controlled and explicitly authorized labs.</p>
+            <div class="planner-meta-row">
+              <label>
+                <span data-i18n="adversaries.payload.name">Payload name</span>
+                <input id="adversary-payload-name" data-i18n-placeholder="adversaries.payload.name_placeholder" placeholder="Example: Linux telemetry probe">
+              </label>
+              <label>
+                <span data-i18n="adversaries.payload.runner">Runner</span>
+                <select id="adversary-payload-runner">
+                  <option value="spuc-agent">spuc-agent</option>
+                  <option value="bash">bash</option>
+                  <option value="powershell">powershell</option>
+                  <option value="python">python</option>
+                  <option value="javascript">javascript</option>
+                  <option value="rubber-ducky">rubber-ducky / HID</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="adversaries.payload.language">Payload type</span>
+                <select id="adversary-payload-language">
+                  <option value="bash">Bash</option>
+                  <option value="powershell">PowerShell</option>
+                  <option value="python">Python</option>
+                  <option value="javascript">JavaScript</option>
+                  <option value="rubber-ducky">Rubber Ducky / HID</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              <span data-i18n="adversaries.payload.description">Description</span>
+              <input id="adversary-payload-description" data-i18n-placeholder="adversaries.payload.description_placeholder" placeholder="What this payload is meant to validate">
+            </label>
+            <label>
+              <span data-i18n="adversaries.payload.content">Payload content</span>
+              <textarea id="adversary-payload-content" rows="7" spellcheck="false" data-i18n-placeholder="adversaries.payload.content_placeholder" placeholder="Paste or write the payload here"></textarea>
+            </label>
+            <div class="adversary-payload-actions">
+              <button type="button" class="btn btn-ghost" data-action="adversary-preview-payload" data-i18n="adversaries.payload.preview">Preview</button>
+              <button type="button" id="adversary-add-custom-payload" class="btn btn-primary" data-action="adversary-add-custom-payload" data-i18n="adversaries.payload.add">Add custom payload</button>
+            </div>
+            <pre id="adversary-payload-preview" class="detail-code hidden"></pre>
+          </article>
+          <article class="planner-card hidden" id="adversary-pane-criteria">
+            <div class="planner-card-title" data-i18n="adversaries.editor.validation_title">Validation and export</div>
+            <p class="muted" data-i18n="adversaries.editor.validation_hint">SPUC generates reproducible artifacts; it does not execute this plan from the web interface.</p>
+            <div id="adversary-validation-summary" class="adversary-validation-summary"></div>
+            <div id="adversary-execution-criteria"></div>
+          </article>
         </section>
-        <div class="dialog-actions modal-actions-split">
+        <div class="dialog-actions modal-actions-split hidden">
           <div class="modal-actions-left">
-            <button type="button" id="adversary-cancel" class="btn btn-danger" data-i18n="common.cancel">Cancel</button>
+            <button type="button" id="adversary-cancel" class="btn btn-danger" data-i18n="adversaries.editor.back">Back to list</button>
           </div>
           <div class="modal-actions-right adversary-dialog-actions-right">
-            <button type="button" class="btn btn-primary" data-action="adversary-open-ability-picker">Anadir habilidades</button>
+            <button type="button" class="btn btn-primary" data-action="adversary-open-ability-picker" data-i18n="adversaries.editor.add_catalog">Add catalog ability</button>
             <div id="adversary-export-inline" class="detail-copy-emulation hidden">
               <div class="rule-export-combo">
-                <button type="button" class="btn btn-success" id="adversary-export-inline-button" title="Export adversary" aria-label="Export adversary">Exportar</button>
+                <button type="button" class="btn btn-success" id="adversary-export-inline-button" title="Export adversary" aria-label="Export adversary">Export</button>
                 <select id="adversary-export-inline-target" class="rule-export-select"></select>
               </div>
             </div>
@@ -1014,11 +1161,11 @@
   <dialog id="adversary-ability-picker-dialog" class="detail-dialog">
     <article class="glass detail-card">
       <header>
-        <h3>Catalogo de habilidades</h3>
-        <button type="button" class="btn btn-ghost" data-action="adversary-close-ability-picker">Cerrar</button>
+        <h3 data-i18n="adversaries.picker.title">Ability catalog</h3>
+        <button type="button" class="icon-btn detail-close-btn" data-action="adversary-close-ability-picker" data-i18n-title="common.close" aria-label="Close" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
       </header>
       <div class="rule-detail-subtabs" id="adversary-picker-tabs">
-        <button type="button" class="btn btn-ghost active" data-action="adversary-picker-tab" data-tab="catalog">Catalogo</button>
+        <button type="button" class="btn btn-ghost active" data-action="adversary-picker-tab" data-tab="catalog" data-i18n="adversaries.picker.catalog">Catalog</button>
         <button type="button" class="btn btn-ghost" data-action="adversary-picker-tab" data-tab="dummy">Dummy</button>
       </div>
       <section id="adversary-picker-pane-catalog">
@@ -1075,6 +1222,139 @@
     </article>
   </dialog>
 
+  <dialog id="adversary-payload-picker-dialog" class="detail-dialog">
+    <article class="glass detail-card">
+      <header>
+        <h3 data-i18n="adversaries.payload.catalog_title">Payload catalog</h3>
+        <button type="button" class="icon-btn detail-close-btn" data-action="adversary-close-payload-picker" data-i18n-title="common.close" aria-label="Close" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </header>
+      <section class="planner-filter-grid">
+        <label>
+          <span data-i18n="adversaries.create.filter_search">Search</span>
+          <input id="adversary-flow-payload-search" type="search" data-i18n-placeholder="adversaries.payload.search" placeholder="Search payloads...">
+        </label>
+        <label>
+          <span data-i18n="adversaries.payload.language">Payload type</span>
+          <select id="adversary-flow-payload-technology">
+            <option value="all" data-i18n="common.all_types">All technologies</option>
+            <option value="bash">Bash</option>
+            <option value="powershell">PowerShell</option>
+            <option value="python">Python</option>
+            <option value="javascript">JavaScript</option>
+            <option value="rubber_ducky">Rubber Ducky / HID</option>
+          </select>
+        </label>
+      </section>
+      <div id="adversary-flow-payloads" class="flow-payloads-list"></div>
+      <div class="dialog-actions modal-actions-split">
+        <div class="modal-actions-left">
+          <button type="button" class="btn btn-danger" data-action="adversary-close-payload-picker" data-i18n="common.cancel">Cancel</button>
+        </div>
+        <div class="modal-actions-right">
+          <button type="button" class="btn btn-primary" data-action="adversary-open-payload-form" data-i18n="adversaries.payload.create_inline">Create new payload</button>
+        </div>
+      </div>
+    </article>
+  </dialog>
+
+  <dialog id="adversary-payload-form-dialog" class="detail-dialog">
+    <article class="glass detail-card">
+      <header>
+        <h3 data-i18n="adversaries.payload.new_title">Create payload</h3>
+        <button type="button" class="icon-btn detail-close-btn" data-action="adversary-cancel-payload-form" data-i18n-title="common.close" aria-label="Close" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </header>
+      <form id="adversary-flow-payload-form" class="stack">
+        <div class="adversary-payload-form-grid">
+          <label>
+            <span data-i18n="adversaries.payload.name">Payload name</span>
+            <input id="adversary-flow-payload-name" type="text" data-i18n-placeholder="adversaries.payload.name_placeholder" placeholder="e.g., Linux telemetry probe">
+          </label>
+          <label>
+            <span data-i18n="adversaries.payload.language">Technology</span>
+            <select id="adversary-flow-payload-tech">
+              <option value="bash">Bash</option>
+              <option value="powershell">PowerShell</option>
+              <option value="python">Python</option>
+              <option value="javascript">JavaScript</option>
+              <option value="rubber_ducky">Rubber Ducky / HID</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="adversaries.payload.runner">Runner</span>
+            <select id="adversary-flow-payload-runner">
+              <option value="spuc-agent">spuc-agent</option>
+              <option value="bash">bash</option>
+              <option value="powershell">powershell</option>
+              <option value="python">python</option>
+              <option value="javascript">javascript</option>
+              <option value="rubber-ducky">rubber-ducky / HID</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          <span data-i18n="adversaries.payload.description">Description</span>
+          <textarea id="adversary-flow-payload-desc" rows="2" data-i18n-placeholder="adversaries.payload.description_placeholder" placeholder="What this payload validates..."></textarea>
+        </label>
+        <label>
+          <span data-i18n="adversaries.payload.content">Payload content</span>
+          <textarea id="adversary-flow-payload-content" rows="8" spellcheck="false" data-i18n-placeholder="adversaries.payload.content_placeholder" placeholder="Paste payload code here..."></textarea>
+        </label>
+        <div class="adversary-payload-preview-actions">
+          <button type="button" class="btn btn-ghost" data-action="adversary-preview-payload" data-i18n="adversaries.payload.preview">Preview</button>
+          <pre id="adversary-payload-preview" class="detail-code hidden"></pre>
+        </div>
+        <div class="dialog-actions modal-actions-split">
+          <div class="modal-actions-left">
+            <button type="button" class="btn btn-danger" data-action="adversary-cancel-payload-form" data-i18n="common.cancel">Cancel</button>
+          </div>
+          <div class="modal-actions-right">
+            <button type="button" class="btn btn-success" data-action="adversary-save-custom-payload" data-i18n="adversaries.payload.add">Save and add to flow</button>
+          </div>
+        </div>
+      </form>
+    </article>
+  </dialog>
+
+  <dialog id="payload-catalog-form-dialog" class="detail-dialog">
+    <article class="glass detail-card compact-modal">
+      <header>
+        <h3 id="payload-catalog-form-title" data-i18n="payloads.create.title">Create payload</h3>
+      </header>
+      <form id="payload-catalog-create-form" class="stack">
+        <label>
+          <span data-i18n="adversaries.payload.name">Payload name</span>
+          <input id="payload-catalog-create-name" type="text" data-i18n-placeholder="adversaries.payload.name_placeholder" placeholder="e.g., Linux telemetry probe">
+        </label>
+        <label>
+          <span data-i18n="adversaries.payload.language">Payload type</span>
+          <select id="payload-catalog-create-tech">
+            <option value="bash">Bash</option>
+            <option value="powershell">PowerShell</option>
+            <option value="python">Python</option>
+            <option value="javascript">JavaScript</option>
+            <option value="rubber_ducky">Rubber Ducky / HID</option>
+          </select>
+        </label>
+        <label>
+          <span data-i18n="adversaries.payload.description">Description</span>
+          <textarea id="payload-catalog-create-desc" rows="2" data-i18n-placeholder="adversaries.payload.description_placeholder" placeholder="What this payload validates..."></textarea>
+        </label>
+        <label>
+          <span data-i18n="adversaries.payload.content">Content</span>
+          <textarea id="payload-catalog-create-content" rows="8" spellcheck="false" data-i18n-placeholder="adversaries.payload.content_placeholder" placeholder="Paste or write the payload here"></textarea>
+        </label>
+        <div class="dialog-actions modal-actions-split">
+          <div class="modal-actions-left">
+            <button type="button" class="btn btn-danger" data-action="payload-catalog-close-create" data-i18n="common.cancel">Cancel</button>
+          </div>
+          <div class="modal-actions-right">
+            <button id="payload-catalog-save-create" type="button" class="btn btn-success" data-action="payload-catalog-save-create" data-i18n="adversaries.payload.save">Save payload</button>
+          </div>
+        </div>
+      </form>
+    </article>
+  </dialog>
+
   <dialog id="confirm-dialog" class="detail-dialog">
     <article class="glass detail-card confirm-card">
       <header>
@@ -1083,37 +1363,165 @@
       <p id="confirm-message" class="muted"></p>
       <div class="dialog-actions modal-actions-split">
         <div class="modal-actions-left">
-          <button type="button" id="confirm-cancel" class="btn btn-danger" data-i18n="common.cancel">Cancel</button>
+          <button type="button" id="confirm-cancel" class="btn btn-ghost" data-i18n="common.cancel">Cancel</button>
         </div>
         <div class="modal-actions-right">
-          <button type="button" id="confirm-accept" class="btn btn-primary" data-i18n="common.confirm">Confirm</button>
+          <button type="button" id="confirm-accept" class="btn btn-danger" data-i18n="common.confirm">Confirm</button>
         </div>
       </div>
     </article>
   </dialog>
 
   <dialog id="stix-object-dialog" class="detail-dialog">
-    <article class="glass detail-card confirm-card">
+    <article class="glass detail-card">
       <header>
-        <h3 data-i18n="stix_objects.create">Create new</h3>
+        <h3 id="stix-object-dialog-title" data-i18n="stix_objects.create">Create new STIX object</h3>
+        <button type="button" id="stix-object-dialog-close" class="icon-btn detail-close-btn" data-i18n-title="common.close" aria-label="Close" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
       </header>
       <form id="stix-object-form" class="stack">
-        <label>
-          <span data-i18n="rules.indicates.stix_id">STIX ID</span>
-          <input id="stix-object-id" data-i18n-placeholder="rules.indicates.stix_id.placeholder" placeholder="malware--01234567-89ab-4def-8abc-0123456789ab" required>
+        <div class="stix-form-grid">
+          <label>
+            <span data-i18n="stix_objects.form.type">Object type</span>
+            <select id="stix-object-type" required>
+              <option value="attack-pattern">attack-pattern</option>
+              <option value="malware" selected>malware</option>
+              <option value="threat-actor">threat-actor</option>
+              <option value="intrusion-set">intrusion-set</option>
+              <option value="tool">tool</option>
+              <option value="campaign">campaign</option>
+              <option value="vulnerability">vulnerability</option>
+              <option value="identity">identity</option>
+              <option value="indicator">indicator</option>
+              <option value="course-of-action">course-of-action</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="stix_objects.form.name">Name</span>
+            <input id="stix-object-name" data-i18n-placeholder="rules.indicates.object_name.placeholder" placeholder="Example: Emotet" required autocomplete="off">
+            <div id="stix-name-similar" class="stix-name-similar hidden"></div>
+          </label>
+        </div>
+        <label class="stix-id-row">
+          <span data-i18n="stix_objects.form.id">STIX ID</span>
+          <input id="stix-object-id" class="stix-id-field" data-i18n-placeholder="rules.indicates.stix_id.placeholder" placeholder="malware--..." disabled>
         </label>
         <label>
-          <span data-i18n="rules.indicates.object_name">Object name</span>
-          <input id="stix-object-name" data-i18n-placeholder="rules.indicates.object_name.placeholder" placeholder="Example: Emotet" required>
+          <div class="stix-description-head">
+            <span data-i18n="stix_objects.form.description">Description</span>
+            <div class="markdown-editor-tabs stix-description-actions">
+              <button type="button" class="btn btn-ghost active" data-action="markdown-tab" data-editor="stix-object-description" data-tab="edit" data-i18n="markdown.edit">Edit</button>
+              <button type="button" class="btn btn-ghost" data-action="markdown-tab" data-editor="stix-object-description" data-tab="preview" data-i18n="markdown.preview">Preview</button>
+            </div>
+          </div>
+          <div class="markdown-editor" data-md-editor="stix-object-description">
+            <textarea id="stix-object-description" class="markdown-editor-input" rows="4" placeholder="Describe the object in Markdown..."></textarea>
+            <article id="stix-object-description-preview" class="markdown-preview hidden"></article>
+          </div>
         </label>
-        <p class="muted" data-i18n="rules.indicates.example">Example: STIX ID malware--01234567-89ab-4def-8abc-0123456789ab, object name Emotet.</p>
-        <p class="muted" data-i18n="rules.indicates.hint">SPUC validates STIX ID structure before saving the relation.</p>
+        <div class="stix-form-trust-row">
+          <div class="trust-item">
+            <div class="meta-head"><span>TLP</span></div>
+            <select id="stix-object-tlp" class="level-select tlp-select level-amber" data-action="level-select">
+              <option value="TLP:CLEAR">TLP:CLEAR</option>
+              <option value="TLP:GREEN">TLP:GREEN</option>
+              <option value="TLP:AMBER" selected>TLP:AMBER</option>
+              <option value="TLP:AMBER+STRICT">TLP:AMBER+STRICT</option>
+              <option value="TLP:RED">TLP:RED</option>
+            </select>
+          </div>
+          <div class="trust-item">
+            <div class="meta-head"><span>PAP</span></div>
+            <select id="stix-object-pap" class="level-select pap-select level-green" data-action="level-select">
+              <option value="PAP:CLEAR">PAP:CLEAR</option>
+              <option value="PAP:GREEN" selected>PAP:GREEN</option>
+              <option value="PAP:AMBER">PAP:AMBER</option>
+              <option value="PAP:RED">PAP:RED</option>
+            </select>
+          </div>
+          <label class="trust-item">
+            <div class="meta-head"><span data-i18n="stix_objects.form.first_seen">First seen</span></div>
+            <input id="stix-object-first-seen" type="date">
+          </label>
+          <label class="trust-item">
+            <div class="meta-head"><span data-i18n="stix_objects.form.created_at">Created at</span></div>
+            <input id="stix-object-created-at" type="date" readonly>
+          </label>
+        </div>
         <div class="dialog-actions modal-actions-split">
           <div class="modal-actions-left">
             <button type="button" id="stix-object-cancel" class="btn btn-danger" data-i18n="common.cancel">Cancel</button>
           </div>
           <div class="modal-actions-right">
             <button type="submit" class="btn btn-success" data-i18n="common.save">Save</button>
+          </div>
+        </div>
+      </form>
+    </article>
+  </dialog>
+
+  <dialog id="rulelab-save-dialog" class="detail-dialog">
+    <article class="detail-card glass">
+      <header>
+        <h3 data-i18n="rulelab.save_dialog.title">Save rule metadata</h3>
+        <button type="button" id="rulelab-save-dialog-close" class="icon-btn detail-close-btn" data-i18n-title="common.close" aria-label="Close" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </header>
+      <div id="rulelab-save-editing-note" class="rulelab-editing-banner hidden"></div>
+      <form id="rulelab-save-form" class="stack">
+        <label>
+          <span data-i18n="rulelab.title">Rule title</span>
+          <input
+            id="rulelab-title"
+            data-i18n-placeholder="rulelab.title.placeholder"
+            placeholder="Rule title for catalog"
+            value="SPUC Web Lab rule"
+            required
+          >
+        </label>
+        <label>
+          <span data-i18n="rulelab.description">Description</span>
+          <textarea
+            id="rulelab-description"
+            rows="4"
+            data-i18n-placeholder="rulelab.description.placeholder"
+            placeholder="Describe objective, context and expected telemetry in Markdown."
+          ></textarea>
+        </label>
+        <label>
+          <span>TLP</span>
+          <select id="rulelab-tlp" class="level-select tlp-select level-green" data-action="level-select">
+            <option value="TLP:CLEAR">TLP:CLEAR</option>
+            <option value="TLP:GREEN" selected>TLP:GREEN</option>
+            <option value="TLP:AMBER">TLP:AMBER</option>
+            <option value="TLP:AMBER+STRICT">TLP:AMBER+STRICT</option>
+            <option value="TLP:RED">TLP:RED</option>
+          </select>
+        </label>
+        <label class="hidden" aria-hidden="true">
+          <span>PAP</span>
+          <select id="rulelab-pap" class="level-select pap-select level-green" data-action="level-select" tabindex="-1">
+            <option value="PAP:CLEAR">PAP:CLEAR</option>
+            <option value="PAP:GREEN" selected>PAP:GREEN</option>
+            <option value="PAP:AMBER">PAP:AMBER</option>
+            <option value="PAP:RED">PAP:RED</option>
+          </select>
+        </label>
+        <input id="rulelab-confidence" type="hidden" value="70">
+        <div class="rulelab-save-stix-block">
+          <span data-i18n="rulelab.stix_relations">Related STIX objects</span>
+          <div class="rulelab-save-stix-row">
+            <select id="rulelab-stix-object-select">
+              <option value="" data-i18n="rules.indicates.catalog_placeholder">Select one object...</option>
+            </select>
+            <button type="button" id="rulelab-stix-add" class="btn btn-ghost" data-i18n="rules.indicates.add">Add relation</button>
+          </div>
+          <div id="rulelab-indicates-list" class="rulelab-indicates-list"></div>
+        </div>
+        <div class="dialog-actions modal-actions-split">
+          <div class="modal-actions-left">
+            <button type="button" id="rulelab-save-cancel" class="btn btn-danger" data-i18n="common.cancel">Cancel</button>
+          </div>
+          <div class="modal-actions-right">
+            <button type="submit" id="rulelab-save-submit" class="btn btn-primary" data-i18n="common.save">Save</button>
           </div>
         </div>
       </form>

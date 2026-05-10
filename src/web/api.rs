@@ -97,6 +97,7 @@ pub(crate) struct WebRuntimeConfig {
     pub(crate) admin_user: String,
     pub(crate) project_link: String,
     pub(crate) project_name: String,
+    pub(crate) documentation_link: String,
     pub(crate) license_link: String,
     pub(crate) license_name: String,
     pub(crate) oauth: OAuthConfig,
@@ -166,6 +167,7 @@ impl WebState {
                 admin_user: admin_user.to_string(),
                 project_link: "https://github.com/febrezo/spuc".to_string(),
                 project_name: "GitHub Project".to_string(),
+                documentation_link: "https://github.com/febrezo/spuc#readme".to_string(),
                 license_link: "https://github.com/febrezo/spuc/blob/main/LICENSE.md".to_string(),
                 license_name: "Server Side Public License".to_string(),
                 oauth,
@@ -658,6 +660,7 @@ struct AppBootstrap {
     year: i32,
     project_url: String,
     project_name: String,
+    documentation_url: String,
     license_url: String,
     license_name: String,
 }
@@ -734,6 +737,8 @@ struct RuleMutationRequest {
     confidence: Option<u8>,
     #[serde(default)]
     indicates: Option<RuleIndicatesRelation>,
+    #[serde(default)]
+    indicates_list: Option<Vec<RuleIndicatesRelation>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -879,11 +884,40 @@ struct RuleBundleExportRequest {
 }
 
 #[derive(Debug, Deserialize)]
+struct PatternBundleExportRequest {
+    rule: String,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    confidence: Option<u8>,
+    #[serde(default)]
+    tlp: Option<String>,
+    #[serde(default)]
+    pap: Option<String>,
+    #[serde(default)]
+    indicates_list: Vec<RuleIndicatesRelation>,
+}
+
+#[derive(Debug, Deserialize)]
 struct DummyAbilityCreateRequest {
     kind: String,
     seconds: Option<u64>,
     label: Option<String>,
     platform: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    runner: Option<String>,
+    #[serde(default)]
+    payload_language: Option<String>,
+    #[serde(default)]
+    payload: Option<String>,
+    #[serde(default)]
+    safety_notes: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -910,11 +944,38 @@ struct RuleView {
     activity_count: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct StixCatalogEntry {
+    stix_id: String,
+    stix_type: String,
+    name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    tlp: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pap: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    created_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    first_seen: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct StixObjectView {
     stix_id: String,
     stix_type: String,
     name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tlp: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pap: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    created_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    first_seen: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1117,6 +1178,41 @@ pub(crate) fn route(request: HttpRequest, state: &WebState) -> Result<HttpRespon
             assets::LOGO_SPUTNIK_PNG.to_vec(),
         ));
     }
+    if request.method == "GET" && request.path == "/assets/donate-bitcoin.png" {
+        return Ok(HttpResponse::text(
+            200,
+            "image/png",
+            assets::DONATE_BITCOIN_PNG.to_vec(),
+        ));
+    }
+    if request.method == "GET" && request.path == "/assets/donate-monero.png" {
+        return Ok(HttpResponse::text(
+            200,
+            "image/png",
+            assets::DONATE_MONERO_PNG.to_vec(),
+        ));
+    }
+    if request.method == "GET" && request.path == "/assets/logo-bitcoin.png" {
+        return Ok(HttpResponse::text(
+            200,
+            "image/png",
+            assets::LOGO_BITCOIN_PNG.to_vec(),
+        ));
+    }
+    if request.method == "GET" && request.path == "/assets/logo-monero.png" {
+        return Ok(HttpResponse::text(
+            200,
+            "image/png",
+            assets::LOGO_MONERO_PNG.to_vec(),
+        ));
+    }
+    if request.method == "GET" && request.path == "/assets/logo-github.png" {
+        return Ok(HttpResponse::text(
+            200,
+            "image/png",
+            assets::LOGO_GITHUB_PNG.to_vec(),
+        ));
+    }
     if request.method == "GET" && request.path == "/i18n.json" {
         return Ok(HttpResponse::text(
             200,
@@ -1175,11 +1271,21 @@ pub(crate) fn route(request: HttpRequest, state: &WebState) -> Result<HttpRespon
         ("GET", ["api", "rules"]) => list_rules(&request),
         ("GET", ["api", "rules", selector]) => show_rule(selector),
         ("GET", ["api", "stix-objects"]) => list_stix_objects(),
+        ("POST", ["api", "stix-objects"]) => create_stix_object(&request),
+        ("DELETE", ["api", "stix-objects", stix_id]) => delete_stix_object(stix_id),
+        ("GET", ["api", "mitre-attack"]) => Ok(HttpResponse::text(
+            200,
+            "application/json; charset=utf-8",
+            assets::MITRE_ATTACK_COMPACT_JSON.as_bytes().to_vec(),
+        )),
         ("DELETE", ["api", "rules", selector]) => delete_rule(selector),
         ("POST", ["api", "rules", "save"]) => save_rule(&request),
         ("POST", ["api", "rules", selector, "indicates"]) => set_rule_indicates(selector, &request),
         ("POST", ["api", "rules", "compatibility"]) => rule_compatibility(&request),
         ("POST", ["api", "rules", "export", "bundle"]) => export_rules_bundle(&request),
+        ("POST", ["api", "rules", "export", "bundle-from-pattern"]) => {
+            export_bundle_from_pattern(&request)
+        }
         ("GET", ["api", "abilities"]) => list_abilities(&request),
         ("POST", ["api", "abilities", "dummy"]) => create_dummy_ability(&request),
         ("GET", ["api", "abilities", ability_id]) => show_ability(ability_id),
@@ -1248,6 +1354,7 @@ fn bootstrap_response(state: &WebState, principal: Option<&Principal>) -> Result
                 year: Utc::now().year(),
                 project_url: state.runtime().project_link.clone(),
                 project_name: state.runtime().project_name.clone(),
+                documentation_url: state.runtime().documentation_link.clone(),
                 license_url: state.runtime().license_link.clone(),
                 license_name: state.runtime().license_name.clone(),
             },
@@ -1827,15 +1934,154 @@ fn show_rule(selector: &str) -> Result<HttpResponse> {
     HttpResponse::json(200, &rule_view(entry))
 }
 
+fn stix_catalog_path() -> Option<PathBuf> {
+    spuc_config_root().map(|root| root.join("stix-objects.json"))
+}
+
+fn load_stix_catalog() -> Vec<StixCatalogEntry> {
+    let Some(path) = stix_catalog_path() else {
+        return Vec::new();
+    };
+    if !path.exists() {
+        return Vec::new();
+    }
+    let Ok(data) = fs::read(&path) else {
+        return Vec::new();
+    };
+    serde_json::from_slice::<Vec<StixCatalogEntry>>(&data).unwrap_or_default()
+}
+
+fn save_stix_catalog(entries: &[StixCatalogEntry]) -> Result<()> {
+    let Some(path) = stix_catalog_path() else {
+        return Err(anyhow!("stix catalog path unavailable"));
+    };
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let data = serde_json::to_vec_pretty(entries)?;
+    Ok(fs::write(&path, data)?)
+}
+
 fn list_stix_objects() -> Result<HttpResponse> {
+    let catalog_entries = load_stix_catalog();
     let (_, _, rules, _) = load_catalog_data()?;
-    let entries = collect_stix_objects_from_rules(&rules);
-    HttpResponse::json(
-        200,
-        &serde_json::json!({
-            "entries": entries
-        }),
-    )
+    let mut from_rules = collect_stix_objects_from_rules(&rules);
+    // Merge: catalog entries take priority; supplement with rule-derived entries
+    let catalog_ids: BTreeSet<String> = catalog_entries
+        .iter()
+        .map(|e| e.stix_id.to_ascii_lowercase())
+        .collect();
+    from_rules.retain(|e| !catalog_ids.contains(&e.stix_id.to_ascii_lowercase()));
+    let mut catalog_views: Vec<StixObjectView> = catalog_entries
+        .into_iter()
+        .map(|e| StixObjectView {
+            stix_id: e.stix_id,
+            stix_type: e.stix_type,
+            name: e.name,
+            description: e.description,
+            tlp: e.tlp,
+            pap: e.pap,
+            created_at: e.created_at,
+            first_seen: e.first_seen,
+        })
+        .collect();
+    catalog_views.append(&mut from_rules);
+    catalog_views.sort_by(|a, b| {
+        a.stix_type
+            .cmp(&b.stix_type)
+            .then_with(|| a.name.cmp(&b.name))
+            .then_with(|| a.stix_id.cmp(&b.stix_id))
+    });
+    HttpResponse::json(200, &serde_json::json!({ "entries": catalog_views }))
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateStixObjectRequest {
+    stix_id: String,
+    name: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    tlp: Option<String>,
+    #[serde(default)]
+    pap: Option<String>,
+    #[serde(default)]
+    created_at: Option<String>,
+    #[serde(default)]
+    first_seen: Option<String>,
+}
+
+fn create_stix_object(request: &HttpRequest) -> Result<HttpResponse> {
+    let payload: CreateStixObjectRequest = request.json()?;
+    let stix_id = payload.stix_id.trim().to_string();
+    let name = payload.name.trim().to_string();
+    if stix_id.is_empty() || name.is_empty() {
+        return HttpResponse::json(
+            400,
+            &serde_json::json!({ "error": "stix_id_and_name_required" }),
+        );
+    }
+    if !is_valid_stix_id(&stix_id) {
+        return HttpResponse::json(400, &serde_json::json!({ "error": "invalid_stix_id" }));
+    }
+    let stix_type = stix_object_type_from_id(&stix_id);
+    let now = Utc::now().to_rfc3339();
+    let mut catalog = load_stix_catalog();
+    // Upsert by stix_id
+    if let Some(existing) = catalog
+        .iter_mut()
+        .find(|e| e.stix_id.eq_ignore_ascii_case(&stix_id))
+    {
+        existing.name = name;
+        if let Some(desc) = payload
+            .description
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+        {
+            existing.description = Some(desc.to_string());
+        }
+        if payload.tlp.is_some() {
+            existing.tlp = payload.tlp.map(|v| normalize_tlp(Some(&v)).to_string());
+        }
+        if payload.pap.is_some() {
+            existing.pap = payload.pap.map(|v| normalize_pap(Some(&v)).to_string());
+        }
+        if payload.first_seen.is_some() {
+            existing.first_seen = payload.first_seen;
+        }
+    } else {
+        catalog.push(StixCatalogEntry {
+            stix_id: stix_id.clone(),
+            stix_type,
+            name,
+            description: payload.description.and_then(|v| {
+                let trimmed = v.trim().to_string();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed)
+                }
+            }),
+            tlp: Some(normalize_tlp(payload.tlp.as_deref()).to_string()),
+            pap: Some(normalize_pap(payload.pap.as_deref()).to_string()),
+            created_at: Some(payload.created_at.unwrap_or_else(|| now.clone())),
+            first_seen: Some(payload.first_seen.unwrap_or(now)),
+        });
+    }
+    save_stix_catalog(&catalog)?;
+    HttpResponse::json(200, &serde_json::json!({ "ok": true, "stix_id": stix_id }))
+}
+
+fn delete_stix_object(stix_id: &str) -> Result<HttpResponse> {
+    let mut catalog = load_stix_catalog();
+    let before = catalog.len();
+    catalog.retain(|e| !e.stix_id.eq_ignore_ascii_case(stix_id));
+    if catalog.len() == before {
+        return HttpResponse::json(404, &serde_json::json!({ "error": "not_found" }));
+    }
+    save_stix_catalog(&catalog)?;
+    HttpResponse::json(200, &serde_json::json!({ "ok": true }))
 }
 
 fn delete_rule(selector: &str) -> Result<HttpResponse> {
@@ -1867,23 +2113,39 @@ fn save_rule(request: &HttpRequest) -> Result<HttpResponse> {
         .map(|entry| decode_rule_metadata_description(entry.description.clone()).indicates_list)
         .unwrap_or_default();
 
-    let requested_indicates = normalize_indicates_relation(payload.indicates.clone());
-    if payload.indicates.is_some() && requested_indicates.is_none() {
-        return HttpResponse::json(
-            400,
-            &serde_json::json!({ "error": "indicates_requires_stix_id_and_object_name" }),
-        );
-    }
-    if let Some(indicates) = requested_indicates.as_ref() {
-        if !is_valid_stix_id(&indicates.stix_id) {
-            return HttpResponse::json(400, &serde_json::json!({ "error": "invalid_stix_id" }));
+    // If indicates_list is explicitly provided, use it (with normalization and validation)
+    // overriding existing stored ones. Otherwise, fall back to the legacy single `indicates`.
+    let effective_indicates = if let Some(list) = payload.indicates_list.as_ref() {
+        let normalized = normalize_indicates_relations(list.clone());
+        for rel in &normalized {
+            if !is_valid_stix_id(&rel.stix_id) {
+                return HttpResponse::json(
+                    400,
+                    &serde_json::json!({ "error": "invalid_stix_id", "stix_id": rel.stix_id }),
+                );
+            }
         }
-    }
+        normalized
+    } else {
+        let requested_indicates = normalize_indicates_relation(payload.indicates.clone());
+        if payload.indicates.is_some() && requested_indicates.is_none() {
+            return HttpResponse::json(
+                400,
+                &serde_json::json!({ "error": "indicates_requires_stix_id_and_object_name" }),
+            );
+        }
+        if let Some(indicates) = requested_indicates.as_ref() {
+            if !is_valid_stix_id(&indicates.stix_id) {
+                return HttpResponse::json(400, &serde_json::json!({ "error": "invalid_stix_id" }));
+            }
+        }
+        let mut merged = existing_indicates;
+        if let Some(indicates) = requested_indicates {
+            push_unique_indicates(&mut merged, indicates);
+        }
+        merged
+    };
 
-    let mut effective_indicates = existing_indicates;
-    if let Some(indicates) = requested_indicates {
-        push_unique_indicates(&mut effective_indicates, indicates);
-    }
     let observables = extract_rule_observable_types(&payload.rule);
     let storage_description = encode_rule_metadata_description(
         payload.description.as_deref(),
@@ -2067,6 +2329,48 @@ fn export_rules_bundle(request: &HttpRequest) -> Result<HttpResponse> {
         HttpResponse::text(200, "application/json; charset=utf-8", pretty).with_header(
             "Content-Disposition",
             "attachment; filename=\"spuc-rules-bundle.json\"",
+        ),
+    )
+}
+
+fn export_bundle_from_pattern(request: &HttpRequest) -> Result<HttpResponse> {
+    let payload: PatternBundleExportRequest = request.json()?;
+    let rule = payload.rule.trim().to_string();
+    if rule.is_empty() {
+        return HttpResponse::json(400, &json!({ "error": "rule_required" }));
+    }
+    let description = encode_rule_metadata_description(
+        payload.description.as_deref(),
+        payload.tlp.as_deref(),
+        payload.pap.as_deref(),
+        None,
+        None,
+        None,
+        Some(&payload.indicates_list),
+    );
+    let entry = CatalogRuleEntry {
+        rule_id: new_stix_id("x-spuc-lab-rule"),
+        ability_id: None,
+        name: payload.name.unwrap_or_else(|| "Lab Rule".to_string()),
+        description,
+        ttp: None,
+        confidence: payload.confidence.unwrap_or(70),
+        emulable: false,
+        rule,
+        last_seen_utc: Utc::now().to_rfc3339(),
+        commands: vec![],
+        targets: vec![],
+        statuses: vec![],
+        target_statuses: BTreeMap::new(),
+        emulation_statuses: BTreeMap::new(),
+        activity_count: 0,
+    };
+    let bundle = build_stix_bundle_from_rules(&[entry])?;
+    let pretty = serde_json::to_vec_pretty(&bundle)?;
+    Ok(
+        HttpResponse::text(200, "application/json; charset=utf-8", pretty).with_header(
+            "Content-Disposition",
+            "attachment; filename=\"spuc-lab-bundle.json\"",
         ),
     )
 }
@@ -2318,6 +2622,41 @@ fn create_dummy_ability(request: &HttpRequest) -> Result<HttpResponse> {
             };
             build_dummy_label_ability(label, &platform)
         }
+        "custom_payload" => {
+            let Some(name) = payload
+                .name
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            else {
+                return HttpResponse::json(
+                    400,
+                    &json!({ "error": "custom_payload_name_required" }),
+                );
+            };
+            let Some(payload_body) = payload
+                .payload
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            else {
+                return HttpResponse::json(
+                    400,
+                    &json!({ "error": "custom_payload_body_required" }),
+                );
+            };
+            let runner = normalize_custom_payload_runner(payload.runner.as_deref());
+            let language = normalize_payload_language(payload.payload_language.as_deref(), &runner);
+            build_custom_payload_ability(
+                name,
+                payload.description.as_deref(),
+                &platform,
+                &runner,
+                &language,
+                payload_body,
+                payload.safety_notes.as_deref(),
+            )
+        }
         _ => {
             return HttpResponse::json(400, &json!({ "error": "dummy_kind_invalid" }));
         }
@@ -2334,6 +2673,34 @@ fn create_dummy_ability(request: &HttpRequest) -> Result<HttpResponse> {
         .get_by_id(&ability_id)?
         .ok_or_else(|| anyhow!("dummy_ability_persist_failed"))?;
     HttpResponse::json(200, &ability_view(created))
+}
+
+fn normalize_custom_payload_runner(raw: Option<&str>) -> String {
+    let normalized = raw.unwrap_or("spuc-agent").trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "bash" | "powershell" | "python" | "javascript" | "rubber-ducky" | "hid" | "spuc-agent" => {
+            if normalized == "hid" {
+                "rubber-ducky".to_string()
+            } else {
+                normalized
+            }
+        }
+        _ => "spuc-agent".to_string(),
+    }
+}
+
+fn normalize_payload_language(raw: Option<&str>, runner: &str) -> String {
+    let normalized = raw.unwrap_or(runner).trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "bash" | "powershell" | "python" | "javascript" | "rubber-ducky" | "hid" => {
+            if normalized == "hid" {
+                "rubber-ducky".to_string()
+            } else {
+                normalized
+            }
+        }
+        _ => runner.to_string(),
+    }
 }
 
 fn normalize_dummy_platform(raw: Option<&str>) -> String {
@@ -2361,6 +2728,71 @@ fn dummy_slug(raw: &str) -> String {
         "unnamed".to_string()
     } else {
         trimmed
+    }
+}
+
+fn custom_payload_hash(name: &str, platform: &str, runner: &str, payload: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    name.hash(&mut hasher);
+    platform.hash(&mut hasher);
+    runner.hash(&mut hasher);
+    payload.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
+fn build_custom_payload_ability(
+    name: &str,
+    description: Option<&str>,
+    platform: &str,
+    runner: &str,
+    payload_language: &str,
+    payload: &str,
+    safety_notes: Option<&str>,
+) -> emu_ability::Ability {
+    let trimmed_name = name.trim();
+    let slug = dummy_slug(trimmed_name);
+    let hash = custom_payload_hash(trimmed_name, platform, runner, payload);
+    let payload_description = description
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("User-defined custom payload step for authorized defensive lab export.");
+    let safety = safety_notes
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("SPUC does not execute this custom payload from the UI. Export and run only in controlled, authorized labs with telemetry enabled.");
+
+    emu_ability::Ability {
+        schema_version: emu_ability::ABILITY_SCHEMA_VERSION.to_string(),
+        id: format!("abl-custom-payload-{platform}-{runner}-{slug}-{}", &hash[..8]),
+        name: format!("Custom payload: {trimmed_name}"),
+        description: payload_description.to_string(),
+        ttp: None,
+        supported_platforms: vec![platform.to_string()],
+        requires: vec![emu_ability::AbilityRequirement {
+            id: format!("cap.runner.{runner}"),
+            description: format!("Authorized lab runner capable of handling {runner} payloads."),
+        }],
+        optional: vec![],
+        agent_capabilities: vec![format!("cap.custom_payload.{runner}")],
+        actions: vec![emu_ability::AbilityAction {
+            id: "act-custom-payload-001".to_string(),
+            title: format!("Custom {payload_language} payload"),
+            action_type: "custom_payload".to_string(),
+            observable: format!("x-spuc-custom-payload:{runner}"),
+            operator: "CONTAINS".to_string(),
+            value: payload.to_string(),
+            safe_instructions: safety.to_string(),
+        }],
+        source_pattern: format!(
+            "[x-spuc-custom-payload:name = '{}' AND x-spuc-custom-payload:runner = '{}' AND x-spuc-custom-payload:platform = '{}' AND x-spuc-custom-payload:hash = '{}']",
+            trimmed_name.replace('\'', "\\'"),
+            runner,
+            platform,
+            hash
+        ),
+        classification: emu_ability::AbilityClassification::CommandLineTrace,
+        emulation_level: emu_ability::EmulationLevel::TraceSimulation,
+        confidence: 80,
     }
 }
 
@@ -2672,7 +3104,7 @@ fn create_adversary(request: &HttpRequest, state: &WebState) -> Result<HttpRespo
     .unwrap_or(description_plain);
 
     let campaign = emu_campaign::build_campaign_ordered_with_confidence(
-        format!("intrusion-set-{}", generate_secret(10).to_ascii_lowercase()),
+        emu_campaign::generate_intrusion_set_stix_id(),
         payload.name.clone(),
         description_encoded,
         &abilities,
@@ -3311,6 +3743,11 @@ fn collect_stix_objects_from_rules(rules: &[CatalogRuleEntry]) -> Vec<StixObject
                     stix_id,
                     stix_type,
                     name,
+                    description: None,
+                    tlp: None,
+                    pap: None,
+                    created_at: None,
+                    first_seen: None,
                 });
         }
     }
@@ -4074,13 +4511,7 @@ fn generate_operational_runner_artifacts(
 }
 
 fn catalog_adversary_id(intrusion_set_id: &str) -> String {
-    if intrusion_set_id.starts_with("adversary-") {
-        intrusion_set_id.to_string()
-    } else if let Some(suffix) = intrusion_set_id.strip_prefix("intrusion-set-") {
-        format!("adversary-{suffix}")
-    } else {
-        format!("adversary-{intrusion_set_id}")
-    }
+    emu_campaign::catalog_adversary_id(intrusion_set_id)
 }
 
 fn download_link(name: &str, token: &str) -> DownloadLink {
@@ -4585,6 +5016,32 @@ mod tests {
         assert_eq!(ability.id, "abl-dummy-label-windows-phase_a_s");
         assert!(ability.source_pattern.contains("Phase A\\'s"));
         assert_eq!(ability.actions[0].action_type, "execution_label");
+    }
+
+    #[test]
+    fn custom_payload_builder_is_safe_metadata_only() {
+        let ability = build_custom_payload_ability(
+            "Telemetry probe",
+            Some("Validate a runner payload"),
+            "linux",
+            "bash",
+            "bash",
+            "echo spuc",
+            None,
+        );
+        assert!(ability
+            .id
+            .starts_with("abl-custom-payload-linux-bash-telemetry_probe-"));
+        assert_eq!(ability.supported_platforms, vec!["linux".to_string()]);
+        assert_eq!(ability.actions[0].action_type, "custom_payload");
+        assert_eq!(ability.actions[0].observable, "x-spuc-custom-payload:bash");
+        assert_eq!(ability.actions[0].value, "echo spuc");
+        assert!(ability.actions[0]
+            .safe_instructions
+            .contains("SPUC does not execute"));
+        assert!(ability
+            .agent_capabilities
+            .contains(&"cap.custom_payload.bash".to_string()));
     }
 
     #[test]

@@ -1,6 +1,9 @@
+#![allow(dead_code)]
+
 use anyhow::{anyhow, Result};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet, HashMap};
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 use crate::cli::{AbilityTarget, AdversaryCommands, BuildOutput, RuleCommands};
@@ -227,7 +230,7 @@ fn build_catalog_rule_entries(
             .collect::<BTreeMap<_, _>>();
 
             CatalogRuleEntry {
-                rule_id: format!("rule-{}", short_catalog_token(&stable_token)),
+                rule_id: catalog_indicator_id(&stable_token),
                 ability_id: ability.map(|item| item.id.clone()),
                 name: ability
                     .map(|item| item.name.clone())
@@ -786,14 +789,46 @@ fn short_catalog_token(input: &str) -> String {
     input.chars().take(12).collect()
 }
 
+fn catalog_indicator_id(stable_token: &str) -> String {
+    let mut left = DefaultHasher::new();
+    "indicator".hash(&mut left);
+    stable_token.hash(&mut left);
+    let left = left.finish();
+
+    let mut right = DefaultHasher::new();
+    stable_token.hash(&mut right);
+    "spuc-catalog-rule".hash(&mut right);
+    let right = right.finish();
+
+    let mut bytes = [0u8; 16];
+    bytes[..8].copy_from_slice(&left.to_be_bytes());
+    bytes[8..].copy_from_slice(&right.to_be_bytes());
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    format!(
+        "indicator--{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        bytes[0],
+        bytes[1],
+        bytes[2],
+        bytes[3],
+        bytes[4],
+        bytes[5],
+        bytes[6],
+        bytes[7],
+        bytes[8],
+        bytes[9],
+        bytes[10],
+        bytes[11],
+        bytes[12],
+        bytes[13],
+        bytes[14],
+        bytes[15],
+    )
+}
+
 fn catalog_adversary_id(intrusion_set_id: &str) -> String {
-    if intrusion_set_id.starts_with("adversary-") {
-        intrusion_set_id.to_string()
-    } else if let Some(suffix) = intrusion_set_id.strip_prefix("intrusion-set-") {
-        format!("adversary-{suffix}")
-    } else {
-        format!("adversary-{intrusion_set_id}")
-    }
+    emu_campaign::catalog_adversary_id(intrusion_set_id)
 }
 
 fn join_or_dash(values: &[String]) -> String {
@@ -903,5 +938,25 @@ mod tests {
         ];
         let refs = rows.iter().collect::<Vec<_>>();
         assert_eq!(collapse_target_status(&refs), "lossy");
+    }
+
+    #[test]
+    fn catalog_rule_ids_are_stix_indicator_ids() {
+        let id = catalog_indicator_id("stable-rule-token");
+        assert!(id.starts_with("indicator--"));
+        assert_eq!(
+            id.len(),
+            "indicator--00000000-0000-4000-8000-000000000000".len()
+        );
+        let uuid = id.strip_prefix("indicator--").expect("indicator id prefix");
+        let parts = uuid.split('-').collect::<Vec<_>>();
+        assert_eq!(parts.len(), 5);
+        assert_eq!(parts[0].len(), 8);
+        assert_eq!(parts[1].len(), 4);
+        assert_eq!(parts[2].len(), 4);
+        assert_eq!(parts[3].len(), 4);
+        assert_eq!(parts[4].len(), 12);
+        assert_eq!(parts[2].as_bytes()[0], b'4');
+        assert!(matches!(parts[3].as_bytes()[0], b'8' | b'9' | b'a' | b'b'));
     }
 }

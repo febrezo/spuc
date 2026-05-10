@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use anyhow::{anyhow, Result};
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;

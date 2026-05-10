@@ -1,13 +1,19 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeSet;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::emulation::ability::Ability;
 use crate::paths;
 
 pub const CAMPAIGN_SCHEMA_VERSION: &str = "1.0";
+
+static INTRUSION_SET_NONCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CampaignStep {
@@ -137,6 +143,66 @@ pub fn build_campaign_ordered_with_confidence(
         description,
         confidence,
         steps,
+    }
+}
+
+pub fn generate_intrusion_set_stix_id() -> String {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let nonce = INTRUSION_SET_NONCE.fetch_add(1, Ordering::Relaxed);
+    let pid = u64::from(std::process::id());
+
+    let mut left = DefaultHasher::new();
+    "intrusion-set".hash(&mut left);
+    now.hash(&mut left);
+    nonce.hash(&mut left);
+    let left = left.finish();
+
+    let mut right = DefaultHasher::new();
+    pid.hash(&mut right);
+    nonce.hash(&mut right);
+    now.rotate_left(17).hash(&mut right);
+    let right = right.finish();
+
+    let mut bytes = [0u8; 16];
+    bytes[..8].copy_from_slice(&left.to_be_bytes());
+    bytes[8..].copy_from_slice(&right.to_be_bytes());
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    format!(
+        "intrusion-set--{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        bytes[0],
+        bytes[1],
+        bytes[2],
+        bytes[3],
+        bytes[4],
+        bytes[5],
+        bytes[6],
+        bytes[7],
+        bytes[8],
+        bytes[9],
+        bytes[10],
+        bytes[11],
+        bytes[12],
+        bytes[13],
+        bytes[14],
+        bytes[15],
+    )
+}
+
+pub fn catalog_adversary_id(intrusion_set_id: &str) -> String {
+    if intrusion_set_id.starts_with("adversary-") {
+        intrusion_set_id.to_string()
+    } else if let Some(suffix) = intrusion_set_id
+        .strip_prefix("intrusion-set--")
+        .or_else(|| intrusion_set_id.strip_prefix("intrusion-set-"))
+    {
+        format!("adversary-{suffix}")
+    } else {
+        format!("adversary-{intrusion_set_id}")
     }
 }
 
@@ -371,6 +437,35 @@ mod tests {
         assert_eq!(
             file,
             "spuc-intrusion-set-linux-blue_team_validation.yaml".to_string()
+        );
+    }
+
+    #[test]
+    fn generated_intrusion_set_id_uses_stix_intrusion_set_shape() {
+        let id = generate_intrusion_set_stix_id();
+        assert!(id.starts_with("intrusion-set--"));
+        assert_eq!(
+            id.len(),
+            "intrusion-set--00000000-0000-4000-8000-000000000000".len()
+        );
+        let uuid = id
+            .strip_prefix("intrusion-set--")
+            .expect("intrusion-set prefix");
+        let parts = uuid.split('-').collect::<Vec<_>>();
+        assert_eq!(parts.len(), 5);
+        assert_eq!(parts[2].as_bytes()[0], b'4');
+        assert!(matches!(parts[3].as_bytes()[0], b'8' | b'9' | b'a' | b'b'));
+    }
+
+    #[test]
+    fn catalog_adversary_id_accepts_stix_and_legacy_intrusion_set_ids() {
+        assert_eq!(
+            catalog_adversary_id("intrusion-set--12345678-1234-4000-8000-1234567890ab"),
+            "adversary-12345678-1234-4000-8000-1234567890ab"
+        );
+        assert_eq!(
+            catalog_adversary_id("intrusion-set-legacy-token"),
+            "adversary-legacy-token"
         );
     }
 }

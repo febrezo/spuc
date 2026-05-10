@@ -117,6 +117,7 @@ Last updated: 2026-03-15
   - use `--refresh` to force recomputation
 - Ability persistence uses upsert-by-rule (`source_pattern`) to avoid duplicated ability files for the same rule.
 - Catalog exploration for adversaries is available through the web interface.
+- Payloads now follow the same two-stage pattern as STIX objects: centered welcome card first, then a STIX-like table catalog with icon actions and edit support after at least one payload exists.
 
 ## Output Modes
 
@@ -142,13 +143,18 @@ Last updated: 2026-03-15
 
 - Running `spuc` with no command launches local no-login web mode on `http://127.0.0.1:8090/`.
 - `spuc web` runs a localhost-only HTTP interface, opens the system browser by default, supports `--no-open` for embedded/sidecar use, and exposes `GET /healthz` for readiness checks.
-- `spuc-gui` wraps the web UI in a native window titled `SPUC: A behavioural IOC mapping lab` or the Spanish equivalent, starts `spuc web --no-login --no-open` on an available localhost port, shows a local loading screen until `/healthz` is ready, passes its detected system locale to the embedded web UI, and manages sidecar lifecycle.
+- `spuc-gui` wraps the web UI in a native window titled `SPUC: A behavioural IOC mapping lab` or the Spanish equivalent, starts `spuc web --no-login --no-open` on an available localhost port, marks the embedded URL with `spuc-mode=gui`, shows a local loading screen until `/healthz` is ready, passes its detected system locale to the embedded web UI, and manages sidecar lifecycle.
 - `spuc-gui` keeps local SPUC navigation in the webview and opens external links in the system browser.
 - If the GUI cannot start the `spuc` sidecar, it exits before opening the window and reports how to build or point `SPUC_SERVER_BIN` at the CLI binary.
 - The web interface is localized in English and Spanish only.
 - Authentication supports local username/password users persisted in `web_users.json`.
 - Google/GitHub sign-in uses authorization-code callback flow with environment bootstrap plus explicit admin authorization flags per provider.
+- The STIX objects catalog uses a left-aligned text search field, right-aligned icon-only bulk actions, and a compact disclosure that only shows ID plus markdown description; the pencil button reopens the upsert modal for the selected object.
 - `spuc web --no-login` is supported for local standalone mode (implicit admin principal, no logout, no user-management UI/routes).
-- Login/start view is centered and branded with the SPUC logo, app title/subtitle and footer links for project/license attribution.
+- Login/start view is centered and branded with the SPUC logo, app title/subtitle and multi-row footer attribution for coded-with-love, project and license links.
+- In no-login sessions, the web UI first shows a branded project presentation gate with the SPUC logo and an explicit `Enter SPUC` / `Entrar en SPUC` action; the standard app shell loads only after that confirmation.
 - The app shell sidebar keeps only the SPUC logo/name and navigation; product tagline text is intentionally omitted there.
 - The web interface reuses the same local catalog and intrusion-set persistence as CLI/console flows.
+- Web-only payload catalog and learning progress are browser-local (`localStorage`) and are intentionally separate from `<config_root>` file persistence.
+- Cataloged rule rows are represented in UI/API as STIX Indicator IDs (`indicator--...`) because saved rules model source STIX indicator patterns.
+- Newly created adversary plans persist `intrusion_set_id` using STIX intrusion-set object identifiers (`intrusion-set--<uuid>`), while legacy `intrusion-set-...` ids remain readable for backward compatibility.
