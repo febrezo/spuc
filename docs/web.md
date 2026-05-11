@@ -19,6 +19,7 @@ spuc web --port 8090 --no-login --no-open
 - `spuc-gui` reads `SPUC_LOCALE`, `LC_ALL`, `LC_MESSAGES`, or `LANG` to choose the native window title language at startup and passes that default locale to the embedded web UI. Browser mode uses the browser language when no saved language preference exists, and the page title stays synchronized with the language preference stored in `Settings`.
 - In `spuc-gui`, local SPUC navigation remains inside the webview and external links open in the system browser.
 - If `spuc-gui` cannot start the `spuc` sidecar, startup fails fast with guidance to build `spuc`, place it beside `spuc-gui`/in `PATH`, or set `SPUC_SERVER_BIN`.
+- Desktop release builds keep both `crates/spuc-gui/icons/icon.png` and `crates/spuc-gui/icons/icon.ico`; the `.ico` asset is required by Tauri when compiling the Windows resource file.
 - desktop build command: `cargo run -p spuc-gui`
 - Linux desktop prerequisites: WebKitGTK, JavaScriptCoreGTK, GTK and GLib development packages.
 - Fedora: `sudo dnf install glib2-devel gtk3-devel webkit2gtk4.1-devel javascriptcoregtk4.1-devel libappindicator-gtk3-devel librsvg2-devel libxdo-devel pkgconf-pkg-config`.

@@ -208,6 +208,7 @@ mod tests {
         server_binary_name, system_locale_code, SERVER_HOST, WINDOW_TITLE_EN, WINDOW_TITLE_ES,
     };
     use std::net::TcpListener;
+    use std::path::Path;
 
     #[test]
     fn choose_available_port_returns_bindable_local_port() {
@@ -236,6 +237,13 @@ mod tests {
         } else {
             assert_eq!(server_binary_name(), "spuc");
         }
+    }
+
+    #[test]
+    fn desktop_icon_assets_cover_cross_platform_builds() {
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        assert!(manifest_dir.join("icons/icon.png").is_file());
+        assert!(manifest_dir.join("icons/icon.ico").is_file());
     }
 
     #[test]
