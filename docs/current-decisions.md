@@ -150,10 +150,12 @@ Last updated: 2026-03-15
 - Authentication supports local username/password users persisted in `web_users.json`.
 - Google/GitHub sign-in uses authorization-code callback flow with environment bootstrap plus explicit admin authorization flags per provider.
 - The STIX objects catalog uses a left-aligned text search field, right-aligned icon-only bulk actions, and a compact disclosure that only shows ID plus markdown description; the pencil button reopens the upsert modal for the selected object.
-- `spuc web --no-login` is supported for local standalone mode (implicit admin principal, no logout, no user-management UI/routes).
+- `spuc web --no-login` is supported for local standalone mode (implicit admin principal, no logout, branded two-phase entry gate, and `Settings` still available for local administration).
 - Login/start view is centered and branded with the SPUC logo, app title/subtitle and multi-row footer attribution for coded-with-love, project and license links.
 - In no-login sessions, the web UI first shows a branded project presentation gate with the SPUC logo and an explicit `Enter SPUC` / `Entrar en SPUC` action; the standard app shell loads only after that confirmation.
 - The app shell sidebar keeps only the SPUC logo/name and navigation; product tagline text is intentionally omitted there.
+- Theme and locale selection are now part of the dedicated `Settings` route instead of the top-right header controls.
+- `Settings` is a first-class route for every user; administrator-only subsections inside it cover runtime defaults, OAuth provider authorization and local user management.
 - The web interface reuses the same local catalog and intrusion-set persistence as CLI/console flows.
 - Web-only payload catalog and learning progress are browser-local (`localStorage`) and are intentionally separate from `<config_root>` file persistence.
 - Cataloged rule rows are represented in UI/API as STIX Indicator IDs (`indicator--...`) because saved rules model source STIX indicator patterns.

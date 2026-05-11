@@ -383,7 +383,7 @@ mod tests {
     }
 
     #[test]
-    fn no_login_mode_hides_admin_routes() {
+    fn no_login_mode_keeps_admin_routes_reachable() {
         with_test_config_dir("no_login_admin_hidden", || {
             let listener = match TcpListener::bind(("127.0.0.1", 0)) {
                 Ok(listener) => listener,
@@ -403,8 +403,8 @@ mod tests {
                 port,
                 "GET /api/admin/users HTTP/1.1\r\nHost: localhost\r\n\r\n",
             );
-            assert!(admin_users.contains("404 Not Found"));
-            assert!(admin_users.contains("\"code\": \"no_login_mode\""));
+            assert!(admin_users.contains("200 OK"));
+            assert!(admin_users.contains("\"entries\""));
         });
     }
 

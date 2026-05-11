@@ -20,6 +20,7 @@ const state = {
   translations: {},
   bootstrap: null,
   principal: null,
+  userSettings: null,
   route: "home",
   overview: null,
   rules: {
@@ -128,7 +129,18 @@ const state = {
     filtersOpen: false,
   },
   learning: { guides: [], challenges: [], search: "", pathFilter: "", onlyPending: false },
+  settings: {
+    activeTab: "personal",
+    usersFilters: {
+      open: false,
+      search: "",
+      role: "all",
+      status: "all",
+    },
+  },
   adminUsers: [],
+  adminRuntimeSettings: null,
+  adminOauthProviders: [],
   compatibility: [],
   rulesFilterTimer: null,
   adversariesFilterTimer: null,
@@ -292,7 +304,7 @@ const ROUTE_META = {
   "stix-objects": { title: "route.stix_objects.title", subtitle: "route.stix_objects.subtitle" },
   "stix-objects-catalog": { title: "route.stix_objects.title", subtitle: "route.stix_objects.subtitle" },
   learning: { title: "route.learning.title", subtitle: "route.learning.subtitle" },
-  admin: { title: "route.admin.title", subtitle: "route.admin.subtitle" },
+  settings: { title: "route.settings.title", subtitle: "route.settings.subtitle" },
 };
 
 const LEARNING_PROGRESS_STORAGE_KEY = "spuc-web-learning-progress";
@@ -585,6 +597,174 @@ function setTheme(theme) {
   document.body.classList.toggle("theme-light", state.theme === "light");
 }
 
+function setLocale(locale) {
+  state.locale = locale === "es" ? "es" : "en";
+  localStorage.setItem("spuc-web-locale", state.locale);
+  document.documentElement.lang = state.locale;
+}
+
+function isCustomComboboxCandidate(select) {
+  if (!(select instanceof HTMLSelectElement)) return false;
+  if (select.multiple) return false;
+  const size = Number(select.getAttribute("size") || "1");
+  if (Number.isFinite(size) && size > 1) return false;
+  return select.dataset.nativeSelect !== "true";
+}
+
+function comboboxClassName(token) {
+  return `combobox-${String(token || "").replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+}
+
+function closeAllCustomComboboxes(except = null) {
+  document.querySelectorAll(".spuc-combobox.open").forEach((node) => {
+    if (except && node === except) return;
+    node.classList.remove("open");
+    node.querySelector(".spuc-combobox-trigger")?.setAttribute("aria-expanded", "false");
+  });
+}
+
+function syncCustomComboboxClasses(select, wrapper) {
+  [...wrapper.classList].forEach((className) => {
+    if (className.startsWith("combobox-")) wrapper.classList.remove(className);
+  });
+  select.classList.forEach((className) => {
+    wrapper.classList.add(comboboxClassName(className));
+  });
+}
+
+function buildCustomComboboxOptions(select, menu, triggerLabel) {
+  const items = [];
+  [...select.children].forEach((node) => {
+    if (node instanceof HTMLOptGroupElement) {
+      const label = String(node.label || "").trim();
+      if (label) {
+        items.push(`<div class="spuc-combobox-group">${escapeHtml(label)}</div>`);
+      }
+      [...node.children].forEach((child) => {
+        if (!(child instanceof HTMLOptionElement)) return;
+        const value = String(child.value || "");
+        const text = child.textContent || value;
+        const selected = child.selected;
+        items.push(`
+          <button
+            type="button"
+            class="spuc-combobox-option${selected ? " is-selected" : ""}"
+            data-combobox-option="${escapeHtml(value)}"
+            ${child.disabled ? "disabled" : ""}
+        >${escapeHtml(text)}</button>
+        `);
+        if (selected) triggerLabel.textContent = text;
+      });
+      return;
+    }
+    if (!(node instanceof HTMLOptionElement)) return;
+    const value = String(node.value || "");
+    const text = node.textContent || value;
+    const selected = node.selected;
+    items.push(`
+      <button
+        type="button"
+        class="spuc-combobox-option${selected ? " is-selected" : ""}"
+        data-combobox-option="${escapeHtml(value)}"
+        ${node.disabled ? "disabled" : ""}
+      >${escapeHtml(text)}</button>
+    `);
+    if (selected) triggerLabel.textContent = text;
+  });
+  const selectedOption = select.selectedOptions?.[0];
+  if (selectedOption) {
+    triggerLabel.textContent = selectedOption.textContent || triggerLabel.textContent;
+  }
+  menu.innerHTML = items.join("");
+}
+
+function syncCustomCombobox(select) {
+  if (!isCustomComboboxCandidate(select)) return;
+  if (!select.id) {
+    select.id = `spuc-select-${Math.random().toString(36).slice(2, 9)}`;
+  }
+  let wrapper = select.closest(".spuc-combobox");
+  if (!(wrapper instanceof HTMLDivElement)) {
+    wrapper = document.createElement("div");
+    wrapper.className = "spuc-combobox";
+    select.parentNode?.insertBefore(wrapper, select);
+    wrapper.appendChild(select);
+
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "spuc-combobox-trigger";
+    trigger.setAttribute("aria-haspopup", "listbox");
+    trigger.setAttribute("aria-expanded", "false");
+    trigger.innerHTML = `
+      <span class="spuc-combobox-trigger-label"></span>
+      <span class="spuc-combobox-chevron" aria-hidden="true"></span>
+    `;
+    wrapper.appendChild(trigger);
+
+    const menu = document.createElement("div");
+    menu.className = "spuc-combobox-menu";
+    menu.setAttribute("role", "listbox");
+    wrapper.appendChild(menu);
+
+    select.classList.add("spuc-combobox-native");
+
+    trigger.addEventListener("click", () => {
+      if (select.disabled) return;
+      const isOpen = wrapper.classList.contains("open");
+      closeAllCustomComboboxes(wrapper);
+      wrapper.classList.toggle("open", !isOpen);
+      trigger.setAttribute("aria-expanded", String(!isOpen));
+    });
+
+    trigger.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        if (!wrapper.classList.contains("open")) {
+          closeAllCustomComboboxes(wrapper);
+          wrapper.classList.add("open");
+          trigger.setAttribute("aria-expanded", "true");
+        }
+        menu.querySelector(".spuc-combobox-option:not(:disabled)")?.focus();
+      } else if (event.key === "Escape") {
+        closeAllCustomComboboxes();
+      }
+    });
+
+    menu.addEventListener("click", (event) => {
+      const option = event.target.closest("[data-combobox-option]");
+      if (!(option instanceof HTMLButtonElement) || option.disabled) return;
+      const value = option.dataset.comboboxOption ?? "";
+      select.value = value;
+      select.dispatchEvent(new Event("input", { bubbles: true }));
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      syncCustomCombobox(select);
+      closeAllCustomComboboxes();
+      trigger.focus();
+    });
+  }
+
+  syncCustomComboboxClasses(select, wrapper);
+  wrapper.classList.toggle("is-disabled", Boolean(select.disabled));
+  wrapper.classList.toggle("is-empty", !String(select.value || "").trim());
+
+  const trigger = wrapper.querySelector(".spuc-combobox-trigger");
+  const triggerLabel = wrapper.querySelector(".spuc-combobox-trigger-label");
+  const menu = wrapper.querySelector(".spuc-combobox-menu");
+  if (!(trigger instanceof HTMLButtonElement) || !(triggerLabel instanceof HTMLSpanElement) || !(menu instanceof HTMLDivElement)) {
+    return;
+  }
+  trigger.disabled = Boolean(select.disabled);
+  buildCustomComboboxOptions(select, menu, triggerLabel);
+}
+
+function refreshCustomComboboxes(root = document) {
+  root.querySelectorAll?.("select").forEach((select) => {
+    if (!(select instanceof HTMLSelectElement)) return;
+    if (!isCustomComboboxCandidate(select)) return;
+    syncCustomCombobox(select);
+  });
+}
+
 function applyTranslations() {
   document.documentElement.lang = state.locale;
   document.title = t("app.title");
@@ -642,6 +822,7 @@ function applyTranslations() {
   updateRulesBulkState();
   updateAdversariesBulkState();
   syncAdversaryModalTitle();
+  refreshCustomComboboxes(document);
   refreshRouteMeta();
 }
 
@@ -682,7 +863,7 @@ function showToast(message, asKey = true) {
   }, 2800);
 }
 
-function askForConfirmation(message, title = "") {
+function askForConfirmation(message, title = "", options = {}) {
   const dialog = document.getElementById("confirm-dialog");
   const titleNode = document.getElementById("confirm-title");
   const messageNode = document.getElementById("confirm-message");
@@ -695,6 +876,8 @@ function askForConfirmation(message, title = "") {
   const resolvedTitle = String(title || "").trim() || t("common.confirm_action");
   titleNode.textContent = resolvedTitle;
   messageNode.textContent = message;
+  acceptButton.textContent = options.acceptLabel || t("common.confirm");
+  cancelButton.textContent = options.cancelLabel || t("common.cancel");
 
   return new Promise((resolve) => {
     let done = false;
@@ -914,7 +1097,14 @@ function renderAboutDialog(section = "") {
     `
     : donation.address
     ? `
-      <code class="about-donation-address">${escapeHtml(donation.address)}</code>
+      <input
+        class="about-donation-address"
+        type="text"
+        value="${escapeHtml(donation.address)}"
+        readonly
+        spellcheck="false"
+        aria-label="${escapeHtml(t("about.donate.copy"))}"
+      >
       <button type="button" class="btn btn-primary about-donation-action" data-action="about-copy-donation" data-method="${escapeHtml(donation.id)}">${escapeHtml(t("about.donate.copy"))}</button>
     `
     : `
@@ -2743,6 +2933,57 @@ function setupLoginProviders() {
   });
 }
 
+function currentDisplayName() {
+  return state.userSettings?.display_name
+    || state.principal?.display_name
+    || state.principal?.username
+    || "";
+}
+
+function refreshIdentityPill() {
+  const pill = document.getElementById("identity-pill");
+  if (!pill) return;
+  const noLoginActive = Boolean(state.bootstrap?.auth?.no_login);
+  if (noLoginActive) {
+    pill.textContent = currentDisplayName() || t("common.local_user");
+    return;
+  }
+  if (!state.principal) {
+    pill.textContent = t("common.not_authenticated");
+    return;
+  }
+  const name = currentDisplayName() || state.principal.username;
+  pill.textContent = `${name} · ${state.principal.role}`;
+}
+
+function applyBootstrapPreferences() {
+  const defaults = state.bootstrap?.auth || {};
+  const user = state.bootstrap?.user || null;
+  state.userSettings = user;
+  setLocale(user?.locale || defaults.default_locale || state.locale);
+  setTheme(user?.theme || defaults.default_theme || state.theme);
+  if (state.principal) {
+    state.principal.display_name = user?.display_name || state.principal.display_name || state.principal.username;
+  }
+  applyTranslations();
+  refreshIdentityPill();
+}
+
+async function reloadLocalizedAppData() {
+  if (document.getElementById("app-view").classList.contains("hidden")) return;
+  refreshRouteMeta();
+  if (state.route === "dashboard") renderDashboard();
+  if (state.route === "rules" || state.route === "rules-catalog") await loadRules();
+  if (state.route === "adversaries" || state.route === "adversaries-catalog" || state.route === "adversaries-payloads") {
+    await loadAdversaries();
+  }
+  if (state.route === "stix-objects" || state.route === "stix-objects-catalog") {
+    await loadStixObjects();
+  }
+  if (state.route === "learning") await loadLearning();
+  if (state.route === "settings") await loadSettingsView();
+}
+
 function applyNavSelection(route) {
   const rootRoute = route === "adversaries-payloads"
     ? "adversaries-payloads"
@@ -2764,9 +3005,6 @@ function setRoute(route) {
   if (!ROUTE_META[route]) route = "home";
   if (route === "rules-import" || route === "rules-catalog") route = "rules";
   if (route === "adversaries-catalog") route = "adversaries";
-  if (route === "admin" && (state.bootstrap?.auth?.no_login || state.principal?.role !== "admin")) {
-    route = "home";
-  }
   state.route = route;
   if (route !== "adversaries-create") {
     document.getElementById("panel-adversary-editor")?.classList.add("hidden");
@@ -2814,7 +3052,7 @@ function setRoute(route) {
     loadStixObjects();
   }
   if (route === "learning") loadLearning();
-  if (route === "admin") loadAdminUsers();
+  if (route === "settings") loadSettingsView();
 
   if (window.innerWidth <= 900) {
     document.body.classList.remove("sidebar-open");
@@ -2833,29 +3071,15 @@ function normalizeDetectionTargets(values) {
 async function bootstrap() {
   state.bootstrap = await api("/api/bootstrap");
   state.principal = state.bootstrap.auth.principal || null;
+  applyBootstrapPreferences();
   RULE_OUTPUT_TARGETS = normalizeDetectionTargets(state.bootstrap?.translation?.available_targets);
   loadCustomPayloadCatalog();
 
   populateFooter();
   setupLoginProviders();
-  document.getElementById("locale-select").value = state.locale;
   document.getElementById("logout-button").classList.toggle("hidden", !state.bootstrap.auth.show_logout);
-
-  const adminNavSection = document.getElementById("admin-nav-section");
-  if (state.bootstrap.auth.no_login || !state.principal || state.principal.role !== "admin") {
-    document.querySelector('[data-route="admin"]')?.classList.add("hidden");
-    adminNavSection?.classList.add("hidden");
-  } else {
-    document.querySelector('[data-route="admin"]')?.classList.remove("hidden");
-    adminNavSection?.classList.remove("hidden");
-  }
-
+  refreshIdentityPill();
   const noLoginActive = state.bootstrap.auth.no_login;
-  document.getElementById("identity-pill").textContent = noLoginActive
-    ? t("common.local_user")
-    : (state.principal
-      ? `${state.principal.username} · ${state.principal.role}`
-      : t("common.not_authenticated"));
   if (noLoginActive) {
     showBootGate();
   } else if (state.bootstrap.auth.authenticated) {
@@ -2901,7 +3125,13 @@ async function loadSharedData() {
   await Promise.all([loadOverview(), loadRules(), loadAbilities(), loadAdversaries(), loadStixObjects(), loadMitreAttack()]);
   await loadLearning();
   if (state.principal?.role === "admin") {
-    await loadAdminUsers();
+    await loadAdminRuntimeSettings();
+    await loadAdminOauthProviders();
+    if (!isNoLoginSession()) {
+      const usersResponse = await api("/api/admin/users");
+      state.adminUsers = usersResponse.entries || [];
+      renderAdminUsersTable();
+    }
   }
   renderDashboard();
   renderAdversaryAbilitySelector();
@@ -2949,6 +3179,7 @@ function renderDashboard() {
   renderBarChart("target-chart", state.overview.top_targets, ["#4d8dff", "#3fd5e0", "#8a78ff"]);
   renderCoverageChart("emulation-coverage-chart", state.overview.emulation_coverage, ["#4d8dff", "#3fd5e0", "#8a78ff", "#39c47a", "#e3b341"]);
   renderBarChart("observable-chart", state.overview.top_observables, ["#8a78ff", "#4d8dff", "#3fd5e0", "#39c47a"]);
+  refreshCustomComboboxes(document);
 }
 
 function detectRuleTypes(entry) {
@@ -3008,6 +3239,7 @@ function renderIndicatesObjectOptions() {
   if (options.some((entry) => entry.stix_id === current)) {
     select.value = current;
   }
+  refreshCustomComboboxes(document);
 }
 
 function renderRuleLabSaveStixOptions() {
@@ -3024,6 +3256,7 @@ function renderRuleLabSaveStixOptions() {
   if (options.some((entry) => entry.stix_id === current)) {
     select.value = current;
   }
+  refreshCustomComboboxes(document);
 }
 
 function renderStixObjectsTable() {
@@ -3451,6 +3684,7 @@ function renderRulesObservableFilterOptions(entries) {
   `;
   select.value = values.includes(current) ? current : "";
   state.rules.observableFilter = select.value;
+  refreshCustomComboboxes(document);
 }
 
 function rulesColumnLabel(columnKey) {
@@ -4015,6 +4249,20 @@ function renderRulesTable() {
   ];
 
   const table = document.getElementById("rules-table");
+  const cardsRoot = document.getElementById("rules-cards");
+  const meta = document.getElementById("rules-meta");
+  const pager = document.getElementById("rules-pager");
+  if (!state.rules.allEntries.length) {
+    if (table) table.innerHTML = "";
+    if (cardsRoot) cardsRoot.innerHTML = "";
+    if (meta) meta.textContent = "";
+    if (pager) pager.innerHTML = "";
+    updateRulesViewModeUI();
+    updateRulesBulkState();
+    renderRulesWorkspace();
+    return;
+  }
+
   table.innerHTML = `
     <thead>
       <tr>${headers.join("")}</tr>
@@ -4024,9 +4272,10 @@ function renderRulesTable() {
   renderRulesCards();
   updateRulesViewModeUI();
   const modeLabel = state.rules.viewMode === "cards" ? t("rules.view.cards") : t("rules.view.table");
-  document.getElementById("rules-meta").textContent = `${state.rules.entries.length}/${state.rules.total} ${t("common.entries")} · ${modeLabel}`;
+  if (meta) meta.textContent = `${state.rules.entries.length}/${state.rules.total} ${t("common.entries")} · ${modeLabel}`;
   renderPager("rules-pager", state.rules.page, state.rules.pageSize, state.rules.total, "rules");
   updateRulesBulkState();
+  renderRulesWorkspace();
 }
 
 async function loadRules(page = state.rules.page) {
@@ -4167,6 +4416,7 @@ function renderAdversaryPlatformFilterOptions() {
   ].join("");
   const validValues = new Set(["", ...options]);
   select.value = validValues.has(selectedValue) ? selectedValue : "";
+  refreshCustomComboboxes(document);
 }
 
 function applyAdversariesClientFilters(entries) {
@@ -5480,7 +5730,7 @@ function setAdversaryFormMode(mode, adversary = null) {
   if (submit) {
     submit.textContent = normalized === "edit" ? t("common.save") : t("adversaries.create.submit");
     submit.classList.remove("hidden", "btn-primary", "btn-success");
-    submit.classList.add(normalized === "edit" ? "btn-primary" : "btn-success");
+    submit.classList.add("btn-primary");
   }
   syncAdversaryExportInlineControls();
   renderAdversaryExecutionCriteria();
@@ -5493,32 +5743,36 @@ function setAdversaryFormSubmitState() {
   if (!(submit instanceof HTMLButtonElement)) return;
   const hasName = Boolean(document.getElementById("adversary-name")?.value?.trim());
   const hasTargetPlatform = Boolean(String(document.getElementById("adversary-target-platform")?.value || "").trim());
-  const hasSteps = state.adversaryCompose.selectedOrder.length > 0;
-  submit.disabled = !hasName || !hasTargetPlatform || !hasSteps;
-  renderAdversaryValidationSummary();
-  updateAdversaryEditorHeading();
-  renderAdversaryWorkspaceHeader();
+  submit.disabled = !hasName || !hasTargetPlatform;
+}
+
+function populateAdversaryCreatePlatformOptions() {
+  const targetPlatform = document.getElementById("adversary-target-platform");
+  if (!(targetPlatform instanceof HTMLSelectElement)) return;
+  const values = state.abilities.entries
+    .flatMap((entry) => entry.platforms || [])
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean);
+  const unique = [...new Set(values)].sort((a, b) => a.localeCompare(b));
+  targetPlatform.innerHTML = [
+    `<option value="">${escapeHtml(t("common.all_platforms"))}</option>`,
+    ...unique.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`),
+  ].join("");
+  refreshCustomComboboxes(document);
 }
 
 function openAdversaryDialog() {
-  mountAdversaryEditorSurface();
-  resetAdversaryComposer();
-  state.adversaryView.entry = null;
-  state.adversaryView.activeId = null;
-  state.adversaryView.activeTab = "summary";
+  const dialog = document.getElementById("adversary-dialog");
+  if (!(dialog instanceof HTMLDialogElement)) return;
   document.getElementById("adversary-form")?.reset();
-  setAdversaryFormMode("create");
-  state.adversaryCompose.originalSignature = adversaryFormSignature();
-  state.adversaryCompose.activeTab = "plan";
+  populateAdversaryCreatePlatformOptions();
+  const title = document.getElementById("adversary-form-title");
+  if (title) title.textContent = t("adversaries.create.title");
   setMarkdownEditorMode("adversary-description", "preview");
   refreshMarkdownEditorPreview("adversary-description");
-  renderAdversaryAbilitySelector();
-  setAdversaryTab("plan");
-  showAdversaryEditorWorkspace();
-  renderAdversaryWorkspaceHeader();
-  const dialog = document.getElementById("adversary-dialog");
-  if (dialog instanceof HTMLDialogElement && dialog.open) {
-    dialog.close();
+  setAdversaryFormSubmitState();
+  if (!dialog.open) {
+    dialog.showModal();
   }
 }
 
@@ -5530,7 +5784,6 @@ async function openAdversaryEditor(adversaryId) {
   resetAdversaryComposer();
   document.getElementById("adversary-name").value = adversary.name || "";
   document.getElementById("adversary-description").value = adversary.description || "";
-  document.getElementById("adversary-confidence").value = String(adversary.confidence ?? 70);
   const targetPlatform = document.getElementById("adversary-target-platform");
   if (targetPlatform instanceof HTMLSelectElement) {
     targetPlatform.value = String(adversary.target_platform || "").trim().toLowerCase();
@@ -5572,11 +5825,33 @@ function closeAdversaryDialog() {
 
 async function createAdversary(event) {
   event.preventDefault();
-  const saved = await persistAdversaryAutosave();
-  if (!saved?.id) return;
-  showToast("toast.saved");
-  await loadAdversaries(state.adversaries.page);
-  await openAdversaryDetail(saved.id);
+  const name = String(document.getElementById("adversary-name")?.value || "").trim();
+  const targetPlatform = String(document.getElementById("adversary-target-platform")?.value || "").trim().toLowerCase();
+  const description = String(document.getElementById("adversary-description")?.value || "").trim();
+  if (!name || !targetPlatform) {
+    showToast("toast.error_saving", true);
+    return;
+  }
+  state.adversaryCompose.selectedOrder = [];
+  state.adversaryCompose.editorSelectedStepId = null;
+  state.adversaryCompose.editingId = null;
+  state.adversaryCompose.mode = "create";
+  state.adversaryCompose.editorLastSavedSignature = "";
+  state.adversaryView.entry = {
+    id: "",
+    name,
+    confidence: 70,
+    target_platform: targetPlatform,
+    description,
+    ability_refs: [],
+    steps: 0,
+    compatible_exports: [],
+  };
+  state.adversaryView.activeId = null;
+  state.adversaryView.activeTab = "summary";
+  document.getElementById("adversary-dialog")?.close();
+  showAdversaryEditorPanel();
+  setAdversaryEditorTab("overview");
 }
 
 async function exportAdversaryFromDialog() {
@@ -6322,7 +6597,8 @@ function renderRulesWorkspace() {
   const catalogMain = document.getElementById("rules-catalog-main");
   const panel = document.getElementById("panel-rules");
   const hasEntries = (state.rules.allEntries || []).length > 0;
-  const showEmptyState = mode === "explore" && state.rules.loaded && !hasEntries;
+  const visibleTotal = Number(state.rules.total || 0);
+  const showEmptyState = mode === "explore" && (visibleTotal === 0 || !hasEntries);
   if (welcomeCard) {
     welcomeCard.classList.toggle("hidden", mode !== "welcome");
   }
@@ -6342,6 +6618,7 @@ function renderRulesWorkspace() {
     panel.classList.toggle("workspace-center-mode", mode === "welcome" || showEmptyState);
   }
   renderRulesFiltersRevealer();
+  refreshCustomComboboxes(document);
 }
 
 function renderRulesFiltersRevealer() {
@@ -6411,6 +6688,7 @@ function renderAdversaryWorkspace() {
     renderPayloadCatalogFiltersRevealer();
     renderPayloadCatalogWorkspace();
   }
+  refreshCustomComboboxes(document);
 }
 
 function mountAdversaryEditorSurface() {
@@ -6471,8 +6749,10 @@ function renderAdversaryWorkspaceHeader() {
   primary.classList.add("btn-success");
   primary.dataset.action = "adversary-save";
   primary.textContent = t("common.save");
+  const payload = adversaryEditorPayload();
+  primary.disabled = !payload.name || !payload.target_platform || state.adversaryCompose.selectedOrder.length === 0;
 
-  secondary.classList.remove("hidden");
+  secondary.classList.add("hidden");
   secondary.dataset.action = "adversary-cancel-edit";
   secondary.textContent = t("common.cancel");
 }
@@ -6530,6 +6810,7 @@ function renderStixObjectsWorkspace() {
   if (panel) {
     panel.classList.toggle("workspace-center-mode", showWelcome);
   }
+  refreshCustomComboboxes(document);
 }
 
 function renderRulesAdvancedFilters() {
@@ -6562,6 +6843,7 @@ function renderRulesAdvancedFilters() {
     `,
     )
     .join("");
+  refreshCustomComboboxes(document);
 }
 
 async function saveRulesBatch(rules) {
@@ -6620,6 +6902,7 @@ async function deleteSelectedRules() {
   const confirmed = await askForConfirmation(
     t("rules.confirm_delete_selected"),
     t("common.confirm_action"),
+    { acceptLabel: t("rules.delete_action") },
   );
   if (!confirmed) return;
   const selectedIds = [...state.rules.selected];
@@ -6692,6 +6975,7 @@ async function deleteSelectedAdversaries() {
   const confirmed = await askForConfirmation(
     t("adversaries.confirm_delete_selected"),
     t("common.confirm_action"),
+    { acceptLabel: t("adversaries.delete_action") },
   );
   if (!confirmed) return;
   const selectedIds = [...state.adversaries.selected];
@@ -6798,6 +7082,7 @@ function renderLearningPathOptions() {
   `;
   select.value = paths.includes(state.learning.pathFilter) ? state.learning.pathFilter : "";
   state.learning.pathFilter = select.value;
+  refreshCustomComboboxes(document);
 }
 
 function filteredLearningChallenges() {
@@ -7081,16 +7366,74 @@ async function validateLearningSubmission() {
   status.innerHTML = `${statusBadge("pending", "warning")} ${escapeHtml(response.message || t("learning.status.pending"))}`;
 }
 
-async function loadAdminUsers() {
-  if (state.principal?.role !== "admin") return;
-  const response = await api("/api/admin/users");
-  state.adminUsers = response.entries || [];
-  const rows = state.adminUsers.map((user) => `
+function isNoLoginSession() {
+  return Boolean(state.bootstrap?.auth?.no_login);
+}
+
+function setSettingsTab(tab) {
+  const normalized = ["personal", "application", "users"].includes(tab) ? tab : "personal";
+  const noLoginActive = isNoLoginSession();
+  const isAdmin = state.principal?.role === "admin";
+  const applicationEnabled = isAdmin;
+  const usersEnabled = isAdmin && !noLoginActive;
+  const effective = normalized === "application" && !applicationEnabled
+    ? "personal"
+    : normalized === "users" && !usersEnabled
+      ? "personal"
+      : normalized;
+  state.settings.activeTab = effective;
+
+  document.querySelectorAll("[data-action='settings-tab']").forEach((button) => {
+    const tabId = button.dataset.tab || "personal";
+    const enabled = tabId === "personal"
+      || (tabId === "application" && applicationEnabled)
+      || (tabId === "users" && usersEnabled);
+    button.disabled = !enabled;
+    button.classList.toggle("active", tabId === effective);
+    button.classList.toggle("is-disabled", !enabled);
+  });
+
+  document.querySelectorAll("[data-settings-panel]").forEach((panel) => {
+    panel.classList.toggle("hidden", panel.dataset.settingsPanel !== effective);
+  });
+}
+
+function userMatchesSettingsFilters(user) {
+  const filters = state.settings.usersFilters;
+  const search = String(filters.search || "").trim().toLowerCase();
+  const roleMatch = filters.role === "all" || String(user.role || "") === filters.role;
+  const statusMatch = filters.status === "all"
+    || (filters.status === "enabled" && Boolean(user.enabled))
+    || (filters.status === "disabled" && !Boolean(user.enabled));
+  if (!roleMatch || !statusMatch) return false;
+  if (!search) return true;
+  const haystack = [user.username, user.display_name, user.id]
+    .map((value) => String(value || "").toLowerCase())
+    .join(" ");
+  return haystack.includes(search);
+}
+
+function renderAdminUsersTable() {
+  const noLoginActive = isNoLoginSession();
+  const users = state.adminUsers.filter((entry) => userMatchesSettingsFilters(entry));
+  const rows = users.map((user) => `
     <tr>
-      <td>${escapeHtml(user.username)}</td>
+      <td>
+        <div class="settings-user-main">
+          <strong>${escapeHtml(user.username)}</strong>
+          <small class="muted mono">${escapeHtml(user.id)}</small>
+        </div>
+      </td>
       <td>
         ${
-  user.id === state.principal.user_id
+          user.id === state.principal.user_id
+            ? escapeHtml(user.display_name || user.username)
+            : `<input class="admin-user-display-input" data-admin-display-name="${user.id}" value="${escapeHtml(user.display_name || user.username)}">`
+        }
+      </td>
+      <td>
+        ${
+  user.id === state.principal.user_id || noLoginActive
     ? statusBadge(user.role, user.role === "admin" ? "warning" : "success")
     : `<select class="admin-role-select" data-admin-role="${user.id}">
               <option value="analyst" ${user.role === "analyst" ? "selected" : ""}>${escapeHtml(t("admin.role.analyst"))}</option>
@@ -7098,10 +7441,21 @@ async function loadAdminUsers() {
             </select>`
 }
       </td>
+      <td>${user.local_auth ? statusBadge(t("settings.admin.users.local_account"), "success") : statusBadge(t("settings.admin.users.external_account"), "warning")}</td>
+      <td>
+        ${
+  !user.local_auth
+    ? statusBadge(t("settings.password.unavailable"), "warning")
+    : `<label class="admin-enabled-toggle">
+            <input type="checkbox" data-admin-totp="${user.id}" ${user.totp_enabled ? "checked" : ""} ${noLoginActive ? "disabled" : ""}>
+            <span>${user.totp_enabled ? escapeHtml(t("common.enabled")) : escapeHtml(t("common.disabled"))}</span>
+          </label>`
+}
+      </td>
       <td>${escapeHtml(user.created_at_utc)}</td>
       <td>
         ${
-  user.id === state.principal.user_id
+  user.id === state.principal.user_id || noLoginActive
     ? (user.enabled ? statusBadge(t("common.enabled"), "success") : statusBadge(t("common.disabled"), "error"))
     : `<label class="admin-enabled-toggle">
             <input type="checkbox" data-admin-enabled="${user.id}" ${user.enabled ? "checked" : ""}>
@@ -7111,7 +7465,17 @@ async function loadAdminUsers() {
       </td>
       <td>
         ${
-          user.id === state.principal.user_id
+          user.id === state.principal.user_id || !user.local_auth || noLoginActive
+            ? statusBadge(t("settings.password.unavailable"), "warning")
+            : `<div class="settings-user-password-row">
+                <input type="password" data-admin-password="${user.id}" data-i18n-placeholder="admin.password.new" placeholder="New password">
+                <button class="btn btn-primary" data-action="admin-reset-password" data-id="${user.id}">${escapeHtml(t("settings.admin.users.change_password"))}</button>
+              </div>`
+        }
+      </td>
+      <td>
+        ${
+          user.id === state.principal.user_id || noLoginActive
             ? ""
             : `<button class="btn btn-primary" data-action="admin-update-user" data-id="${user.id}">${escapeHtml(t("common.apply"))}</button>
                <button class="btn btn-danger" data-action="admin-delete-user" data-id="${user.id}">${escapeHtml(t("admin.delete"))}</button>`
@@ -7121,11 +7485,20 @@ async function loadAdminUsers() {
   `);
   renderTable(
     "admin-users-table",
-    [t("admin.col.username"), t("admin.col.role"), t("admin.col.created"), t("admin.col.enabled"), t("admin.col.actions")],
+    [
+      t("admin.col.username"),
+      t("settings.admin.users.display_name"),
+      t("admin.col.role"),
+      t("settings.admin.users.account_type"),
+      t("settings.admin.users.totp"),
+      t("admin.col.created"),
+      t("admin.col.enabled"),
+      t("settings.admin.users.password"),
+      t("admin.col.actions"),
+    ],
     rows,
   );
-  await loadAdminOauthProviders();
-  await loadAdminRuntimeSettings();
+  refreshCustomComboboxes(document);
 }
 
 async function loadAdminOauthProviders() {
@@ -7135,8 +7508,28 @@ async function loadAdminOauthProviders() {
     container.innerHTML = "";
     return;
   }
-  const response = await api("/api/admin/oauth/providers");
-  const entries = response.entries || [];
+  const noLoginActive = isNoLoginSession();
+  let entries = [];
+  if (noLoginActive) {
+    entries = (state.bootstrap?.auth?.providers || []).map((provider) => ({
+      id: provider.id,
+      label: provider.label,
+      configured: Boolean(provider.configured),
+      authorized: Boolean(provider.authorized),
+      enabled: Boolean(provider.enabled),
+      auth_url: provider.auth_url || "",
+    }));
+  } else {
+    const response = await api("/api/admin/oauth/providers");
+    entries = (response.entries || []).map((provider) => {
+      const bootstrapProvider = (state.bootstrap?.auth?.providers || []).find((item) => item.id === provider.id);
+      return {
+        ...provider,
+        auth_url: bootstrapProvider?.auth_url || "",
+      };
+    });
+  }
+  state.adminOauthProviders = entries;
   container.innerHTML = entries.map((provider) => `
     <article class="admin-oauth-row">
       <div class="admin-oauth-main">
@@ -7145,17 +7538,65 @@ async function loadAdminOauthProviders() {
           ${provider.configured
       ? statusBadge(t("admin.oauth.configured"), "success")
       : statusBadge(t("admin.oauth.not_configured"), "error")}
+          ${provider.authorized
+      ? statusBadge(t("common.enabled"), "success")
+      : statusBadge(t("common.disabled"), "warning")}
         </div>
       </div>
       <div class="admin-oauth-actions">
-        <label class="admin-enabled-toggle">
-          <input type="checkbox" data-admin-oauth-authorized="${escapeHtml(provider.id || "")}" ${provider.authorized ? "checked" : ""}>
-          <span>${provider.authorized ? escapeHtml(t("common.enabled")) : escapeHtml(t("common.disabled"))}</span>
-        </label>
-        <button class="btn btn-primary" data-action="admin-oauth-update" data-provider="${escapeHtml(provider.id || "")}">${escapeHtml(t("common.apply"))}</button>
+        <button class="btn btn-primary" data-action="admin-oauth-configure" data-provider="${escapeHtml(provider.id || "")}" ${noLoginActive ? "disabled" : ""}>${escapeHtml(t("admin.oauth.configure"))}</button>
       </div>
     </article>
   `).join("");
+}
+
+function openAdminProviderConfigDialog(providerId) {
+  const dialog = document.getElementById("admin-provider-dialog");
+  if (!(dialog instanceof HTMLDialogElement)) return;
+  const provider = state.adminOauthProviders.find((entry) => String(entry.id || "") === String(providerId || ""));
+  if (!provider) return;
+
+  const providerIdInput = document.getElementById("admin-provider-id");
+  const providerName = document.getElementById("admin-provider-name");
+  const providerAuthUrl = document.getElementById("admin-provider-auth-url");
+  const providerAuthorized = document.getElementById("admin-provider-authorized");
+  const providerSummary = document.getElementById("admin-provider-config-summary");
+  const saveButton = document.getElementById("admin-provider-save");
+  const noLoginActive = isNoLoginSession();
+
+  if (providerIdInput instanceof HTMLInputElement) providerIdInput.value = String(provider.id || "");
+  if (providerName instanceof HTMLInputElement) providerName.value = String(provider.label || provider.id || "");
+  if (providerAuthUrl instanceof HTMLInputElement) {
+    providerAuthUrl.value = String(provider.auth_url || "");
+    providerAuthUrl.placeholder = t("admin.oauth.configure.auth_url_unavailable");
+  }
+  if (providerAuthorized instanceof HTMLInputElement) {
+    providerAuthorized.checked = Boolean(provider.authorized);
+    providerAuthorized.disabled = noLoginActive || !provider.configured;
+  }
+  if (saveButton instanceof HTMLButtonElement) {
+    saveButton.disabled = noLoginActive || !provider.configured;
+  }
+  if (providerSummary) {
+    providerSummary.textContent = provider.configured
+      ? t("admin.oauth.configure.configured")
+      : t("admin.oauth.configure.not_configured");
+  }
+
+  dialog.showModal();
+}
+
+function closeAdminProviderConfigDialog() {
+  const dialog = document.getElementById("admin-provider-dialog");
+  if (dialog instanceof HTMLDialogElement) {
+    dialog.close();
+  }
+}
+
+function toggleSettingsUsersFilters() {
+  state.settings.usersFilters.open = !state.settings.usersFilters.open;
+  const panel = document.getElementById("settings-users-filters");
+  panel?.classList.toggle("hidden", !state.settings.usersFilters.open);
 }
 
 async function loadAdminRuntimeSettings() {
@@ -7170,8 +7611,12 @@ async function loadAdminRuntimeSettings() {
   const entry = response?.entry || {};
   const sigmaUrl = document.getElementById("admin-sigma-rpc-url");
   const sigmaToken = document.getElementById("admin-sigma-rpc-token");
-  const noLogin = document.getElementById("admin-no-login");
+  const defaultLocale = document.getElementById("admin-default-locale");
+  const defaultTheme = document.getElementById("admin-default-theme");
+  const defaultTotp = document.getElementById("admin-default-totp");
   const tokenHint = document.getElementById("admin-sigma-rpc-token-hint");
+  const noLoginActive = isNoLoginSession();
+  state.adminRuntimeSettings = entry;
 
   if (sigmaUrl instanceof HTMLInputElement) {
     sigmaUrl.value = entry.sigma_rpc_url || "";
@@ -7179,14 +7624,109 @@ async function loadAdminRuntimeSettings() {
   if (sigmaToken instanceof HTMLInputElement) {
     sigmaToken.value = "";
   }
-  if (noLogin instanceof HTMLInputElement) {
-    noLogin.checked = Boolean(entry.no_login);
+  if (defaultLocale instanceof HTMLSelectElement) {
+    defaultLocale.value = entry.default_locale || "en";
+    defaultLocale.disabled = noLoginActive;
+  }
+  if (defaultTheme instanceof HTMLSelectElement) {
+    defaultTheme.value = entry.default_theme || "dark";
+    defaultTheme.disabled = noLoginActive;
+  }
+  if (defaultTotp instanceof HTMLSelectElement) {
+    defaultTotp.value = entry.default_totp_required ? "required" : "disabled";
+    defaultTotp.disabled = noLoginActive;
   }
   if (tokenHint) {
     tokenHint.textContent = entry.sigma_rpc_token_set
       ? t("admin.settings.sigma_token_set")
       : t("admin.settings.sigma_token_unset");
   }
+
+  const disabledNote = document.getElementById("settings-application-disabled-note");
+  disabledNote?.classList.toggle("hidden", !noLoginActive);
+  refreshCustomComboboxes(document);
+}
+
+function populateSettingsProfileForm() {
+  const entry = state.userSettings || state.bootstrap?.user;
+  if (!entry) return;
+  const displayName = document.getElementById("settings-display-name");
+  const locale = document.getElementById("settings-locale");
+  const theme = document.getElementById("settings-theme");
+  const accountId = document.getElementById("settings-account-id");
+  const currentPassword = document.getElementById("settings-current-password");
+  const nextPassword = document.getElementById("settings-next-password");
+  const submit = document.getElementById("settings-password-submit");
+  const disabledReason = document.getElementById("settings-password-disabled");
+  const passwordForm = document.getElementById("settings-password-form");
+  const passwordSection = document.getElementById("settings-password-section");
+
+  if (displayName instanceof HTMLInputElement) {
+    displayName.value = entry.display_name || entry.username || "";
+  }
+  if (locale instanceof HTMLSelectElement) {
+    locale.value = entry.locale || "en";
+  }
+  if (theme instanceof HTMLSelectElement) {
+    theme.value = entry.theme || "dark";
+  }
+  if (accountId instanceof HTMLInputElement) {
+    accountId.value = entry.account_id || "";
+  }
+
+  const canChangePassword = Boolean(entry.can_change_password);
+  const noLoginActive = Boolean(entry.no_login);
+  if (passwordSection) {
+    passwordSection.classList.toggle("hidden", noLoginActive);
+  }
+  const reasonKey = entry.no_login
+    ? "settings.password.disabled_no_login"
+    : entry.is_bootstrap_admin
+      ? "settings.password.disabled_bootstrap_admin"
+      : !entry.local_auth
+        ? "settings.password.disabled_external_account"
+        : "";
+
+  if (currentPassword instanceof HTMLInputElement) currentPassword.disabled = !canChangePassword;
+  if (nextPassword instanceof HTMLInputElement) nextPassword.disabled = !canChangePassword;
+  if (submit instanceof HTMLButtonElement) submit.disabled = !canChangePassword;
+  if (passwordForm instanceof HTMLFormElement) {
+    passwordForm.classList.toggle("is-disabled", !canChangePassword);
+  }
+  if (disabledReason) {
+    disabledReason.classList.toggle("hidden", canChangePassword || !reasonKey);
+    disabledReason.textContent = reasonKey ? t(reasonKey) : "";
+  }
+  refreshCustomComboboxes(document);
+}
+
+async function loadSettingsView() {
+  const response = await api("/api/settings/profile");
+  state.userSettings = response.entry || state.bootstrap?.user || null;
+  if (state.principal) {
+    state.principal.display_name = state.userSettings?.display_name || state.principal.username;
+  }
+  populateSettingsProfileForm();
+  refreshIdentityPill();
+  const adminSections = document.getElementById("settings-admin-sections");
+  const usersDisabledNote = document.getElementById("settings-users-disabled-note");
+  const isAdmin = state.principal?.role === "admin";
+  const noLoginActive = isNoLoginSession();
+  adminSections?.classList.toggle("hidden", !isAdmin);
+  if (isAdmin) {
+    await loadAdminRuntimeSettings();
+    await loadAdminOauthProviders();
+    if (noLoginActive) {
+      state.adminUsers = [];
+      renderAdminUsersTable();
+    } else {
+      const usersResponse = await api("/api/admin/users");
+      state.adminUsers = usersResponse.entries || [];
+      renderAdminUsersTable();
+    }
+  }
+  usersDisabledNote?.classList.toggle("hidden", !noLoginActive);
+  setSettingsTab(state.settings.activeTab || "personal");
 }
 
 function renderDownloadsModal(title, downloads) {
@@ -7285,6 +7825,22 @@ async function initialize() {
 }
 
 function installEventHandlers() {
+  document.addEventListener("click", (event) => {
+    if (!(event.target instanceof Element) || !event.target.closest(".spuc-combobox")) {
+      closeAllCustomComboboxes();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeAllCustomComboboxes();
+    }
+  });
+  document.addEventListener("change", (event) => {
+    if (event.target instanceof HTMLSelectElement && isCustomComboboxCandidate(event.target)) {
+      syncCustomCombobox(event.target);
+    }
+  });
+
   document.querySelectorAll("dialog.detail-dialog").forEach((dialog) => {
     if (!(dialog instanceof HTMLDialogElement)) return;
     const closeWithPolicy = () => {
@@ -7303,24 +7859,6 @@ function installEventHandlers() {
         closeWithPolicy();
       }
     });
-  });
-
-  document.getElementById("locale-select").addEventListener("change", async (event) => {
-    state.locale = event.target.value;
-    localStorage.setItem("spuc-web-locale", state.locale);
-    applyTranslations();
-    if (!document.getElementById("app-view").classList.contains("hidden")) {
-      renderDashboard();
-      await loadRules();
-      await loadAbilities();
-      await loadAdversaries();
-      await loadLearning();
-      await loadAdminUsers();
-    }
-  });
-
-  document.getElementById("theme-toggle").addEventListener("click", () => {
-    setTheme(state.theme === "dark" ? "light" : "dark");
   });
 
   document.getElementById("login-form").addEventListener("submit", async (event) => {
@@ -7549,6 +8087,9 @@ function installEventHandlers() {
       void saveAdversaryFromNewEditor({ showSavedToast: true });
     });
     node.addEventListener(node.tagName === "SELECT" ? "change" : "input", () => {
+      if (id === "adversary-editor-confidence") {
+        updateAdversaryEditorConfidenceValue();
+      }
       renderAdversaryEditorHeader();
     });
   });
@@ -7619,7 +8160,7 @@ function installEventHandlers() {
       }
     });
   }
-  ["adversary-name", "adversary-description", "adversary-confidence"].forEach((id) => {
+  ["adversary-name", "adversary-description"].forEach((id) => {
     const node = document.getElementById(id);
     if (!node) return;
     node.addEventListener("input", () => {
@@ -7775,22 +8316,104 @@ function installEventHandlers() {
       method: "POST",
       body: JSON.stringify({
         username: document.getElementById("admin-new-username").value,
+        display_name: document.getElementById("admin-new-display-name").value,
         password: document.getElementById("admin-new-password").value,
         role: document.getElementById("admin-new-role").value,
       }),
     });
     showToast("toast.saved");
     event.target.reset();
-    await loadAdminUsers();
+    const dialog = document.getElementById("admin-create-user-dialog");
+    if (dialog instanceof HTMLDialogElement) {
+      dialog.close();
+    }
+    await loadSettingsView();
   });
 
-  document.getElementById("admin-change-password").addEventListener("submit", async (event) => {
+  const createUserCancel = document.getElementById("admin-create-user-cancel");
+  if (createUserCancel) {
+    createUserCancel.addEventListener("click", () => {
+      const dialog = document.getElementById("admin-create-user-dialog");
+      if (dialog instanceof HTMLDialogElement) {
+        dialog.close();
+      }
+    });
+  }
+
+  const providerCancel = document.getElementById("admin-provider-cancel");
+  if (providerCancel) {
+    providerCancel.addEventListener("click", () => {
+      closeAdminProviderConfigDialog();
+    });
+  }
+
+  const providerForm = document.getElementById("admin-provider-form");
+  if (providerForm instanceof HTMLFormElement) {
+    providerForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (isNoLoginSession()) return;
+      const providerId = document.getElementById("admin-provider-id")?.value || "";
+      const authorized = Boolean(document.getElementById("admin-provider-authorized")?.checked);
+      await api(`/api/admin/oauth/providers/${encodeURIComponent(providerId)}/update`, {
+        method: "POST",
+        body: JSON.stringify({ authorized }),
+      });
+      closeAdminProviderConfigDialog();
+      showToast("toast.saved");
+      await loadAdminOauthProviders();
+    });
+  }
+
+  const usersFilterSearch = document.getElementById("admin-users-filter-search");
+  const usersFilterRole = document.getElementById("admin-users-filter-role");
+  const usersFilterStatus = document.getElementById("admin-users-filter-status");
+  if (usersFilterSearch instanceof HTMLInputElement) {
+    usersFilterSearch.addEventListener("input", (event) => {
+      state.settings.usersFilters.search = event.target.value || "";
+      renderAdminUsersTable();
+    });
+  }
+  if (usersFilterRole instanceof HTMLSelectElement) {
+    usersFilterRole.addEventListener("change", (event) => {
+      state.settings.usersFilters.role = event.target.value || "all";
+      renderAdminUsersTable();
+    });
+  }
+  if (usersFilterStatus instanceof HTMLSelectElement) {
+    usersFilterStatus.addEventListener("change", (event) => {
+      state.settings.usersFilters.status = event.target.value || "all";
+      renderAdminUsersTable();
+    });
+  }
+
+  document.getElementById("settings-profile-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const response = await api("/api/settings/profile", {
+      method: "POST",
+      body: JSON.stringify({
+        display_name: document.getElementById("settings-display-name").value,
+        locale: document.getElementById("settings-locale").value,
+        theme: document.getElementById("settings-theme").value,
+      }),
+    });
+    state.userSettings = response.entry || state.userSettings;
+    state.principal.display_name = state.userSettings?.display_name || state.principal?.username || "";
+    setLocale(state.userSettings?.locale || state.locale);
+    setTheme(state.userSettings?.theme || state.theme);
+    applyTranslations();
+    populateSettingsProfileForm();
+    refreshIdentityPill();
+    showToast("toast.saved");
+    await reloadLocalizedAppData();
+  });
+
+  document.getElementById("settings-password-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     await api("/api/admin/change-password", {
       method: "POST",
       body: JSON.stringify({
-        current_password: document.getElementById("admin-current-password").value,
-        new_password: document.getElementById("admin-next-password").value,
+        current_password: document.getElementById("settings-current-password").value,
+        new_password: document.getElementById("settings-next-password").value,
       }),
     });
     showToast("toast.saved");
@@ -7803,17 +8426,19 @@ function installEventHandlers() {
       event.preventDefault();
       const sigmaUrl = document.getElementById("admin-sigma-rpc-url")?.value || "";
       const sigmaToken = document.getElementById("admin-sigma-rpc-token")?.value || "";
-      const noLogin = Boolean(document.getElementById("admin-no-login")?.checked);
+      const defaultTotpRequired = (document.getElementById("admin-default-totp")?.value || "disabled") === "required";
       await api("/api/admin/settings", {
         method: "POST",
         body: JSON.stringify({
           sigma_rpc_url: sigmaUrl,
           sigma_rpc_token: sigmaToken,
-          no_login: noLogin,
+          default_locale: document.getElementById("admin-default-locale")?.value || "en",
+          default_theme: document.getElementById("admin-default-theme")?.value || "dark",
+          default_totp_required: defaultTotpRequired,
         }),
       });
       showToast("toast.saved");
-      await bootstrap();
+      await loadAdminRuntimeSettings();
     });
   }
 
@@ -8011,8 +8636,9 @@ function updatePayloadCatalogBulkState(filteredEntries = null) {
 async function deleteSelectedPayloads() {
   if (state.customPayloads.selected.size === 0) return;
   const confirmed = await askForConfirmation(
-    t("rules.confirm_delete_selected"),
+    t("payloads.confirm_delete_selected"),
     t("common.confirm_action"),
+    { acceptLabel: t("payloads.delete_action") },
   );
   if (!confirmed) return;
 
@@ -8150,6 +8776,20 @@ function adversaryEditorPayload() {
   };
 }
 
+function updateAdversaryEditorConfidenceValue() {
+  const input = document.getElementById("adversary-editor-confidence");
+  const value = document.getElementById("adversary-editor-confidence-value");
+  if (!(input instanceof HTMLInputElement) || !value) return;
+  value.textContent = String(Math.max(0, Math.min(100, Number(input.value || 70) || 70)));
+}
+
+function canPersistAdversaryEditorPayload(payload) {
+  return Boolean(payload?.name)
+    && Boolean(String(payload?.target_platform || "").trim())
+    && Array.isArray(payload?.ability_refs)
+    && payload.ability_refs.length > 0;
+}
+
 function renderAdversaryEditorExportMenu() {
   const toggleButton = document.getElementById("adversary-editor-export-toggle");
   const menu = document.getElementById("adversary-editor-export-menu");
@@ -8193,7 +8833,7 @@ async function saveAdversaryFromNewEditor(options = {}) {
     force = false,
   } = options;
   const payload = adversaryEditorPayload();
-  if (!payload.name) return null;
+  if (!canPersistAdversaryEditorPayload(payload)) return null;
 
   const signature = JSON.stringify(payload);
   if (!force && signature === state.adversaryCompose.editorLastSavedSignature) {
@@ -8377,6 +9017,8 @@ function renderAdversaryEditorOverview() {
     platformSelect.value = String(current.target_platform || "").toLowerCase();
   }
   if (descriptionInput) descriptionInput.value = String(current.description || "");
+  updateAdversaryEditorConfidenceValue();
+  refreshCustomComboboxes(document);
   renderAdversaryEditorHeader();
 }
 
@@ -8493,6 +9135,7 @@ function renderAdversaryEditorFlowAbilityOptions() {
     utilitySelect.innerHTML = [`<option value="">${escapeHtml(t("common.all_utility_types"))}</option>`, ...values.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`)].join("");
     utilitySelect.dataset.loaded = "1";
   }
+  refreshCustomComboboxes(document);
 
   const search = String(searchInput?.value || "").toLowerCase();
   const platform = String(platformSelect?.value || "").toLowerCase();
@@ -8740,8 +9383,9 @@ function createNewAdversaryInEditor() {
         const payloadId = String(target.dataset.payloadId || "");
         if (!payloadId) return;
         const confirmed = await askForConfirmation(
-          t("adversaries.create.remove"),
+          t("payloads.confirm_delete_one"),
           t("common.confirm_action"),
+          { acceptLabel: t("payloads.delete_one_action") },
         );
         if (!confirmed) return;
         state.customPayloads.entries = (state.customPayloads.entries || []).filter((entry) => entry.id !== payloadId);
@@ -8940,7 +9584,11 @@ function createNewAdversaryInEditor() {
       } else if (action === "adversary-remove-ability") {
         const abilityId = target.dataset.id;
         if (!abilityId) return;
-        const confirmed = confirm(t("adversaries.confirm_remove_step"));
+        const confirmed = await askForConfirmation(
+          t("adversaries.confirm_remove_step"),
+          t("common.confirm_action"),
+          { acceptLabel: t("adversaries.create.remove") },
+        );
         if (!confirmed) return;
         state.adversaryCompose.selectedOrder = state.adversaryCompose.selectedOrder.filter((id) => id !== abilityId);
         renderAdversaryFlowSteps();
@@ -8993,6 +9641,12 @@ function createNewAdversaryInEditor() {
       } else if (action === "flow-step-remove") {
         const stepIndex = Number(target.dataset.stepIndex || -1);
         if (stepIndex >= 0 && stepIndex < state.adversaryCompose.selectedOrder.length) {
+          const confirmed = await askForConfirmation(
+            t("adversaries.confirm_remove_step"),
+            t("common.confirm_action"),
+            { acceptLabel: t("adversaries.create.remove") },
+          );
+          if (!confirmed) return;
           state.adversaryCompose.selectedOrder.splice(stepIndex, 1);
           renderAdversaryFlowSteps();
           void saveAdversaryFromNewEditor({ showSavedToast: true });
@@ -9217,26 +9871,59 @@ function createNewAdversaryInEditor() {
         if (select instanceof HTMLSelectElement) select.value = state.learning.pathFilter;
         saveLearningProgress();
         renderLearningChallenges();
+      } else if (action === "settings-tab") {
+        setSettingsTab(target.dataset.tab || "personal");
+      } else if (action === "settings-users-toggle-filters") {
+        toggleSettingsUsersFilters();
+      } else if (action === "admin-open-create-user") {
+        if (isNoLoginSession()) return;
+        const dialog = document.getElementById("admin-create-user-dialog");
+        if (dialog instanceof HTMLDialogElement) {
+          dialog.showModal();
+        }
       } else if (action === "admin-delete-user") {
-        const confirmDelete = confirm(t("admin.delete_confirm"));
+        const confirmDelete = await askForConfirmation(
+          t("admin.delete_confirm"),
+          t("common.confirm_action"),
+          { acceptLabel: t("admin.delete_action") },
+        );
         if (!confirmDelete) return;
         await api(`/api/admin/users/${encodeURIComponent(target.dataset.id)}`, {
           method: "DELETE",
           body: "{}",
         });
         showToast("toast.saved");
-        await loadAdminUsers();
+        await loadSettingsView();
       } else if (action === "admin-update-user") {
         const userId = target.dataset.id;
         const role = document.querySelector(`[data-admin-role="${userId}"]`)?.value || "analyst";
         const enabled = Boolean(document.querySelector(`[data-admin-enabled="${userId}"]`)?.checked);
+        const totpEnabled = Boolean(document.querySelector(`[data-admin-totp="${userId}"]`)?.checked);
+        const displayName = document.querySelector(`[data-admin-display-name="${userId}"]`)?.value || "";
         await api(`/api/admin/users/${encodeURIComponent(userId)}/update`, {
           method: "POST",
-          body: JSON.stringify({ role, enabled }),
+          body: JSON.stringify({ role, enabled, display_name: displayName, totp_enabled: totpEnabled }),
         });
         showToast("toast.saved");
-        await loadAdminUsers();
+        await loadSettingsView();
+      } else if (action === "admin-reset-password") {
+        const userId = target.dataset.id || "";
+        const newPassword = document.querySelector(`[data-admin-password="${userId}"]`)?.value || "";
+        if (!newPassword.trim()) {
+          showToast("settings.admin.users.password_required", true);
+          return;
+        }
+        await api("/api/admin/change-password", {
+          method: "POST",
+          body: JSON.stringify({ user_id: userId, new_password: newPassword }),
+        });
+        const passwordInput = document.querySelector(`[data-admin-password="${userId}"]`);
+        if (passwordInput instanceof HTMLInputElement) passwordInput.value = "";
+        showToast("toast.saved");
+      } else if (action === "admin-oauth-configure") {
+        openAdminProviderConfigDialog(target.dataset.provider || "");
       } else if (action === "admin-oauth-update") {
+        if (isNoLoginSession()) return;
         const providerId = target.dataset.provider || "";
         const authorized = Boolean(document.querySelector(`[data-admin-oauth-authorized="${providerId}"]`)?.checked);
         await api(`/api/admin/oauth/providers/${encodeURIComponent(providerId)}/update`, {
@@ -9244,7 +9931,7 @@ function createNewAdversaryInEditor() {
           body: JSON.stringify({ authorized }),
         });
         showToast("toast.saved");
-        await loadAdminUsers();
+        await loadAdminOauthProviders();
       } else if (action === "stix-create-open") {
         openStixObjectDialog();
       } else if (action === "stix-edit-object") {
@@ -9334,14 +10021,22 @@ function createNewAdversaryInEditor() {
       } else if (action === "stix-delete") {
         const stixId = target.dataset.stixId || "";
         if (!stixId) return;
-        const confirmDelete = confirm(t("rules.bulk.delete_confirm"));
+        const confirmDelete = await askForConfirmation(
+          t("stix_objects.confirm_delete_one"),
+          t("common.confirm_action"),
+          { acceptLabel: t("stix_objects.delete_one_action") },
+        );
         if (!confirmDelete) return;
         await api(`/api/stix-objects/${encodeURIComponent(stixId)}`, { method: "DELETE", body: "{}" });
         showToast("toast.saved");
         await loadStixObjects();
       } else if (action === "stix-delete-selected") {
         if (state.stixObjectsView.selected.size === 0) return;
-        const confirmDelete = confirm(t("rules.bulk.delete_confirm"));
+        const confirmDelete = await askForConfirmation(
+          t("stix_objects.confirm_delete_selected"),
+          t("common.confirm_action"),
+          { acceptLabel: t("stix_objects.delete_selected_action") },
+        );
         if (!confirmDelete) return;
         await Promise.all(
           Array.from(state.stixObjectsView.selected).map((stixId) =>

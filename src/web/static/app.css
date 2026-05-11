@@ -269,10 +269,50 @@ select {
   transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
+select {
+  min-height: 42px;
+  padding: 9px 38px 9px 12px;
+  border-radius: 10px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23d7e7ff' d='M1.18.73 5 4.28 8.82.73 10 1.82 5 6 0 1.82z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 10px 6px;
+  color-scheme: dark;
+}
+
+select:hover {
+  border-color: rgba(108, 156, 234, 0.34);
+}
+
+select[multiple],
+select[size]:not([size="1"]) {
+  min-height: 112px;
+  padding: 8px 10px;
+  appearance: auto;
+  -webkit-appearance: auto;
+  -moz-appearance: auto;
+  background-image: none;
+  background-position: initial;
+  background-size: initial;
+}
+
 body.theme-light input,
 body.theme-light textarea,
 body.theme-light select {
   background: rgba(255, 255, 255, 0.9);
+}
+
+body.theme-light select {
+  border-color: rgba(129, 153, 196, 0.36);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+body.theme-light select:not([multiple]):not([size]),
+body.theme-light select[size="1"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23344d78' d='M1.18.73 5 4.28 8.82.73 10 1.82 5 6 0 1.82z'/%3E%3C/svg%3E");
 }
 
 input:focus,
@@ -285,6 +325,163 @@ select:focus {
 
 textarea {
   resize: vertical;
+}
+
+select option,
+select optgroup {
+  background: #101826;
+  color: #e7f0ff;
+}
+
+.spuc-combobox {
+  position: relative;
+  width: 100%;
+}
+
+.spuc-combobox-native {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.spuc-combobox-trigger {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(18, 29, 48, 0.96), rgba(11, 20, 34, 0.88));
+  color: var(--text);
+  padding: 9px 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.spuc-combobox-trigger:hover {
+  border-color: rgba(108, 156, 234, 0.34);
+}
+
+.spuc-combobox.open .spuc-combobox-trigger,
+.spuc-combobox-trigger:focus-visible {
+  outline: none;
+  border-color: rgba(77, 141, 255, 0.8);
+  box-shadow: 0 0 0 3px rgba(77, 141, 255, 0.16);
+}
+
+.spuc-combobox-trigger-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spuc-combobox-chevron {
+  width: 10px;
+  height: 6px;
+  background: currentColor;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  opacity: 0.74;
+  transition: transform 0.16s ease, opacity 0.16s ease;
+}
+
+.spuc-combobox.open .spuc-combobox-chevron {
+  transform: rotate(180deg);
+  opacity: 1;
+}
+
+.spuc-combobox.is-disabled .spuc-combobox-trigger {
+  opacity: 0.56;
+  cursor: not-allowed;
+}
+
+.spuc-combobox-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: none;
+  padding: 8px;
+  border: 1px solid rgba(86, 126, 194, 0.24);
+  border-radius: 14px;
+  background: rgba(10, 17, 29, 0.98);
+  box-shadow: 0 18px 40px rgba(4, 8, 15, 0.42);
+  backdrop-filter: blur(14px);
+  max-height: min(280px, 42vh);
+  overflow-y: auto;
+}
+
+.spuc-combobox.open .spuc-combobox-menu {
+  display: grid;
+  gap: 4px;
+}
+
+.spuc-combobox-group {
+  padding: 6px 8px 2px;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.spuc-combobox-option {
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  padding: 8px 10px;
+  text-align: left;
+  line-height: 1.35;
+}
+
+.spuc-combobox-option:hover,
+.spuc-combobox-option:focus-visible {
+  outline: none;
+  background: rgba(77, 141, 255, 0.16);
+  color: #eef6ff;
+}
+
+.spuc-combobox-option.is-selected {
+  background: rgba(77, 141, 255, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(108, 156, 234, 0.38);
+  color: #f3f8ff;
+}
+
+.spuc-combobox-option:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+body.theme-light .spuc-combobox-trigger {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(243, 247, 255, 0.94));
+  color: #24324d;
+  border-color: rgba(129, 153, 196, 0.36);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+body.theme-light .spuc-combobox-menu {
+  background: rgba(248, 251, 255, 0.98);
+  border-color: rgba(149, 169, 205, 0.28);
+  box-shadow: 0 18px 40px rgba(26, 38, 63, 0.16);
+}
+
+body.theme-light .spuc-combobox-option {
+  color: #22314d;
+}
+
+body.theme-light .spuc-combobox-option:hover,
+body.theme-light .spuc-combobox-option:focus-visible {
+  background: rgba(77, 141, 255, 0.14);
+}
+
+body.theme-light .spuc-combobox-option.is-selected {
+  background: rgba(77, 141, 255, 0.18);
+  color: #16315f;
 }
 
 .btn {
@@ -316,6 +513,25 @@ textarea {
   background: linear-gradient(140deg, var(--warning), #b58a2f);
 }
 
+.btn-primary,
+.btn-success,
+.btn-warning,
+.btn-danger {
+  color: #fff;
+}
+
+.btn-primary i,
+.btn-primary svg,
+.btn-success i,
+.btn-success svg,
+.btn-warning i,
+.btn-warning svg,
+.btn-danger i,
+.btn-danger svg {
+  color: currentColor;
+  fill: currentColor;
+}
+
 .btn-import {
   border-color: rgba(128, 190, 255, 0.28);
 }
@@ -341,16 +557,19 @@ textarea {
 }
 
 .login-footer {
-  display: grid;
-  gap: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: nowrap;
   font-size: 0.8rem;
-  justify-items: center;
   text-align: center;
   padding: 8px 12px;
   border: 1px solid rgba(83, 119, 177, 0.18);
   border-radius: 10px;
   background: rgba(7, 12, 22, 0.72);
   backdrop-filter: blur(8px);
+  white-space: nowrap;
 }
 
 .login-footer-row {
@@ -525,6 +744,13 @@ textarea {
   fill: currentColor;
 }
 
+body.theme-light .nav-icon,
+body.theme-light .route-title-icon,
+body.theme-light .welcome-icon,
+body.theme-light .icon-only:not(.btn-primary):not(.btn-success):not(.btn-warning):not(.btn-danger) {
+  color: rgba(32, 49, 82, 0.9);
+}
+
 .app-floating-footer {
   position: fixed;
   left: 50%;
@@ -630,6 +856,10 @@ body.theme-light .app-floating-footer {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
+.footer-separator {
+  opacity: 0.48;
+  user-select: none;
+}
   padding: 14px 18px;
 }
 
@@ -700,8 +930,11 @@ body.theme-light .app-floating-footer {
   grid-auto-rows: auto;
   justify-items: stretch;
   min-height: 100%;
-  overflow-y: auto;
-  padding-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: nowrap;
 }
 
 .panel.active > * {
@@ -710,6 +943,11 @@ body.theme-light .app-floating-footer {
 
 .panel.active:not(.workspace-center-mode) > * {
   width: 100%;
+}
+
+#panel-rulelab.panel.active {
+  align-items: flex-start;
+  justify-content: flex-start;
 }
 
 .welcome-card {
@@ -1362,7 +1600,18 @@ body.theme-light .stix-detail-row details {
   background-clip: padding-box;
 }
 
+.combobox-level-select .spuc-combobox-trigger {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
 .level-select.level-clear {
+  background: #03070f;
+  color: #f0f5ff;
+  border-color: #254264;
+}
+
+.combobox-level-clear .spuc-combobox-trigger {
   background: #03070f;
   color: #f0f5ff;
   border-color: #254264;
@@ -1381,7 +1630,19 @@ body.theme-light .stix-detail-row details {
   border-color: #2c9a49;
 }
 
+.combobox-level-green .spuc-combobox-trigger {
+  background: #35b558;
+  color: #ffffff;
+  border-color: #2c9a49;
+}
+
 .level-select.level-amber {
+  background: #ffbf3f;
+  color: #2d1e00;
+  border-color: #d89a14;
+}
+
+.combobox-level-amber .spuc-combobox-trigger {
   background: #ffbf3f;
   color: #2d1e00;
   border-color: #d89a14;
@@ -1393,7 +1654,19 @@ body.theme-light .stix-detail-row details {
   border-color: #d07300;
 }
 
+.combobox-level-amber-strict .spuc-combobox-trigger {
+  background: #ff8c00;
+  color: #2a1700;
+  border-color: #d07300;
+}
+
 .level-select.level-red {
+  background: #e53935;
+  color: #ffffff;
+  border-color: #b92d2a;
+}
+
+.combobox-level-red .spuc-combobox-trigger {
   background: #e53935;
   color: #ffffff;
   border-color: #b92d2a;
@@ -1966,7 +2239,7 @@ body.theme-light .stix-detail-row details {
 }
 
 .adversaries-empty-state {
-  width: min(84%, 780px);
+  width: min(92%, 860px);
   margin: 0 auto;
   min-height: min(360px, calc(100vh - 260px));
   display: grid;
@@ -1977,7 +2250,7 @@ body.theme-light .stix-detail-row details {
 
 .adversaries-empty-body {
   width: 100%;
-  max-width: 500px;
+  max-width: 620px;
   display: grid;
   gap: 14px;
 }
@@ -1988,18 +2261,28 @@ body.theme-light .stix-detail-row details {
 }
 
 .adversaries-empty-actions {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   justify-content: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 10px;
+  width: min(100%, 360px);
+  margin-left: auto;
+  margin-right: auto;
   margin-top: 4px;
 }
 
 .adversaries-empty-actions .btn,
 .adversaries-empty-actions .btn.btn-ghost,
 .adversaries-empty-actions a.btn {
-  width: min(100%, 250px);
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 18px;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  text-align: center;
+  line-height: 1.3;
+  white-space: normal;
 }
 
 #adversaries-platform {
@@ -3036,6 +3319,139 @@ tr:hover td {
   gap: 12px;
 }
 
+.mono {
+  font-family: var(--font-mono);
+}
+
+.settings-layout,
+.settings-admin-stack {
+  display: grid;
+  gap: 12px;
+  align-items: start;
+}
+
+.settings-tab-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-tabs-shell {
+  padding: 12px;
+}
+
+.settings-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-tabs .btn.active {
+  border-color: rgba(77, 141, 255, 0.55);
+  background: rgba(77, 141, 255, 0.22);
+}
+
+.settings-tabs .btn.is-disabled {
+  opacity: 0.58;
+}
+
+.settings-card {
+  padding: 16px 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.settings-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.settings-card-head h3,
+.settings-password-card h4 {
+  margin: 0;
+}
+
+.settings-card-head p,
+.settings-password-card p {
+  margin: 4px 0 0;
+}
+
+.settings-profile-grid,
+.settings-admin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.settings-personal-side-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-users-head {
+  align-items: flex-start;
+}
+
+.settings-users-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-users-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(10, 18, 31, 0.4);
+}
+
+.settings-password-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(12, 21, 37, 0.34);
+}
+
+.settings-actions-right {
+  justify-content: flex-end;
+}
+
+.settings-user-main {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-user-main small {
+  overflow-wrap: anywhere;
+}
+
+.settings-user-password-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.settings-user-password-row .btn {
+  white-space: nowrap;
+}
+
+.admin-user-display-input {
+  min-width: 180px;
+}
+
 .stack {
   display: grid;
   gap: 10px;
@@ -3573,6 +3989,10 @@ tr:hover td {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  background: linear-gradient(140deg, var(--success), #2b9d64);
+  border-color: rgba(32, 126, 78, 0.48);
+  color: #fff;
+  padding-inline: 10px;
 }
 
 .learning-paths-summary {
@@ -4027,12 +4447,26 @@ tr:hover td {
 
 .about-donation-address {
   display: block;
+  width: 100%;
+  min-height: 42px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 10px;
+  padding: 10px 12px;
   background: rgba(8, 13, 23, 0.7);
-  white-space: normal;
-  overflow-wrap: anywhere;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.83rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-overflow: clip;
+}
+
+.about-donation-address:focus {
+  outline: none;
+  border-color: rgba(77, 141, 255, 0.42);
+  box-shadow: 0 0 0 2px rgba(77, 141, 255, 0.16);
 }
 
 .about-donation-empty {
@@ -4474,9 +4908,24 @@ tr:hover td {
   border-left: 1px solid rgba(57, 196, 122, 0.35);
   background: rgba(7, 24, 16, 0.72);
   color: #c9f5dd;
-  padding: 0 10px;
+  min-height: 36px;
+  padding: 6px 28px 6px 10px;
   font-size: 0.82rem;
   min-width: 124px;
+  border-radius: 0;
+  background-position: right 10px center;
+  background-size: 9px 5px;
+}
+
+.combobox-rule-export-select .spuc-combobox-trigger {
+  min-height: 36px;
+  border: 0;
+  border-left: 1px solid rgba(57, 196, 122, 0.35);
+  border-radius: 0;
+  background: rgba(7, 24, 16, 0.72);
+  color: #c9f5dd;
+  padding: 6px 10px;
+  font-size: 0.82rem;
 }
 
 .rule-tech-card-focus {
@@ -4884,6 +5333,21 @@ tr:hover td {
 
 .confirm-card {
   width: min(520px, calc(100vw - 28px));
+  display: grid;
+  gap: 14px;
+}
+
+.confirm-message {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.confirm-actions {
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
 }
 
 #detail-actions {
@@ -5005,6 +5469,10 @@ tr:hover td {
   align-items: flex-end;
 }
 
+#adversary-dialog .detail-card {
+  width: min(560px, calc(100vw - 40px));
+}
+
 #adversary-dialog #adversary-export-inline .rule-export-combo {
   border-color: rgba(57, 196, 122, 0.42);
 }
@@ -5075,6 +5543,7 @@ tr:hover td {
 
 .admin-role-select {
   min-width: 130px;
+  min-height: 38px;
 }
 
 .admin-enabled-toggle {
@@ -5090,7 +5559,7 @@ tr:hover td {
 
 .admin-oauth-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   padding: 10px;
@@ -5104,11 +5573,22 @@ tr:hover td {
   gap: 4px;
 }
 
+.admin-oauth-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .admin-oauth-meta {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+#admin-provider-dialog .detail-card,
+#admin-create-user-dialog .detail-card {
+  width: min(560px, calc(100vw - 40px));
 }
 
 .toast {
@@ -5208,6 +5688,22 @@ tr:hover td {
     grid-template-columns: 1fr;
   }
 
+  .settings-profile-grid,
+  .settings-admin-grid,
+  .settings-form-grid,
+  .settings-users-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-tabs {
+    flex-direction: column;
+  }
+
+  .settings-users-toolbar {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
   .planner-meta-row {
     grid-template-columns: 1fr;
   }
@@ -5282,6 +5778,11 @@ tr:hover td {
     flex-wrap: wrap;
     gap: 6px 10px;
     border-radius: 14px;
+    white-space: normal;
+  }
+
+  .login-footer {
+    flex-wrap: wrap;
     white-space: normal;
   }
 
@@ -5687,6 +6188,61 @@ tr:hover td {
   gap: 16px;
 }
 
+.compact-adversary-create-grid {
+  max-width: 540px;
+  gap: 14px;
+}
+
+.compact-adversary-create-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.compact-adversary-create-description {
+  grid-column: 1 / -1;
+}
+
+.adversary-create-modal {
+  width: min(560px, calc(100vw - 40px));
+}
+
+.description-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.compact-markdown-tabs {
+  gap: 6px;
+}
+
+.compact-markdown-tabs .btn {
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+}
+
+.compact-markdown-editor {
+  gap: 10px;
+}
+
+.compact-markdown-editor .markdown-editor-input,
+.compact-markdown-editor .markdown-preview {
+  min-height: 112px;
+}
+
+.confidence-slider-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.confidence-slider-wrap input[type="range"] {
+  width: 100%;
+}
+
 .adversary-form-section {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -5957,9 +6513,10 @@ tr:hover td {
 
 .flow-picker-filters input,
 .flow-picker-filters select {
+  min-height: 38px;
   padding: 8px 10px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 10px;
   background: rgba(14, 24, 40, 0.5);
   color: var(--text);
   font-size: 0.85rem;

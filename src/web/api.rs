@@ -43,6 +43,7 @@ use spuc::emulation::export as emu_export;
 
 const OAUTH_STATE_TTL_SECONDS: i64 = 600;
 const WEB_ADMIN_SETTINGS_SCHEMA_VERSION: &str = "1.0";
+const WEB_USER_PREFERENCES_SCHEMA_VERSION: &str = "1.0";
 const ENV_SIGMA_RPC_URL: &str = "SIGMA_RPC_URL";
 const ENV_SIGMA_RPC_TOKEN: &str = "SPUC_SIGMA_RPC_TOKEN";
 
@@ -54,6 +55,12 @@ struct AdminRuntimeSettingsStore {
     sigma_rpc_url: Option<String>,
     #[serde(default)]
     sigma_rpc_token: Option<String>,
+    #[serde(default)]
+    default_locale: Option<String>,
+    #[serde(default)]
+    default_theme: Option<String>,
+    #[serde(default)]
+    default_totp_required: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -61,6 +68,9 @@ pub(crate) struct AdminRuntimeSettingsView {
     no_login: bool,
     sigma_rpc_url: Option<String>,
     sigma_rpc_token_set: bool,
+    default_locale: String,
+    default_theme: String,
+    default_totp_required: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -71,6 +81,30 @@ pub(crate) struct AdminRuntimeSettingsUpdateRequest {
     sigma_rpc_url: Option<String>,
     #[serde(default)]
     sigma_rpc_token: Option<String>,
+    #[serde(default)]
+    default_locale: Option<String>,
+    #[serde(default)]
+    default_theme: Option<String>,
+    #[serde(default)]
+    default_totp_required: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct UserPreferencesStore {
+    schema_version: String,
+    #[serde(default)]
+    entries: Vec<UserPreferencesEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct UserPreferencesEntry {
+    user_id: String,
+    #[serde(default)]
+    display_name: Option<String>,
+    #[serde(default)]
+    locale: Option<String>,
+    #[serde(default)]
+    theme: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -106,6 +140,8 @@ pub(crate) struct WebRuntimeConfig {
 pub(crate) struct WebState {
     users_path: PathBuf,
     users: Mutex<UserStore>,
+    user_preferences_path: PathBuf,
+    user_preferences: Mutex<UserPreferencesStore>,
     oauth_policy_path: PathBuf,
     oauth_policy: Mutex<OAuthPolicyStore>,
     runtime_settings_path: PathBuf,
@@ -128,6 +164,7 @@ impl WebState {
     ) -> Result<Self> {
         let (users_path, users) =
             load_or_init_users(admin_user, admin_password, !generated_password)?;
+        let (user_preferences_path, user_preferences) = load_or_init_user_preferences()?;
         let oauth = OAuthConfig::from_env();
         let (oauth_policy_path, oauth_policy) = load_or_init_oauth_policy(&oauth)?;
         let (runtime_settings_path, runtime_settings) = load_or_init_runtime_settings(no_login)?;
@@ -157,6 +194,8 @@ impl WebState {
         Ok(Self {
             users_path,
             users: Mutex::new(users),
+            user_preferences_path,
+            user_preferences: Mutex::new(user_preferences),
             oauth_policy_path,
             oauth_policy: Mutex::new(oauth_policy),
             runtime_settings_path,
@@ -219,11 +258,131 @@ impl WebState {
         if let Some(token) = payload.sigma_rpc_token {
             settings.sigma_rpc_token = normalize_optional_setting(token);
         }
+        if let Some(locale) = payload.default_locale {
+            settings.default_locale = normalize_locale_setting(locale);
+        }
+        if let Some(theme) = payload.default_theme {
+            settings.default_theme = normalize_theme_setting(theme);
+        }
+        if let Some(default_totp_required) = payload.default_totp_required {
+            settings.default_totp_required = Some(default_totp_required);
+        }
 
         persist_runtime_settings(&self.runtime_settings_path, &settings)?;
         apply_sigma_rpc_env(&settings);
         let _ = refresh_sigma_runtime_cache();
         Ok(settings_view(settings.clone()))
+    }
+
+    fn user_preferences_for(&self, user_id: &str) -> UserPreferencesEntry {
+        self.user_preferences
+            .lock()
+            .expect("user preferences mutex poisoned")
+            .entries
+            .iter()
+            .find(|entry| entry.user_id == user_id)
+            .cloned()
+            .unwrap_or(UserPreferencesEntry {
+                user_id: user_id.to_string(),
+                display_name: None,
+                locale: None,
+                theme: None,
+            })
+    }
+
+    pub(crate) fn effective_locale_for(&self, principal: Option<&Principal>) -> String {
+        if let Some(principal) = principal {
+            if let Some(locale) = self.user_preferences_for(principal.user_id.as_str()).locale {
+                return locale;
+            }
+        }
+        self.runtime_settings
+            .lock()
+            .expect("runtime settings mutex poisoned")
+            .default_locale
+            .clone()
+            .unwrap_or_else(|| "en".to_string())
+    }
+
+    pub(crate) fn effective_theme_for(&self, principal: Option<&Principal>) -> String {
+        if let Some(principal) = principal {
+            if let Some(theme) = self.user_preferences_for(principal.user_id.as_str()).theme {
+                return theme;
+            }
+        }
+        self.runtime_settings
+            .lock()
+            .expect("runtime settings mutex poisoned")
+            .default_theme
+            .clone()
+            .unwrap_or_else(|| "dark".to_string())
+    }
+
+    pub(crate) fn effective_display_name_for(&self, principal: &Principal) -> String {
+        self.user_preferences_for(principal.user_id.as_str())
+            .display_name
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| principal.username.clone())
+    }
+
+    pub(crate) fn is_local_user(&self, user_id: &str) -> bool {
+        self.users
+            .lock()
+            .expect("users mutex poisoned")
+            .users
+            .iter()
+            .any(|user| user.id == user_id)
+    }
+
+    pub(crate) fn is_bootstrap_admin_user(&self, user_id: &str) -> bool {
+        self.bootstrap_admin.user_id == user_id
+    }
+
+    pub(crate) fn can_change_password(&self, principal: &Principal) -> bool {
+        !self.no_login_enabled()
+            && self.is_local_user(principal.user_id.as_str())
+            && !self.is_bootstrap_admin_user(principal.user_id.as_str())
+    }
+
+    fn current_user_settings_view(&self, principal: &Principal) -> UserSettingsView {
+        let locale = self.effective_locale_for(Some(principal));
+        let theme = self.effective_theme_for(Some(principal));
+        let display_name = self.effective_display_name_for(principal);
+        UserSettingsView {
+            account_id: principal.user_id.clone(),
+            username: principal.username.clone(),
+            display_name,
+            locale,
+            theme,
+            can_change_password: self.can_change_password(principal),
+            is_bootstrap_admin: self.is_bootstrap_admin_user(principal.user_id.as_str()),
+            no_login: self.no_login_enabled(),
+            local_auth: self.is_local_user(principal.user_id.as_str()),
+        }
+    }
+
+    fn update_current_user_settings(
+        &self,
+        principal: &Principal,
+        payload: UserSettingsUpdateRequest,
+    ) -> Result<UserSettingsView> {
+        let mut preferences = self
+            .user_preferences
+            .lock()
+            .expect("user preferences mutex poisoned");
+        let entry = user_preferences_entry_mut(&mut preferences, principal.user_id.as_str());
+        if let Some(display_name) = payload.display_name {
+            entry.display_name = normalize_display_name_setting(display_name);
+        }
+        if let Some(locale) = payload.locale {
+            entry.locale = normalize_locale_setting(locale);
+        }
+        if let Some(theme) = payload.theme {
+            entry.theme = normalize_theme_setting(theme);
+        }
+        persist_user_preferences(&self.user_preferences_path, &preferences)?;
+        drop(preferences);
+        Ok(self.current_user_settings_view(principal))
     }
 
     pub(crate) fn list_oauth_providers(&self) -> Vec<ProviderBootstrap> {
@@ -305,7 +464,27 @@ impl WebState {
 
     pub(crate) fn list_users(&self) -> Vec<PublicUserView> {
         let users = self.users.lock().expect("users mutex poisoned");
+        let preferences = self
+            .user_preferences
+            .lock()
+            .expect("user preferences mutex poisoned");
         list_users(&users)
+            .into_iter()
+            .map(|mut user| {
+                if let Some(entry) = preferences
+                    .entries
+                    .iter()
+                    .find(|entry| entry.user_id == user.id)
+                {
+                    user.display_name = entry
+                        .display_name
+                        .clone()
+                        .filter(|value| !value.trim().is_empty())
+                        .unwrap_or_else(|| user.username.clone());
+                }
+                user
+            })
+            .collect()
     }
 
     pub(crate) fn create_user(
@@ -313,10 +492,22 @@ impl WebState {
         username: &str,
         password: &str,
         role: Role,
+        display_name: Option<String>,
     ) -> Result<PublicUserView> {
         let mut users = self.users.lock().expect("users mutex poisoned");
-        let view = create_user(&mut users, username, password, role)?;
+        let mut view = create_user(&mut users, username, password, role)?;
         save_users(&self.users_path, &users)?;
+        if let Some(display_name) = normalize_display_name_setting(display_name.unwrap_or_default())
+        {
+            let mut preferences = self
+                .user_preferences
+                .lock()
+                .expect("user preferences mutex poisoned");
+            let entry = user_preferences_entry_mut(&mut preferences, view.id.as_str());
+            entry.display_name = Some(display_name.clone());
+            persist_user_preferences(&self.user_preferences_path, &preferences)?;
+            view.display_name = display_name;
+        }
         Ok(view)
     }
 
@@ -325,6 +516,12 @@ impl WebState {
         let deleted = delete_user(&mut users, user_id)?;
         if deleted {
             save_users(&self.users_path, &users)?;
+            let mut preferences = self
+                .user_preferences
+                .lock()
+                .expect("user preferences mutex poisoned");
+            preferences.entries.retain(|entry| entry.user_id != user_id);
+            persist_user_preferences(&self.user_preferences_path, &preferences)?;
         }
         Ok(deleted)
     }
@@ -334,10 +531,28 @@ impl WebState {
         user_id: &str,
         role: Option<Role>,
         enabled: Option<bool>,
+        totp_enabled: Option<bool>,
+        display_name: Option<String>,
     ) -> Result<PublicUserView> {
         let mut users = self.users.lock().expect("users mutex poisoned");
-        let view = update_store_user(&mut users, user_id, role, enabled)?;
+        let mut view = update_store_user(&mut users, user_id, role, enabled, totp_enabled)?;
         save_users(&self.users_path, &users)?;
+        if let Some(display_name) = display_name {
+            let mut preferences = self
+                .user_preferences
+                .lock()
+                .expect("user preferences mutex poisoned");
+            let effective_display_name = {
+                let entry = user_preferences_entry_mut(&mut preferences, user_id);
+                entry.display_name = normalize_display_name_setting(display_name);
+                entry
+                    .display_name
+                    .clone()
+                    .unwrap_or_else(|| view.username.clone())
+            };
+            persist_user_preferences(&self.user_preferences_path, &preferences)?;
+            view.display_name = effective_display_name;
+        }
         Ok(view)
     }
 
@@ -348,10 +563,12 @@ impl WebState {
         current_password: Option<&str>,
         new_password: &str,
     ) -> Result<()> {
-        let mut users = self.users.lock().expect("users mutex poisoned");
         let is_self_update = principal.user_id == target_user_id;
-        let bypass =
-            self.no_login_enabled() || (principal.role.can_manage_users() && !is_self_update);
+        if is_self_update && !self.can_change_password(principal) {
+            return Err(anyhow!("password_change_not_allowed"));
+        }
+        let mut users = self.users.lock().expect("users mutex poisoned");
+        let bypass = principal.role.can_manage_users() && !is_self_update;
         change_password(
             &mut users,
             target_user_id,
@@ -469,6 +686,12 @@ fn runtime_settings_path() -> Result<PathBuf> {
     Ok(root.join("web_runtime_settings.json"))
 }
 
+fn user_preferences_path() -> Result<PathBuf> {
+    let root = spuc_config_root().ok_or_else(|| anyhow!("cannot resolve config root"))?;
+    fs::create_dir_all(&root)?;
+    Ok(root.join("web_user_preferences.json"))
+}
+
 fn load_or_init_runtime_settings(
     no_login_default: bool,
 ) -> Result<(PathBuf, AdminRuntimeSettingsStore)> {
@@ -483,6 +706,9 @@ fn load_or_init_runtime_settings(
             sigma_rpc_token: normalize_optional_setting(
                 std::env::var(ENV_SIGMA_RPC_TOKEN).unwrap_or_default(),
             ),
+            default_locale: Some("en".to_string()),
+            default_theme: Some("dark".to_string()),
+            default_totp_required: Some(false),
         };
         persist_runtime_settings(&path, &settings)?;
         return Ok((path, settings));
@@ -501,11 +727,59 @@ fn load_or_init_runtime_settings(
         .sigma_rpc_token
         .take()
         .and_then(normalize_optional_setting);
+    settings.default_locale = settings
+        .default_locale
+        .take()
+        .and_then(normalize_locale_setting)
+        .or_else(|| Some("en".to_string()));
+    settings.default_theme = settings
+        .default_theme
+        .take()
+        .and_then(normalize_theme_setting)
+        .or_else(|| Some("dark".to_string()));
+    settings.default_totp_required = Some(settings.default_totp_required.unwrap_or(false));
     persist_runtime_settings(&path, &settings)?;
     Ok((path, settings))
 }
 
+fn load_or_init_user_preferences() -> Result<(PathBuf, UserPreferencesStore)> {
+    let path = user_preferences_path()?;
+    if !path.exists() {
+        let store = UserPreferencesStore {
+            schema_version: WEB_USER_PREFERENCES_SCHEMA_VERSION.to_string(),
+            entries: Vec::new(),
+        };
+        persist_user_preferences(&path, &store)?;
+        return Ok((path, store));
+    }
+
+    let raw = fs::read_to_string(&path)?;
+    let mut store: UserPreferencesStore = serde_json::from_str(&raw)?;
+    if store.schema_version.trim().is_empty() {
+        store.schema_version = WEB_USER_PREFERENCES_SCHEMA_VERSION.to_string();
+    }
+    for entry in &mut store.entries {
+        entry.display_name = entry
+            .display_name
+            .take()
+            .and_then(normalize_display_name_setting);
+        entry.locale = entry.locale.take().and_then(normalize_locale_setting);
+        entry.theme = entry.theme.take().and_then(normalize_theme_setting);
+    }
+    store
+        .entries
+        .retain(|entry| !entry.user_id.trim().is_empty());
+    persist_user_preferences(&path, &store)?;
+    Ok((path, store))
+}
+
 fn persist_runtime_settings(path: &Path, settings: &AdminRuntimeSettingsStore) -> Result<()> {
+    let raw = serde_json::to_string_pretty(settings)?;
+    fs::write(path, raw)?;
+    Ok(())
+}
+
+fn persist_user_preferences(path: &Path, settings: &UserPreferencesStore) -> Result<()> {
     let raw = serde_json::to_string_pretty(settings)?;
     fs::write(path, raw)?;
     Ok(())
@@ -520,6 +794,49 @@ fn normalize_optional_setting(value: String) -> Option<String> {
     }
 }
 
+fn normalize_display_name_setting(value: String) -> Option<String> {
+    normalize_optional_setting(value)
+}
+
+fn normalize_locale_setting(value: String) -> Option<String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "es" => Some("es".to_string()),
+        "en" => Some("en".to_string()),
+        _ => None,
+    }
+}
+
+fn normalize_theme_setting(value: String) -> Option<String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "light" => Some("light".to_string()),
+        "dark" => Some("dark".to_string()),
+        _ => None,
+    }
+}
+
+fn user_preferences_entry_mut<'a>(
+    store: &'a mut UserPreferencesStore,
+    user_id: &str,
+) -> &'a mut UserPreferencesEntry {
+    if let Some(index) = store
+        .entries
+        .iter()
+        .position(|entry| entry.user_id == user_id)
+    {
+        return &mut store.entries[index];
+    }
+    store.entries.push(UserPreferencesEntry {
+        user_id: user_id.to_string(),
+        display_name: None,
+        locale: None,
+        theme: None,
+    });
+    store
+        .entries
+        .last_mut()
+        .expect("user preferences entry inserted")
+}
+
 fn settings_view(settings: AdminRuntimeSettingsStore) -> AdminRuntimeSettingsView {
     AdminRuntimeSettingsView {
         no_login: settings.no_login,
@@ -529,6 +846,9 @@ fn settings_view(settings: AdminRuntimeSettingsStore) -> AdminRuntimeSettingsVie
             .as_deref()
             .map(str::trim)
             .is_some_and(|value| !value.is_empty()),
+        default_locale: settings.default_locale.unwrap_or_else(|| "en".to_string()),
+        default_theme: settings.default_theme.unwrap_or_else(|| "dark".to_string()),
+        default_totp_required: settings.default_totp_required.unwrap_or(false),
     }
 }
 
@@ -649,6 +969,7 @@ impl HttpResponse {
 struct BootstrapResponse {
     app: AppBootstrap,
     auth: AuthBootstrap,
+    user: Option<UserSettingsView>,
     translation: TranslationBootstrap,
     counters: CounterBootstrap,
 }
@@ -671,6 +992,8 @@ struct AuthBootstrap {
     authenticated: bool,
     show_logout: bool,
     generated_password: bool,
+    default_locale: String,
+    default_theme: String,
     principal: Option<PrincipalView>,
     providers: Vec<ProviderBootstrap>,
 }
@@ -679,7 +1002,21 @@ struct AuthBootstrap {
 struct PrincipalView {
     user_id: String,
     username: String,
+    display_name: String,
     role: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct UserSettingsView {
+    account_id: String,
+    username: String,
+    display_name: String,
+    locale: String,
+    theme: String,
+    can_change_password: bool,
+    is_bootstrap_admin: bool,
+    no_login: bool,
+    local_auth: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -846,15 +1183,21 @@ struct AdminUserCreateRequest {
     username: String,
     password: String,
     #[serde(default)]
+    display_name: Option<String>,
+    #[serde(default)]
     role: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct AdminUserUpdateRequest {
     #[serde(default)]
+    display_name: Option<String>,
+    #[serde(default)]
     role: Option<String>,
     #[serde(default)]
     enabled: Option<bool>,
+    #[serde(default)]
+    totp_enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -864,6 +1207,16 @@ struct AdminPasswordChangeRequest {
     #[serde(default)]
     current_password: Option<String>,
     new_password: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct UserSettingsUpdateRequest {
+    #[serde(default)]
+    display_name: Option<String>,
+    #[serde(default)]
+    locale: Option<String>,
+    #[serde(default)]
+    theme: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1256,16 +1609,6 @@ pub(crate) fn route(request: HttpRequest, state: &WebState) -> Result<HttpRespon
         );
     };
 
-    if state.no_login_enabled() && matches!(segments.as_slice(), ["api", "admin", ..]) {
-        return HttpResponse::json(
-            404,
-            &serde_json::json!({
-                "error": "admin_unavailable",
-                "code": "no_login_mode"
-            }),
-        );
-    }
-
     match (request.method.as_str(), segments.as_slice()) {
         ("GET", ["api", "overview"]) => overview_response(),
         ("GET", ["api", "rules"]) => list_rules(&request),
@@ -1312,6 +1655,10 @@ pub(crate) fn route(request: HttpRequest, state: &WebState) -> Result<HttpRespon
         ("GET", ["api", "learning", "blocks"]) => HttpResponse::json(200, &learning_blocks()),
         ("POST", ["api", "verify"]) => verify_rule_request(&request),
         ("GET", ["api", "download", token]) => download_file(token, state),
+        ("GET", ["api", "settings", "profile"]) => settings_get_profile(&principal, state),
+        ("POST", ["api", "settings", "profile"]) => {
+            settings_update_profile(&principal, &request, state)
+        }
         ("GET", ["api", "admin", "users"]) => admin_list_users(&principal, state),
         ("POST", ["api", "admin", "users"]) => admin_create_user(&principal, &request, state),
         ("POST", ["api", "admin", "users", user_id, "update"]) => {
@@ -1345,6 +1692,8 @@ pub(crate) fn route(request: HttpRequest, state: &WebState) -> Result<HttpRespon
 
 fn bootstrap_response(state: &WebState, principal: Option<&Principal>) -> Result<HttpResponse> {
     let (_, abilities, rules, adversaries) = load_catalog_data()?;
+    let default_locale = state.effective_locale_for(None);
+    let default_theme = state.effective_theme_for(None);
     HttpResponse::json(
         200,
         &BootstrapResponse {
@@ -1363,9 +1712,17 @@ fn bootstrap_response(state: &WebState, principal: Option<&Principal>) -> Result
                 authenticated: principal.is_some(),
                 show_logout: !state.no_login_enabled(),
                 generated_password: state.generated_password(),
-                principal: principal.map(principal_view),
+                default_locale,
+                default_theme,
+                principal: principal.map(|principal| PrincipalView {
+                    user_id: principal.user_id.clone(),
+                    username: principal.username.clone(),
+                    display_name: state.effective_display_name_for(principal),
+                    role: principal.role.as_str(),
+                }),
                 providers: state.list_oauth_providers(),
             },
+            user: principal.map(|principal| state.current_user_settings_view(principal)),
             translation: TranslationBootstrap {
                 available_targets: available_detection_target_labels(),
                 sigma_cli_available: sigma_runtime_info().operational,
@@ -1612,6 +1969,23 @@ fn escape_html(raw: &str) -> String {
         .replace('\'', "&#39;")
 }
 
+fn settings_get_profile(principal: &Principal, state: &WebState) -> Result<HttpResponse> {
+    HttpResponse::json(
+        200,
+        &serde_json::json!({ "entry": state.current_user_settings_view(principal) }),
+    )
+}
+
+fn settings_update_profile(
+    principal: &Principal,
+    request: &HttpRequest,
+    state: &WebState,
+) -> Result<HttpResponse> {
+    let payload: UserSettingsUpdateRequest = request.json()?;
+    let entry = state.update_current_user_settings(principal, payload)?;
+    HttpResponse::json(200, &serde_json::json!({ "ok": true, "entry": entry }))
+}
+
 fn admin_list_users(principal: &Principal, state: &WebState) -> Result<HttpResponse> {
     ensure_admin(principal)?;
     HttpResponse::json(
@@ -1642,7 +2016,12 @@ fn admin_create_user(
         "admin" => Role::Admin,
         _ => Role::Analyst,
     };
-    let created = state.create_user(&payload.username, &payload.password, role)?;
+    let created = state.create_user(
+        &payload.username,
+        &payload.password,
+        role,
+        payload.display_name,
+    )?;
     HttpResponse::json(200, &serde_json::json!({ "ok": true, "entry": created }))
 }
 
@@ -1684,7 +2063,13 @@ fn admin_update_user(
             Role::Analyst
         }
     });
-    let updated = state.update_user(user_id, role, payload.enabled)?;
+    let updated = state.update_user(
+        user_id,
+        role,
+        payload.enabled,
+        payload.totp_enabled,
+        payload.display_name,
+    )?;
     HttpResponse::json(200, &serde_json::json!({ "ok": true, "entry": updated }))
 }
 
@@ -3971,6 +4356,7 @@ fn principal_view(principal: &Principal) -> PrincipalView {
     PrincipalView {
         user_id: principal.user_id.clone(),
         username: principal.username.clone(),
+        display_name: principal.username.clone(),
         role: principal.role.as_str(),
     }
 }
@@ -4950,6 +5336,69 @@ mod tests {
             assert_eq!(principal_unknown.role, Role::Analyst);
             assert!(principal_unknown.user_id.starts_with("oauth-github-"));
             assert_eq!(principal_unknown.username, "gh-user");
+        });
+    }
+
+    #[test]
+    fn user_settings_persist_display_name_and_preferences() {
+        with_test_config_dir("user_settings", || {
+            let state = WebState::new("admin", "secret-pass", false, false).expect("state");
+            state
+                .create_user(
+                    "analyst",
+                    "analyst-pass",
+                    Role::Analyst,
+                    Some("Blue Team".to_string()),
+                )
+                .expect("create analyst");
+            let principal = state
+                .authenticate_local("analyst", "analyst-pass")
+                .expect("principal");
+
+            assert!(state.can_change_password(&principal));
+
+            let updated = state
+                .update_current_user_settings(
+                    &principal,
+                    UserSettingsUpdateRequest {
+                        display_name: Some("Blue Team Lead".to_string()),
+                        locale: Some("es".to_string()),
+                        theme: Some("light".to_string()),
+                    },
+                )
+                .expect("update settings");
+
+            assert_eq!(updated.display_name, "Blue Team Lead");
+            assert_eq!(updated.locale, "es");
+            assert_eq!(updated.theme, "light");
+
+            let users = state.list_users();
+            let analyst = users
+                .iter()
+                .find(|user| user.username == "analyst")
+                .expect("analyst present");
+            assert_eq!(analyst.display_name, "Blue Team Lead");
+        });
+    }
+
+    #[test]
+    fn bootstrap_admin_and_no_login_disable_self_password_rotation() {
+        with_test_config_dir("password_policy", || {
+            let state = WebState::new("admin", "secret-pass", false, false).expect("state");
+            let admin = state
+                .authenticate_local("admin", "secret-pass")
+                .expect("admin principal");
+            assert!(!state.can_change_password(&admin));
+            assert!(state
+                .change_user_password(&admin, &admin.user_id, Some("secret-pass"), "new-secret")
+                .is_err());
+
+            let no_login_state = WebState::new("admin", "secret-pass", false, true).expect("state");
+            let local_admin = no_login_state.bootstrap_admin.clone();
+            assert!(!no_login_state.can_change_password(&local_admin));
+            assert!(no_login_state
+                .change_user_password(&local_admin, &local_admin.user_id, None, "other-secret")
+                .is_err());
         });
     }
 

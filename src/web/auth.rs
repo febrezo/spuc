@@ -43,6 +43,8 @@ pub(crate) struct WebUser {
     pub(crate) password_hash: String,
     pub(crate) created_at_utc: String,
     pub(crate) enabled: bool,
+    #[serde(default)]
+    pub(crate) totp_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,9 +57,12 @@ pub(crate) struct UserStore {
 pub(crate) struct PublicUserView {
     pub(crate) id: String,
     pub(crate) username: String,
+    pub(crate) display_name: String,
     pub(crate) role: &'static str,
     pub(crate) created_at_utc: String,
     pub(crate) enabled: bool,
+    pub(crate) local_auth: bool,
+    pub(crate) totp_enabled: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -341,9 +346,12 @@ pub(crate) fn list_users(store: &UserStore) -> Vec<PublicUserView> {
         .map(|user| PublicUserView {
             id: user.id.clone(),
             username: user.username.clone(),
+            display_name: user.username.clone(),
             role: user.role.as_str(),
             created_at_utc: user.created_at_utc.clone(),
             enabled: user.enabled,
+            local_auth: true,
+            totp_enabled: user.totp_enabled,
         })
         .collect::<Vec<_>>();
     users.sort_by(|a, b| {
@@ -377,9 +385,12 @@ pub(crate) fn create_user(
     let view = PublicUserView {
         id: user.id.clone(),
         username: user.username.clone(),
+        display_name: user.username.clone(),
         role: user.role.as_str(),
         created_at_utc: user.created_at_utc.clone(),
         enabled: user.enabled,
+        local_auth: true,
+        totp_enabled: user.totp_enabled,
     };
     store.users.push(user);
     Ok(view)
@@ -405,6 +416,7 @@ pub(crate) fn update_user(
     user_id: &str,
     role: Option<Role>,
     enabled: Option<bool>,
+    totp_enabled: Option<bool>,
 ) -> Result<PublicUserView> {
     let Some(index) = store.users.iter().position(|user| user.id == user_id) else {
         return Err(anyhow!("user '{}' not found", user_id));
@@ -415,6 +427,9 @@ pub(crate) fn update_user(
     }
     if let Some(enabled) = enabled {
         updated.enabled = enabled;
+    }
+    if let Some(totp_enabled) = totp_enabled {
+        updated.totp_enabled = totp_enabled;
     }
 
     let enabled_admins = store
@@ -434,12 +449,16 @@ pub(crate) fn update_user(
     }
 
     store.users[index] = updated.clone();
+    let display_name = updated.username.clone();
     Ok(PublicUserView {
         id: updated.id,
         username: updated.username,
+        display_name,
         role: updated.role.as_str(),
         created_at_utc: updated.created_at_utc,
         enabled: updated.enabled,
+        local_auth: true,
+        totp_enabled: updated.totp_enabled,
     })
 }
 
@@ -485,6 +504,7 @@ fn new_user(username: &str, password: &str, role: Role) -> Result<WebUser> {
         password_hash,
         created_at_utc: Utc::now().to_rfc3339(),
         enabled: true,
+        totp_enabled: false,
     })
 }
 
@@ -907,7 +927,7 @@ mod tests {
     fn update_user_cannot_disable_last_admin() {
         let mut store = sample_store();
         let admin_id = store.users[0].id.clone();
-        let result = update_user(&mut store, &admin_id, None, Some(false));
+        let result = update_user(&mut store, &admin_id, None, Some(false), None);
         assert!(result.is_err());
     }
 

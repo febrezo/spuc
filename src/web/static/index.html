@@ -24,7 +24,9 @@
 
     <footer class="login-footer auth-footer muted">
       <span>Coded with ❤️ by febrezo</span>
+      <span class="footer-separator" aria-hidden="true">|</span>
       <a id="footer-project-link-boot" href="https://github.com/febrezo/spuc" target="_blank" rel="noreferrer" data-i18n="common.github_project">GitHub Project</a>
+      <span class="footer-separator" aria-hidden="true">|</span>
       <span><span data-i18n="common.license">License</span>: <a id="footer-license-link-boot" href="https://github.com/febrezo/spuc/blob/main/LICENSE.md" target="_blank" rel="noreferrer" data-i18n="common.license_sspl">Server Side Public License</a></span>
     </footer>
   </main>
@@ -63,7 +65,9 @@
 
       <footer class="login-footer auth-footer muted">
         <span>Coded with ❤️ by febrezo</span>
+        <span class="footer-separator" aria-hidden="true">|</span>
         <a id="footer-project-link" href="https://github.com/febrezo/spuc" target="_blank" rel="noreferrer" data-i18n="common.github_project">GitHub Project</a>
+        <span class="footer-separator" aria-hidden="true">|</span>
         <span><span data-i18n="common.license">License</span>: <a id="footer-license-link" href="https://github.com/febrezo/spuc/blob/main/LICENSE.md" target="_blank" rel="noreferrer" data-i18n="common.license_sspl">Server Side Public License</a></span>
       </footer>
     </section>
@@ -123,11 +127,11 @@
             <span data-i18n="nav.stix_standard">STIX Standard</span>
           </a>
         </section>
-        <section id="admin-nav-section" class="nav-section hidden">
-          <p class="nav-section-title" data-i18n="admin.section">User management</p>
-          <button class="nav-item" data-route="admin">
+        <section class="nav-section">
+          <p class="nav-section-title" data-i18n="nav.section.application">Application</p>
+          <button class="nav-item" data-route="settings">
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2l3 2.1 3.6-.4.9 3.5 3 2-1.8 3.2.7 3.6-3.5.9L16 20l-4-1.8L8 20l-2.9-2.7-3.5-.9.7-3.6L.5 9.2l3-2 .9-3.5 3.6.4L12 2zm0 6a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg></span>
-            <span data-i18n="nav.admin">User management</span>
+            <span data-i18n="nav.settings">Settings</span>
           </button>
         </section>
       </nav>
@@ -154,11 +158,6 @@
         <div class="topbar-actions">
           <button id="sidebar-toggle" class="btn btn-ghost sidebar-toggle" aria-label="Toggle menu">☰</button>
           <span id="identity-pill" class="identity-pill muted"></span>
-          <select id="locale-select" class="pill-select">
-            <option value="en">🇬🇧 English</option>
-            <option value="es">🇪🇸 Español</option>
-          </select>
-          <button id="theme-toggle" class="btn btn-ghost">🌓 <span data-i18n="common.theme">Theme</span></button>
           <button id="logout-button" class="btn btn-danger" data-i18n="common.logout">Logout</button>
         </div>
       </header>
@@ -352,11 +351,11 @@
         <section id="rules-explore-shell">
           <article id="rules-empty-state" class="glass adversaries-empty-state hidden">
             <div class="adversaries-empty-body">
-              <h3>Aun no hay reglas creadas</h3>
-              <p class="muted">Todavia no tienes reglas en el catalogo. Crea o importa la primera para empezar a trabajar.</p>
+              <h3 data-i18n="rules.empty.title">No rules created yet</h3>
+              <p class="muted" data-i18n="rules.empty.body">You do not have any catalog rules yet. Create or import the first one to start working.</p>
               <div class="adversaries-empty-actions">
                 <button class="btn btn-primary" data-action="rules-open-lab" data-i18n="rules.welcome.new.title">Add new rule</button>
-                <button class="btn btn-primary btn-import" data-action="rules-import-stix" data-i18n="rules.welcome.file.title">Import rules from file</button>
+                <button class="btn btn-ghost btn-import" data-action="rules-import-stix" data-i18n="rules.welcome.file.title">Import rules from file</button>
               </div>
             </div>
           </article>
@@ -445,12 +444,14 @@
       <section id="panel-stix-objects" class="panel">
         <article id="stix-objects-welcome-card" class="glass adversaries-empty-state">
           <div class="adversaries-empty-body">
-            <h3>Aun no hay objetos creados</h3>
-            <p class="muted">Todavia no tienes objetos STIX en el catalogo. Crea o importa el primero para empezar a relacionar reglas.</p>
+            <h3 data-i18n="stix_objects.empty.title">No STIX objects created yet</h3>
+            <p class="muted" data-i18n="stix_objects.empty.body">You do not have any STIX objects in the catalog yet. Create or import the first one to start relating rules.</p>
+            <p class="muted">
+              <span data-i18n="stix_objects.empty.standard.prefix">Check the official </span><a href="https://docs.oasis-open.org/cti/stix/v2.1/cs02/stix-v2.1-cs02.html" target="_blank" rel="noreferrer" data-i18n="stix_objects.empty.standard.link">standard</a><span data-i18n="stix_objects.empty.standard.suffix"> to review object structure and fields.</span>
+            </p>
             <div class="adversaries-empty-actions">
               <button class="btn btn-primary" data-action="stix-create-open" data-i18n="stix_objects.welcome.create.title">Create new STIX object</button>
               <button class="btn btn-ghost" data-action="stix-import-open" data-i18n="stix_objects.welcome.import.title">Import STIX objects</button>
-              <a class="btn btn-ghost" href="https://docs.oasis-open.org/cti/stix/v2.1/cs02/stix-v2.1-cs02.html" target="_blank" rel="noreferrer" data-i18n="stix_objects.welcome.standard.title">Consult STIX standard</a>
             </div>
           </div>
         </article>
@@ -644,8 +645,8 @@
         <section id="adversaries-payloads-shell" class="stack hidden">
           <article id="payloads-welcome-card" class="glass adversaries-empty-state hidden">
             <div class="adversaries-empty-body">
-              <h3>Aun no hay payloads creados</h3>
-              <p class="muted">Todavia no tienes payloads reutilizables en el catalogo. Crea el primero para empezar a probar.</p>
+              <h3 data-i18n="adversaries.payload.empty.title">No payloads available yet</h3>
+              <p class="muted" data-i18n="adversaries.payload.empty.body">Create your first reusable payload to start building controlled lab plans.</p>
               <div class="adversaries-empty-actions">
                 <button class="btn btn-primary" data-action="payload-catalog-open-create" data-i18n="adversaries.payload.empty.create">Create first payload</button>
                 <button class="btn btn-ghost" data-action="payload-catalog-open-docs" data-i18n="adversaries.payload.empty.docs">Consult payload documentation</button>
@@ -712,7 +713,6 @@
               <button id="adversary-editor-back" type="button" class="btn btn-ghost" data-action="adversary-back-to-list" data-i18n="adversaries.editor.back">Back to list</button>
               <button id="adversary-editor-secondary" type="button" class="btn btn-ghost hidden" data-action="adversary-cancel-edit" data-i18n="common.cancel">Cancel</button>
               <button id="adversary-editor-primary" type="button" class="btn btn-primary hidden" data-action="adversary-enter-edit" data-i18n="common.edit">Edit</button>
-              <button id="adversary-editor-new" type="button" class="btn btn-primary" data-action="adversary-new-inline" data-i18n="adversaries.editor.new">New adversary</button>
             </div>
           </article>
           <div id="adversary-editor-mount"></div>
@@ -752,7 +752,10 @@
                   </label>
                   <label>
                     <span data-i18n="adversaries.create.confidence">Confidence</span>
-                    <input id="adversary-editor-confidence" type="number" min="0" max="100" value="70">
+                    <div class="confidence-slider-wrap">
+                      <input id="adversary-editor-confidence" type="range" min="0" max="100" step="1" value="70">
+                      <span id="adversary-editor-confidence-value" class="badge success">70</span>
+                    </div>
                   </label>
                   <label>
                     <span data-i18n="adversaries.create.target_platform">Target platform</span>
@@ -859,43 +862,114 @@
         </article>
       </section>
 
-      <section id="panel-admin" class="panel">
-        <div class="split-layout">
-          <article class="glass table-card">
-            <header><h3 data-i18n="admin.users.title">Users</h3></header>
-            <div class="table-wrap"><table id="admin-users-table"></table></div>
+      <section id="panel-settings" class="panel">
+        <div class="settings-layout">
+          <article class="glass settings-card settings-tabs-shell">
+            <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+              <button type="button" id="settings-tab-personal" class="btn btn-ghost active" data-action="settings-tab" data-tab="personal" data-i18n="settings.tab.personal">Personal settings</button>
+              <button type="button" id="settings-tab-application" class="btn btn-ghost" data-action="settings-tab" data-tab="application" data-i18n="settings.tab.application">Application settings</button>
+              <button type="button" id="settings-tab-users" class="btn btn-ghost" data-action="settings-tab" data-tab="users" data-i18n="settings.tab.users">User management</button>
+            </div>
           </article>
 
-          <article class="glass form-card stack">
-            <section>
-              <h3 data-i18n="admin.create.title">Create user</h3>
-              <form id="admin-create-user" class="stack">
-                <input id="admin-new-username" data-i18n-placeholder="admin.create.username" placeholder="username" required>
-                <input id="admin-new-password" type="password" data-i18n-placeholder="admin.create.password" placeholder="password" required>
-                <select id="admin-new-role">
-                  <option value="analyst" data-i18n="admin.role.analyst">Analyst</option>
-                  <option value="admin" data-i18n="admin.role.admin">Admin</option>
-                </select>
-                <button type="submit" class="btn btn-primary" data-i18n="admin.create.submit">Create user</button>
-              </form>
-            </section>
-            <section>
-              <h3 data-i18n="admin.password.title">Change password</h3>
-              <form id="admin-change-password" class="stack">
-                <input id="admin-current-password" type="password" data-i18n-placeholder="admin.password.current" placeholder="Current password">
-                <input id="admin-next-password" type="password" data-i18n-placeholder="admin.password.new" placeholder="New password" required>
-                <button type="submit" class="btn btn-warning" data-i18n="admin.password.submit">Change password</button>
-              </form>
-            </section>
-            <section>
-              <h3 data-i18n="admin.oauth.title">External login providers</h3>
-              <p class="muted" data-i18n="admin.oauth.subtitle">Authorize which providers are allowed in the login screen.</p>
-              <div id="admin-oauth-providers" class="admin-oauth-list"></div>
-            </section>
-            <section>
-              <h3 data-i18n="admin.settings.title">Runtime settings</h3>
-              <p class="muted" data-i18n="admin.settings.subtitle">Configure no-login mode and Sigma JSON-RPC connection for dynamic backends.</p>
+          <section id="settings-tab-panel-personal" class="settings-tab-panel" data-settings-panel="personal">
+            <article class="glass settings-card settings-profile-card">
+              <header class="settings-card-head">
+                <div>
+                  <h3 data-i18n="settings.profile.title">Personal settings</h3>
+                  <p class="muted" data-i18n="settings.profile.subtitle">Adjust your language, theme and account display name.</p>
+                </div>
+              </header>
+              <div class="settings-profile-grid">
+                <form id="settings-profile-form" class="stack">
+                  <label>
+                    <span data-i18n="settings.profile.display_name">Display name</span>
+                    <input id="settings-display-name" data-i18n-placeholder="settings.profile.display_name_placeholder" placeholder="How your name should appear">
+                  </label>
+                  <div class="settings-form-grid">
+                    <label>
+                      <span data-i18n="settings.profile.language">Language</span>
+                      <select id="settings-locale">
+                        <option value="en">English</option>
+                        <option value="es">Español</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span data-i18n="settings.profile.theme">Theme</span>
+                      <select id="settings-theme">
+                        <option value="dark" data-i18n="settings.profile.theme_dark">Dark</option>
+                        <option value="light" data-i18n="settings.profile.theme_light">Light</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label>
+                    <span data-i18n="settings.profile.account_id">Account ID</span>
+                    <input id="settings-account-id" readonly>
+                  </label>
+                  <div class="dialog-actions settings-actions-right">
+                    <button type="submit" class="btn btn-primary" data-i18n="settings.profile.save">Save profile</button>
+                  </div>
+                </form>
+
+                <div class="settings-personal-side-stack">
+                  <section id="settings-password-section" class="settings-password-card">
+                    <h4 data-i18n="settings.password.title">Change password</h4>
+                    <p class="muted" data-i18n="settings.password.subtitle">Update your local access password when this session allows it.</p>
+                    <p id="settings-password-disabled" class="muted hidden"></p>
+                    <form id="settings-password-form" class="stack">
+                      <input id="settings-current-password" type="password" data-i18n-placeholder="admin.password.current" placeholder="Current password">
+                      <input id="settings-next-password" type="password" data-i18n-placeholder="admin.password.new" placeholder="New password" required>
+                      <div class="dialog-actions settings-actions-right">
+                        <button id="settings-password-submit" type="submit" class="btn btn-primary" data-i18n="settings.password.submit">Change password</button>
+                      </div>
+                    </form>
+                  </section>
+
+                  <section class="settings-password-card">
+                    <h4 data-i18n="settings.totp.title">Two-factor authentication (TOTP)</h4>
+                    <p class="muted" data-i18n="settings.totp.subtitle">Manage your authenticator app enrollment for this account.</p>
+                    <p class="muted" data-i18n="settings.totp.not_available">TOTP enrollment is not available in this build yet.</p>
+                    <div class="dialog-actions settings-actions-right">
+                      <button type="button" class="btn btn-primary" disabled data-i18n="settings.totp.setup">Configure TOTP</button>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </article>
+          </section>
+
+          <section id="settings-tab-panel-application" class="settings-tab-panel hidden" data-settings-panel="application">
+            <article id="settings-admin-sections" class="glass settings-card settings-admin-stack hidden">
+              <header class="settings-card-head">
+                <div>
+                  <h3 data-i18n="settings.admin.runtime.title">Application defaults</h3>
+                  <p class="muted" data-i18n="settings.admin.runtime.subtitle">Set shared language, theme and Sigma translation connectivity for the whole application.</p>
+                </div>
+              </header>
               <form id="admin-runtime-settings" class="stack">
+                <div class="settings-form-grid">
+                  <label>
+                    <span data-i18n="settings.admin.runtime.default_language">Default language</span>
+                    <select id="admin-default-locale">
+                      <option value="en">English</option>
+                      <option value="es">Español</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span data-i18n="settings.admin.runtime.default_theme">Default theme</span>
+                    <select id="admin-default-theme">
+                      <option value="dark" data-i18n="settings.profile.theme_dark">Dark</option>
+                      <option value="light" data-i18n="settings.profile.theme_light">Light</option>
+                    </select>
+                  </label>
+                </div>
+                <label>
+                  <span data-i18n="settings.admin.runtime.default_totp">Default 2FA policy for new users</span>
+                  <select id="admin-default-totp">
+                    <option value="disabled" data-i18n="settings.admin.runtime.default_totp_disabled">Disabled by default</option>
+                    <option value="required" data-i18n="settings.admin.runtime.default_totp_required">Enabled by default</option>
+                  </select>
+                </label>
                 <label>
                   <span data-i18n="admin.settings.sigma_url">Sigma JSON-RPC URL</span>
                   <input id="admin-sigma-rpc-url" placeholder="http://sigma-jsonrpc:8000/rpc">
@@ -905,21 +979,66 @@
                   <input id="admin-sigma-rpc-token" type="password" data-i18n-placeholder="admin.settings.sigma_token_placeholder" placeholder="Paste token to set or rotate">
                   <small id="admin-sigma-rpc-token-hint" class="muted"></small>
                 </label>
-                <label class="admin-enabled-toggle">
-                  <input id="admin-no-login" type="checkbox">
-                  <span data-i18n="admin.settings.no_login">Enable no-login mode (direct local admin access)</span>
-                </label>
-                <button type="submit" class="btn btn-primary" data-i18n="admin.settings.submit">Save runtime settings</button>
+                <div class="dialog-actions settings-actions-right">
+                  <button type="submit" class="btn btn-primary" data-i18n="admin.settings.submit">Save runtime settings</button>
+                </div>
               </form>
-            </section>
-          </article>
+
+              <section class="stack">
+                <header class="settings-card-head">
+                  <div>
+                    <h3 data-i18n="admin.oauth.title">External login providers</h3>
+                    <p class="muted" data-i18n="admin.oauth.subtitle">Authorize which providers are allowed in the login screen.</p>
+                  </div>
+                </header>
+                <div id="admin-oauth-providers" class="admin-oauth-list"></div>
+              </section>
+
+              <p id="settings-application-disabled-note" class="muted hidden" data-i18n="settings.admin.disabled_no_login">These controls are disabled while SPUC runs in no-login mode.</p>
+            </article>
+          </section>
+
+          <section id="settings-tab-panel-users" class="settings-tab-panel hidden" data-settings-panel="users">
+            <article class="glass settings-card">
+              <header class="settings-card-head settings-users-head">
+                <div>
+                  <h3 data-i18n="admin.users.title">Users</h3>
+                  <p class="muted" data-i18n="settings.admin.users.subtitle">Review local users, roles, access status and password rotation.</p>
+                </div>
+                <div class="settings-users-toolbar">
+                  <button type="button" class="btn btn-ghost icon-only" data-action="settings-users-toggle-filters" data-i18n-title="rules.filters.toggle" aria-label="Filters" title="Filters"><i class="fa-solid fa-filter" aria-hidden="true"></i></button>
+                  <button type="button" class="btn btn-ghost" data-action="admin-open-create-user" data-i18n="settings.admin.users.add_user">Add user</button>
+                  <button type="button" class="btn btn-primary" data-action="admin-open-create-user" data-i18n="admin.create.title">Create user</button>
+                </div>
+              </header>
+
+              <div id="settings-users-filters" class="settings-users-filters hidden">
+                <input id="admin-users-filter-search" type="search" data-i18n-placeholder="settings.admin.users.filter_search" placeholder="Search by user or display name">
+                <select id="admin-users-filter-role">
+                  <option value="all" data-i18n="settings.admin.users.filter_role_all">All roles</option>
+                  <option value="admin" data-i18n="admin.role.admin">Admin</option>
+                  <option value="analyst" data-i18n="admin.role.analyst">Analyst</option>
+                </select>
+                <select id="admin-users-filter-status">
+                  <option value="all" data-i18n="settings.admin.users.filter_status_all">All statuses</option>
+                  <option value="enabled" data-i18n="common.enabled">Enabled</option>
+                  <option value="disabled" data-i18n="common.disabled">Disabled</option>
+                </select>
+              </div>
+
+              <div class="table-wrap"><table id="admin-users-table"></table></div>
+              <p id="settings-users-disabled-note" class="muted hidden" data-i18n="settings.admin.users.disabled_no_login">User management is unavailable while SPUC runs in no-login mode.</p>
+            </article>
+          </section>
         </div>
       </section>
     </section>
 
     <footer class="app-floating-footer muted">
       <span>Coded with ❤️ by febrezo</span>
+      <span class="footer-separator" aria-hidden="true">|</span>
       <a href="https://github.com/febrezo/spuc" target="_blank" rel="noreferrer" data-i18n="common.github_project">GitHub Project</a>
+      <span class="footer-separator" aria-hidden="true">|</span>
       <span><span data-i18n="common.license">License</span>: <a href="https://github.com/febrezo/spuc/blob/main/LICENSE.md" target="_blank" rel="noreferrer" data-i18n="common.license_sspl">Server Side Public License</a></span>
     </footer>
   </div>
@@ -937,6 +1056,64 @@
         <button type="button" class="icon-btn detail-close-btn" data-action="close-support" data-i18n-title="common.close" aria-label="Close" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
       </header>
       <div id="about-view" class="about-layout"></div>
+    </article>
+  </dialog>
+
+  <dialog id="admin-provider-dialog" class="detail-dialog">
+    <article class="glass detail-card">
+      <header>
+        <h3 data-i18n="admin.oauth.configure.title">Configure external provider</h3>
+      </header>
+      <form id="admin-provider-form" class="stack">
+        <input id="admin-provider-id" type="hidden">
+        <label>
+          <span data-i18n="admin.oauth.provider">Provider</span>
+          <input id="admin-provider-name" readonly>
+        </label>
+        <label>
+          <span data-i18n="admin.oauth.configure.auth_url">Authorization URL</span>
+          <input id="admin-provider-auth-url" readonly>
+        </label>
+        <label class="admin-enabled-toggle">
+          <input id="admin-provider-authorized" type="checkbox">
+          <span data-i18n="admin.oauth.authorized">Authorized</span>
+        </label>
+        <p id="admin-provider-config-summary" class="muted"></p>
+        <div class="dialog-actions modal-actions-split">
+          <div class="modal-actions-left">
+            <button type="button" id="admin-provider-cancel" class="btn btn-danger" data-i18n="common.cancel">Cancel</button>
+          </div>
+          <div class="modal-actions-right">
+            <button type="submit" id="admin-provider-save" class="btn btn-primary" data-i18n="common.apply">Apply</button>
+          </div>
+        </div>
+      </form>
+    </article>
+  </dialog>
+
+  <dialog id="admin-create-user-dialog" class="detail-dialog">
+    <article class="glass detail-card">
+      <header>
+        <h3 data-i18n="admin.create.title">Create user</h3>
+      </header>
+      <form id="admin-create-user" class="stack">
+        <p class="muted" data-i18n="settings.admin.create.subtitle">Create a local user with the minimum fields required to access SPUC.</p>
+        <input id="admin-new-username" data-i18n-placeholder="admin.create.username" placeholder="username" required>
+        <input id="admin-new-display-name" data-i18n-placeholder="settings.profile.display_name_placeholder" placeholder="How your name should appear">
+        <input id="admin-new-password" type="password" data-i18n-placeholder="admin.create.password" placeholder="password" required>
+        <select id="admin-new-role">
+          <option value="analyst" data-i18n="admin.role.analyst">Analyst</option>
+          <option value="admin" data-i18n="admin.role.admin">Admin</option>
+        </select>
+        <div class="dialog-actions modal-actions-split">
+          <div class="modal-actions-left">
+            <button type="button" id="admin-create-user-cancel" class="btn btn-danger" data-i18n="common.cancel">Cancel</button>
+          </div>
+          <div class="modal-actions-right">
+            <button type="submit" class="btn btn-primary" data-i18n="admin.create.submit">Create user</button>
+          </div>
+        </div>
+      </form>
     </article>
   </dialog>
 
@@ -1032,126 +1209,45 @@
   </dialog>
 
   <dialog id="adversary-dialog" class="detail-dialog">
-    <article class="glass detail-card">
+    <article class="glass detail-card compact-modal adversary-create-modal">
       <form id="adversary-form" class="stack">
         <header class="adversary-modal-head">
           <div class="adversary-modal-title-wrap">
             <h3 id="adversary-form-title" data-i18n="adversaries.create.title">Create new adversary</h3>
-            <input id="adversary-title-inline" class="hidden" data-i18n-placeholder="adversaries.create.name" placeholder="Name">
           </div>
-          <div id="adversary-emulable-platforms" class="rule-card-tags" aria-label="Emulable platforms"></div>
         </header>
-        <p class="muted" data-i18n="adversaries.create.flow_hint">Plan your adversary flow: filter catalog abilities, add ordered steps, and compile outputs.</p>
-        <div class="adversary-editor-tabs" role="tablist" aria-label="Adversary editor sections">
-          <button type="button" class="btn btn-ghost active" data-action="adversary-tab" data-tab="plan" data-i18n="adversaries.editor.tab.plan">Plan</button>
-          <button type="button" class="btn btn-ghost" data-action="adversary-tab" data-tab="criteria" data-i18n="adversaries.editor.tab.validate">Validate and export</button>
-        </div>
-        <section class="adversary-planner-grid">
-          <article class="planner-card" id="adversary-pane-plan-settings">
-            <div class="planner-card-title" data-i18n="adversaries.create.plan">Plan settings</div>
-            <p class="muted" data-i18n="adversaries.editor.config_hint">Define identity, target platform, and confidence before adding steps.</p>
-            <div class="planner-meta-row">
-              <label>
-                <span data-i18n="adversaries.create.name">Name</span>
-                <input id="adversary-name" required>
-              </label>
-              <label>
-                <span data-i18n="adversaries.create.confidence">Confidence</span>
-                <input id="adversary-confidence" type="number" min="0" max="100" value="70">
-              </label>
-              <label>
-                <span data-i18n="adversaries.create.target_platform">Target platform</span>
-                <select id="adversary-target-platform" required>
-                  <option value="" data-i18n="common.all_platforms">All platforms</option>
-                </select>
-              </label>
-            </div>
-            <label>
+        <p class="muted" data-i18n="adversaries.create.modal_hint">Configura lo mínimo para abrir el constructor principal con un borrador listo para completar.</p>
+        <div class="adversary-form-grid compact-adversary-create-grid">
+          <label>
+            <span data-i18n="adversaries.create.name">Name</span>
+            <input id="adversary-name" required>
+          </label>
+          <label>
+            <span data-i18n="adversaries.create.target_platform">Target platform</span>
+            <select id="adversary-target-platform" required>
+              <option value="" data-i18n="common.all_platforms">All platforms</option>
+            </select>
+          </label>
+          <label class="compact-adversary-create-description">
+            <span class="description-label-row">
               <span data-i18n="adversaries.create.description">Description</span>
-              <div class="markdown-editor" data-md-editor="adversary-description">
-                <div class="markdown-editor-tabs">
-                  <button type="button" class="btn btn-ghost active" data-action="markdown-tab" data-editor="adversary-description" data-tab="edit" data-i18n="markdown.edit">Edit</button>
-                  <button type="button" class="btn btn-ghost" data-action="markdown-tab" data-editor="adversary-description" data-tab="preview" data-i18n="markdown.preview">Preview</button>
-                </div>
-                <textarea id="adversary-description" class="markdown-editor-input" rows="3"></textarea>
-                <article id="adversary-description-preview" class="markdown-preview hidden"></article>
-              </div>
-            </label>
-          </article>
-          <article class="planner-card" id="adversary-pane-plan-selected">
-            <div class="planner-card-title">
-              <span data-i18n="adversaries.create.selected">Selected steps</span>
-              <span id="adversary-selected-count" class="badge success">0</span>
+              <span class="markdown-editor-tabs compact-markdown-tabs">
+                <button type="button" class="btn btn-ghost" data-action="markdown-tab" data-editor="adversary-description" data-tab="edit" data-i18n="markdown.edit">Edit</button>
+                <button type="button" class="btn btn-ghost active" data-action="markdown-tab" data-editor="adversary-description" data-tab="preview" data-i18n="markdown.preview">Preview</button>
+              </span>
+            </span>
+            <div class="markdown-editor compact-markdown-editor" data-md-editor="adversary-description">
+              <textarea id="adversary-description" class="markdown-editor-input" rows="4"></textarea>
+              <article id="adversary-description-preview" class="markdown-preview"></article>
             </div>
-            <div class="planner-card-actions-inline">
-              <button type="button" class="btn btn-primary" data-action="adversary-open-ability-picker" data-i18n="adversaries.editor.add_catalog">Add catalog ability</button>
-            </div>
-            <div id="adversary-selected" class="selected-ability-list"></div>
-          </article>
-          <article class="planner-card adversary-custom-payload-card" id="adversary-pane-custom-payload">
-            <div class="planner-card-title" data-i18n="adversaries.payload.title">Custom payload</div>
-            <p class="muted" data-i18n="adversaries.payload.safety">SPUC does not execute payloads from the UI. Export only for controlled and explicitly authorized labs.</p>
-            <div class="planner-meta-row">
-              <label>
-                <span data-i18n="adversaries.payload.name">Payload name</span>
-                <input id="adversary-payload-name" data-i18n-placeholder="adversaries.payload.name_placeholder" placeholder="Example: Linux telemetry probe">
-              </label>
-              <label>
-                <span data-i18n="adversaries.payload.runner">Runner</span>
-                <select id="adversary-payload-runner">
-                  <option value="spuc-agent">spuc-agent</option>
-                  <option value="bash">bash</option>
-                  <option value="powershell">powershell</option>
-                  <option value="python">python</option>
-                  <option value="javascript">javascript</option>
-                  <option value="rubber-ducky">rubber-ducky / HID</option>
-                </select>
-              </label>
-              <label>
-                <span data-i18n="adversaries.payload.language">Payload type</span>
-                <select id="adversary-payload-language">
-                  <option value="bash">Bash</option>
-                  <option value="powershell">PowerShell</option>
-                  <option value="python">Python</option>
-                  <option value="javascript">JavaScript</option>
-                  <option value="rubber-ducky">Rubber Ducky / HID</option>
-                </select>
-              </label>
-            </div>
-            <label>
-              <span data-i18n="adversaries.payload.description">Description</span>
-              <input id="adversary-payload-description" data-i18n-placeholder="adversaries.payload.description_placeholder" placeholder="What this payload is meant to validate">
-            </label>
-            <label>
-              <span data-i18n="adversaries.payload.content">Payload content</span>
-              <textarea id="adversary-payload-content" rows="7" spellcheck="false" data-i18n-placeholder="adversaries.payload.content_placeholder" placeholder="Paste or write the payload here"></textarea>
-            </label>
-            <div class="adversary-payload-actions">
-              <button type="button" class="btn btn-ghost" data-action="adversary-preview-payload" data-i18n="adversaries.payload.preview">Preview</button>
-              <button type="button" id="adversary-add-custom-payload" class="btn btn-primary" data-action="adversary-add-custom-payload" data-i18n="adversaries.payload.add">Add custom payload</button>
-            </div>
-            <pre id="adversary-payload-preview" class="detail-code hidden"></pre>
-          </article>
-          <article class="planner-card hidden" id="adversary-pane-criteria">
-            <div class="planner-card-title" data-i18n="adversaries.editor.validation_title">Validation and export</div>
-            <p class="muted" data-i18n="adversaries.editor.validation_hint">SPUC generates reproducible artifacts; it does not execute this plan from the web interface.</p>
-            <div id="adversary-validation-summary" class="adversary-validation-summary"></div>
-            <div id="adversary-execution-criteria"></div>
-          </article>
-        </section>
-        <div class="dialog-actions modal-actions-split hidden">
+          </label>
+        </div>
+        <div class="dialog-actions modal-actions-split">
           <div class="modal-actions-left">
-            <button type="button" id="adversary-cancel" class="btn btn-danger" data-i18n="adversaries.editor.back">Back to list</button>
+            <button type="button" id="adversary-cancel" class="btn btn-ghost" data-i18n="common.cancel">Cancel</button>
           </div>
-          <div class="modal-actions-right adversary-dialog-actions-right">
-            <button type="button" class="btn btn-primary" data-action="adversary-open-ability-picker" data-i18n="adversaries.editor.add_catalog">Add catalog ability</button>
-            <div id="adversary-export-inline" class="detail-copy-emulation hidden">
-              <div class="rule-export-combo">
-                <button type="button" class="btn btn-success" id="adversary-export-inline-button" title="Export adversary" aria-label="Export adversary">Export</button>
-                <select id="adversary-export-inline-target" class="rule-export-select"></select>
-              </div>
-            </div>
-            <button type="submit" id="adversary-submit" class="btn btn-success" data-i18n="adversaries.create.submit">Create new adversary</button>
+          <div class="modal-actions-right">
+            <button type="submit" id="adversary-submit" class="btn btn-primary" data-i18n="adversaries.create.submit" disabled>Create adversary</button>
           </div>
         </div>
       </form>
@@ -1360,14 +1456,10 @@
       <header>
         <h3 id="confirm-title" data-i18n="common.confirm_action">Confirm action</h3>
       </header>
-      <p id="confirm-message" class="muted"></p>
-      <div class="dialog-actions modal-actions-split">
-        <div class="modal-actions-left">
-          <button type="button" id="confirm-cancel" class="btn btn-ghost" data-i18n="common.cancel">Cancel</button>
-        </div>
-        <div class="modal-actions-right">
-          <button type="button" id="confirm-accept" class="btn btn-danger" data-i18n="common.confirm">Confirm</button>
-        </div>
+      <p id="confirm-message" class="muted confirm-message"></p>
+      <div class="dialog-actions confirm-actions">
+        <button type="button" id="confirm-cancel" class="btn btn-ghost" data-i18n="common.cancel">Cancel</button>
+        <button type="button" id="confirm-accept" class="btn btn-danger" data-i18n="common.confirm">Confirm</button>
       </div>
     </article>
   </dialog>

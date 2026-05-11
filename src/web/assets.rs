@@ -312,6 +312,7 @@ mod tests {
         assert!(APP_JS.contains("https://github.com/sponsors/febrezo"));
         assert!(APP_JS.contains("about-github-sponsors-link"));
         assert!(APP_JS.contains("about-donation-action"));
+        assert!(APP_JS.contains("<input\n        class=\"about-donation-address\""));
         assert!(APP_JS.contains("function renderAboutDialog(section = \"\")"));
         assert!(APP_JS.contains("function copyDonationAddress(method)"));
         assert!(APP_JS.contains("action === \"about-donation-method\""));
@@ -320,6 +321,8 @@ mod tests {
         assert!(APP_CSS.contains(".about-donation-card {"));
         assert!(APP_CSS.contains(".about-github-sponsors-link {"));
         assert!(APP_CSS.contains("grid-template-columns: minmax(0, 1fr) 220px;"));
+        assert!(APP_CSS.contains("min-height: 42px;"));
+        assert!(APP_CSS.contains("white-space: nowrap;"));
         assert!(APP_CSS.contains(".about-card .detail-close-btn {"));
         assert!(TRANSLATIONS_JSON.contains("\"about.title\": \"Acerca de SPUC\""));
         assert!(TRANSLATIONS_JSON.contains("\"about.sponsors.title\": \"GitHub Sponsors\""));
@@ -401,6 +404,18 @@ mod tests {
         assert!(!INDEX_HTML.contains("id=\"adversary-editor-json\""));
         assert!(INDEX_HTML.contains("id=\"adversary-editor-primary\""));
         assert!(INDEX_HTML.contains("id=\"adversary-editor-secondary\""));
+        assert!(!INDEX_HTML.contains("id=\"adversary-editor-new\""));
+        assert!(INDEX_HTML.contains("id=\"adversary-dialog\""));
+        assert!(INDEX_HTML.contains("class=\"adversary-form-grid compact-adversary-create-grid\""));
+        assert!(
+            INDEX_HTML.contains("class=\"glass detail-card compact-modal adversary-create-modal\"")
+        );
+        assert!(INDEX_HTML.contains("id=\"adversary-submit\" class=\"btn btn-primary\" data-i18n=\"adversaries.create.submit\" disabled"));
+        assert!(INDEX_HTML.contains("class=\"markdown-editor compact-markdown-editor\" data-md-editor=\"adversary-description\""));
+        assert!(INDEX_HTML.contains("id=\"adversary-editor-confidence\" type=\"range\""));
+        assert!(INDEX_HTML.contains(
+            "id=\"adversary-editor-confidence-value\" class=\"badge success\">70</span>"
+        ));
         assert!(INDEX_HTML.contains("id=\"adversary-payload-picker-dialog\""));
         assert!(INDEX_HTML.contains("id=\"adversary-payload-form-dialog\""));
         assert!(INDEX_HTML.contains("data-action=\"adversary-open-payload-picker\""));
@@ -413,6 +428,9 @@ mod tests {
         assert!(APP_CSS.contains(".adversaries-empty-state {"));
         assert!(APP_CSS.contains(".adversary-editor-hero {"));
         assert!(APP_CSS.contains(".adversary-custom-payload-card"));
+        assert!(APP_CSS.contains(".compact-adversary-create-grid {"));
+        assert!(APP_CSS.contains(".adversary-create-modal {"));
+        assert!(APP_CSS.contains(".confidence-slider-wrap {"));
         assert!(APP_CSS.contains(".payload-search-wrap {"));
         assert!(APP_CSS.contains(".payload-catalog-list {"));
         assert!(APP_CSS.contains(".payload-accordion-summary"));
@@ -427,9 +445,14 @@ mod tests {
         assert!(APP_JS.contains("mountAdversaryEditorSurface();"));
         assert!(APP_JS.contains("state.adversaries.workspaceMode = \"editor\";"));
         assert!(APP_JS.contains("function renderPayloadCatalogWorkspace()"));
-        assert!(APP_JS.contains("const runner = String(document.getElementById(\"payload-catalog-runner\")"));
+        assert!(APP_JS
+            .contains("const runner = String(document.getElementById(\"payload-catalog-runner\")"));
         assert!(APP_JS.contains("x-spuc-payload--"));
         assert!(APP_JS.contains("payload-accordion-list"));
+        assert!(APP_JS.contains("function populateAdversaryCreatePlatformOptions()"));
+        assert!(APP_JS.contains("function updateAdversaryEditorConfidenceValue()"));
+        assert!(APP_JS.contains("showAdversaryEditorPanel();"));
+        assert!(APP_JS.contains("setAdversaryEditorTab(\"overview\");"));
         assert!(APP_JS.contains("action === \"payload-catalog-open-create\""));
         assert!(APP_JS.contains("action === \"payload-catalog-open-docs\""));
         assert!(APP_JS.contains("action === \"payload-catalog-save-create\""));
@@ -509,13 +532,7 @@ mod tests {
     }
 
     #[test]
-    fn app_js_hides_admin_route_in_no_login_mode() {
-        assert!(APP_JS.contains(
-            "if (route === \"admin\" && (state.bootstrap?.auth?.no_login || state.principal?.role !== \"admin\"))"
-        ));
-        assert!(APP_JS.contains(
-            "if (state.bootstrap.auth.no_login || !state.principal || state.principal.role !== \"admin\")"
-        ));
+    fn app_js_keeps_two_phase_no_login_start_and_settings_route() {
         assert!(APP_JS.contains("function detectAppMode()"));
         assert!(APP_JS.contains("spuc-mode"));
         assert!(APP_JS.contains("const noLoginActive = state.bootstrap.auth.no_login;"));
@@ -540,13 +557,23 @@ mod tests {
             "document.getElementById(\"boot-enter-button\")?.classList.remove(\"hidden\");"
         ));
         assert!(TRANSLATIONS_JSON.contains("\"boot.enter\": \"Iniciar SPUC\""));
-        assert!(
-            TRANSLATIONS_JSON.contains("\"login.coded_with_love\": \"Codificado con amor por febrezo\"")
-        );
-        assert!(INDEX_HTML.contains("data-i18n=\"common.github_project\">GitHub Project</a>"));
-        assert!(INDEX_HTML.contains(
-            "data-i18n=\"common.license_sspl\">Server Side Public License</a>"
+        assert!(TRANSLATIONS_JSON.contains("\"nav.settings\": \"Configuración\""));
+        assert!(TRANSLATIONS_JSON.contains("\"route.settings.title\": \"Configuración\""));
+        assert!(APP_JS.contains(
+            "settings: { title: \"route.settings.title\", subtitle: \"route.settings.subtitle\" }"
         ));
+        assert!(APP_JS.contains("applyBootstrapPreferences();"));
+        assert!(APP_JS.contains("async function loadSettingsView() {"));
+        assert!(INDEX_HTML.contains("data-route=\"settings\""));
+        assert!(INDEX_HTML.contains("id=\"panel-settings\" class=\"panel\""));
+        assert!(INDEX_HTML.contains("id=\"settings-profile-form\""));
+        assert!(INDEX_HTML.contains("id=\"settings-admin-sections\""));
+        assert!(TRANSLATIONS_JSON
+            .contains("\"login.coded_with_love\": \"Codificado con amor por febrezo\""));
+        assert!(INDEX_HTML.contains("data-i18n=\"common.github_project\">GitHub Project</a>"));
+        assert!(
+            INDEX_HTML.contains("data-i18n=\"common.license_sspl\">Server Side Public License</a>")
+        );
         assert!(INDEX_HTML.contains("id=\"footer-license-link-boot\""));
         assert!(INDEX_HTML.contains("id=\"footer-license-link\""));
         assert!(APP_CSS.contains("position: fixed;"));
@@ -556,15 +583,37 @@ mod tests {
     }
 
     #[test]
+    fn settings_route_uses_tabbed_layout_and_modal_admin_actions() {
+        assert!(INDEX_HTML.contains("id=\"settings-tab-personal\""));
+        assert!(INDEX_HTML.contains("id=\"settings-tab-application\""));
+        assert!(INDEX_HTML.contains("id=\"settings-tab-users\""));
+        assert!(INDEX_HTML.contains("id=\"settings-tab-panel-personal\""));
+        assert!(INDEX_HTML.contains("id=\"settings-tab-panel-application\""));
+        assert!(INDEX_HTML.contains("id=\"settings-tab-panel-users\""));
+        assert!(INDEX_HTML.contains("id=\"admin-create-user-dialog\""));
+        assert!(INDEX_HTML.contains("id=\"admin-provider-dialog\""));
+        assert!(!INDEX_HTML.contains("id=\"admin-no-login\""));
+        assert!(INDEX_HTML.contains("id=\"admin-default-totp\""));
+        assert!(APP_JS.contains("function setSettingsTab(tab) {"));
+        assert!(APP_JS.contains("action === \"settings-tab\""));
+        assert!(APP_JS.contains("action === \"admin-open-create-user\""));
+        assert!(APP_JS.contains("action === \"admin-oauth-configure\""));
+        assert!(APP_JS.contains("default_totp_required"));
+    }
+
+    #[test]
     fn stix_route_switches_between_entity_welcome_and_catalog() {
         assert!(INDEX_HTML.contains("data-action=\"stix-import-open\""));
-        assert!(INDEX_HTML.contains("data-i18n=\"stix_objects.welcome.standard.title\""));
+        assert!(INDEX_HTML.contains("data-i18n=\"stix_objects.empty.standard.prefix\""));
+        assert!(INDEX_HTML.contains("data-i18n=\"stix_objects.empty.standard.link\""));
+        assert!(INDEX_HTML.contains("data-i18n=\"stix_objects.empty.standard.suffix\""));
         assert!(INDEX_HTML.contains("id=\"stix-import-file\""));
         assert!(APP_JS.contains("function importStixObjectsFromFile(file) {"));
         assert!(APP_JS.contains("action === \"stix-import-open\""));
         assert!(APP_JS.contains(
             "state.route === \"stix-objects-catalog\" || hasEntries ? \"catalog\" : \"welcome\""
         ));
+        assert!(!INDEX_HTML.contains("<a class=\"btn btn-ghost\" href=\"https://docs.oasis-open.org/cti/stix/v2.1/cs02/stix-v2.1-cs02.html\" target=\"_blank\" rel=\"noreferrer\" data-i18n=\"stix_objects.welcome.standard.title\">"));
         assert!(TRANSLATIONS_JSON.contains("\"route.stix_objects.title\": \"Catálogo de objetos\""));
         assert!(TRANSLATIONS_JSON.contains("\"nav.stix_objects\": \"Catálogo de objetos\""));
     }
@@ -573,8 +622,23 @@ mod tests {
     fn adversary_delete_uses_in_app_confirmation_dialog() {
         assert!(APP_JS.contains("async function deleteSelectedAdversaries() {"));
         assert!(APP_JS.contains("await askForConfirmation("));
+        assert!(INDEX_HTML.contains("class=\"dialog-actions confirm-actions\""));
+        assert!(APP_CSS.contains(".confirm-actions {"));
         assert!(!APP_JS
             .contains("const confirmed = confirm(t(\"adversaries.confirm_delete_selected\"));"));
+        assert!(
+            !APP_JS.contains("const confirmed = confirm(t(\"adversaries.confirm_remove_step\"));")
+        );
+        assert!(!APP_JS.contains("confirm(t(\"rules.bulk.delete_confirm\"))"));
+        assert!(APP_JS.contains("t(\"stix_objects.confirm_delete_selected\")"));
+        assert!(APP_JS.contains("t(\"stix_objects.confirm_delete_one\")"));
+        assert!(APP_JS.contains("t(\"rules.delete_action\")"));
+        assert!(APP_JS.contains("t(\"adversaries.delete_action\")"));
+        assert!(APP_JS.contains("t(\"payloads.delete_action\")"));
+        assert!(APP_JS.contains("t(\"payloads.delete_one_action\")"));
+        assert!(APP_JS.contains("t(\"stix_objects.delete_selected_action\")"));
+        assert!(APP_JS.contains("t(\"stix_objects.delete_one_action\")"));
+        assert!(APP_JS.contains("t(\"admin.delete_action\")"));
     }
 
     #[test]
@@ -662,6 +726,24 @@ mod tests {
     }
 
     #[test]
+    fn empty_states_use_localized_copy_and_uniform_ctas() {
+        assert!(INDEX_HTML.contains("data-i18n=\"rules.empty.title\""));
+        assert!(INDEX_HTML.contains("data-i18n=\"rules.empty.body\""));
+        assert!(APP_JS.contains("const visibleTotal = Number(state.rules.total || 0);"));
+        assert!(APP_JS.contains("const showEmptyState = mode === \"explore\" && (visibleTotal === 0 || !hasEntries);"));
+        assert!(INDEX_HTML.contains("data-i18n=\"stix_objects.empty.title\""));
+        assert!(INDEX_HTML.contains("data-i18n=\"stix_objects.empty.body\""));
+        assert!(INDEX_HTML.contains("data-i18n=\"adversaries.payload.empty.title\""));
+        assert!(INDEX_HTML.contains("data-i18n=\"adversaries.payload.empty.body\""));
+        assert!(TRANSLATIONS_JSON.contains("\"rules.empty.title\": \"Aún no hay reglas creadas\""));
+        assert!(TRANSLATIONS_JSON.contains("\"stix_objects.empty.title\": \"Aún no hay objetos creados\""));
+        assert!(APP_CSS.contains("width: min(92%, 860px);"));
+        assert!(APP_CSS.contains("max-width: 620px;"));
+        assert!(APP_CSS.contains("min-height: 64px;"));
+        assert!(APP_CSS.contains("white-space: normal;"));
+    }
+
+    #[test]
     fn app_css_compacts_home_workspace_card_to_fit_viewport() {
         assert!(APP_CSS.contains("max-width: 1160px;"));
         assert!(APP_CSS.contains("width: min(1140px, 100%);"));
@@ -694,6 +776,41 @@ mod tests {
         assert!(APP_CSS.contains("#learning-progress {"));
         assert!(APP_CSS.contains("width: auto;"));
         assert!(APP_CSS.contains("white-space: nowrap;"));
+        assert!(APP_CSS.contains("background: linear-gradient(140deg, var(--success), #2b9d64);"));
+        assert!(APP_CSS.contains("color: #fff;"));
+    }
+
+    #[test]
+    fn button_icons_keep_white_contrast_and_light_theme_icons_are_darker() {
+        assert!(APP_CSS.contains(".btn-primary i,"));
+        assert!(APP_CSS.contains(".btn-primary svg,"));
+        assert!(APP_CSS.contains("color: currentColor;"));
+        assert!(APP_CSS.contains("fill: currentColor;"));
+        assert!(APP_CSS.contains("body.theme-light .nav-icon,"));
+        assert!(APP_CSS.contains("body.theme-light .route-title-icon,"));
+        assert!(APP_CSS.contains("body.theme-light .welcome-icon,"));
+        assert!(APP_CSS.contains("color: rgba(32, 49, 82, 0.9);"));
+    }
+
+    #[test]
+    fn selects_use_compact_shared_combobox_styling() {
+        assert!(APP_CSS.contains("select {"));
+        assert!(APP_CSS.contains("min-height: 42px;"));
+        assert!(APP_CSS.contains("padding: 9px 38px 9px 12px;"));
+        assert!(APP_CSS.contains("appearance: none;"));
+        assert!(APP_CSS.contains("background-position: right 12px center;"));
+        assert!(APP_CSS.contains("color-scheme: dark;"));
+        assert!(APP_CSS.contains("select[multiple],"));
+        assert!(APP_CSS.contains("background-image: none;"));
+        assert!(APP_CSS.contains(".spuc-combobox {"));
+        assert!(APP_CSS.contains(".spuc-combobox-trigger {"));
+        assert!(APP_CSS.contains(".spuc-combobox-menu {"));
+        assert!(APP_CSS.contains(".spuc-combobox-option.is-selected {"));
+        assert!(APP_JS.contains("function isCustomComboboxCandidate(select) {"));
+        assert!(APP_JS.contains("function syncCustomCombobox(select) {"));
+        assert!(APP_JS.contains("function refreshCustomComboboxes(root = document) {"));
+        assert!(APP_CSS.contains(".flow-picker-filters select {"));
+        assert!(APP_CSS.contains(".rule-export-select {"));
     }
 
     #[test]
@@ -769,7 +886,9 @@ mod tests {
     fn stix_catalog_uses_icon_only_actions_and_no_columns_toggle() {
         assert!(INDEX_HTML.contains("id=\"stix-create-open-table\""));
         assert!(INDEX_HTML.contains("id=\"stix-objects-search\" type=\"search\""));
-        assert!(INDEX_HTML.contains("class=\"btn btn-primary btn-import icon-only stix-import-label\""));
+        assert!(
+            INDEX_HTML.contains("class=\"btn btn-primary btn-import icon-only stix-import-label\"")
+        );
         assert!(!INDEX_HTML.contains("id=\"stix-bulk-toggle\" class=\"btn btn-ghost icon-only\""));
         assert!(
             INDEX_HTML.contains("id=\"stix-export-selected\" class=\"btn btn-success icon-only\"")

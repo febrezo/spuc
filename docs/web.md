@@ -16,7 +16,7 @@ spuc web --port 8090 --no-login --no-open
 - `spuc web` binds to `127.0.0.1` and exposes `GET /healthz` for sidecar readiness checks.
 - `spuc web` opens the system browser by default; use `--no-open` when another shell, desktop wrapper, or test harness will load the URL.
 - `spuc-gui` starts `spuc web --no-login --no-open` on an available localhost port, marks the embedded web URL with `spuc-mode=gui`, shows a centered SPUC loading screen while the sidecar becomes ready, and then shows it in a native Tauri window titled `SPUC: A behavioural IOC mapping lab` or the Spanish equivalent.
-- `spuc-gui` reads `SPUC_LOCALE`, `LC_ALL`, `LC_MESSAGES`, or `LANG` to choose the native window title language at startup and passes that default locale to the embedded web UI. Browser mode uses the browser language when no saved language preference exists, and the page title stays synchronized with the language selector.
+- `spuc-gui` reads `SPUC_LOCALE`, `LC_ALL`, `LC_MESSAGES`, or `LANG` to choose the native window title language at startup and passes that default locale to the embedded web UI. Browser mode uses the browser language when no saved language preference exists, and the page title stays synchronized with the language preference stored in `Settings`.
 - In `spuc-gui`, local SPUC navigation remains inside the webview and external links open in the system browser.
 - If `spuc-gui` cannot start the `spuc` sidecar, startup fails fast with guidance to build `spuc`, place it beside `spuc-gui`/in `PATH`, or set `SPUC_SERVER_BIN`.
 - desktop build command: `cargo run -p spuc-gui`
@@ -30,12 +30,12 @@ When `--admin-password` is provided explicitly, SPUC keeps that credential synch
 ## Authentication modes
 
 - Local login (username and password) backed by a local user store.
-- `--no-login` mode for standalone local sessions: no login view, implicit administrator role, and logout plus user-management controls hidden in UI.
+- `--no-login` mode for standalone local sessions: no login view, implicit administrator role, a two-phase branded entry gate, and logout hidden in UI.
 - Optional Google/GitHub provider bootstrap from environment variables (authorization code callback flow enabled).
-- OAuth providers must also be authorized by an administrator in `User management` before they can be used in the login screen.
+- OAuth providers must also be authorized by an administrator in `Settings` before they can be used in the login screen.
 - Google/GitHub login buttons are disabled in the static login view and become enabled only after bootstrap confirms that the provider is configured and authorized.
 - Login/start view uses centered layout with SPUC logo, app title/subtitle, login panel, and a fixed bottom footer with `Coded with ❤️ by febrezo`, GitHub project, and `Licencia: Server Side Public License`.
-- In `--no-login`, the sidebar identity is presented as `Local user` (no admin credentials shown in UI text) and admin/user-management routes are unavailable.
+- In `--no-login`, the sidebar identity stays neutral and the app opens through the branded gate first; `Settings` remains available and includes administrator sections because the local session resolves to the bootstrap administrator.
 
 ## OAuth provider bootstrap
 
@@ -55,7 +55,7 @@ Typical local callback URIs:
 
 When variables are not configured, provider buttons remain visible but disabled.
 
-Even when configured, providers stay disabled until an admin authorizes each provider in `User management`.
+Even when configured, providers stay disabled until an admin authorizes each provider in `Settings`.
 
 ## Web interface scope
 
@@ -68,6 +68,14 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Home (`Inicio`) route is available above Overview and provides a centered welcome-view with stacked action rows (icon, title, short description) for Laboratory, Rules Catalog, Adversary Catalog, Learning, and Donate.
 - In no-login mode, the web UI keeps a two-phase start: it first shows a branded SPUC presentation gate with logo and an explicit `Enter SPUC` / `Entrar en SPUC` action; only after that action does the standard app shell open on Home.
 - Sidebar footer exposes compact `About SPUC` and support actions that open a polished `Acerca de SPUC` dialog with project metadata, version, repository/license/releases/docs links, license/credits, and integrated donation method selection with centered Monero, Bitcoin, and GitHub Sponsors cards.
+- In the `About SPUC` donation cards, crypto addresses are rendered in a stable single-line readonly text field so the card height does not change between methods.
+- `Settings` is always visible in the sidebar and now uses a 3-tab layout: `Personal settings`, `Application settings`, and `User management`.
+- `Settings` replaces the old top-right language/theme controls, so the header now keeps only navigation, session identity and logout.
+- In `Personal settings`, account ID is read-only, display-name/language/theme remain editable, and `Change password` is hidden entirely in `--no-login` mode.
+- `Application settings` centralizes Sigma JSON-RPC endpoint/token plus default language/theme/TOTP policy for new users; in `--no-login` mode, identity-related defaults and external login provider controls stay visible but disabled.
+- External OAuth providers (Google/GitHub) are configured through a dedicated provider dialog launched from the `Configure` action in `Application settings`.
+- `User management` keeps the users table plus filter controls and create-user modal; this tab is visible but disabled in `--no-login` mode.
+- In login-enabled sessions, user-management actions include role/status updates, password reset, deletion, and a per-user TOTP policy toggle field.
 - Sidebar footer uses a single `About SPUC` action that opens the same dialog with project metadata, documentation links, and donation method selection.
 - Donation media placeholders and the official GitHub Invertocat asset are embedded from `kb/assets/` and served on:
 	- `/assets/donate-bitcoin.png` (Bitcoin QR)
@@ -80,6 +88,11 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Clicking top-level `Rules` now opens the catalog explorer directly (no intermediate chooser view).
 - Clicking top-level `Emulation` now opens the adversaries explorer directly (no intermediate chooser view).
 - The sidebar now includes a direct `Payloads` entry so reusable payloads can be explored outside the adversary editor.
+- When `Rules`, `Payloads`, or `STIX objects` have no catalog entries yet, the route shows a centered localized welcome/empty-state card instead of an empty table shell.
+- `Rules` now keeps that guided empty-state card visible whenever the catalog is empty, avoiding the intermediate empty grid/table flash.
+- In `Rules`, the same guided empty-state is also shown when active search/filters leave zero visible entries (`0/0`) so analysts always get next-step actions instead of a dead-end table.
+- In `STIX objects` empty state, the official reference URL is attached directly to the `standard/estándar oficial` wording in the helper sentence.
+- These centered empty-state cards use the same wider dialog treatment and uniform stacked CTA sizing so primary/secondary actions stay visually consistent even when labels wrap.
 - `Payloads` keeps a centered welcome card when no reusable payloads exist yet, with direct actions to create a payload or open the project documentation; once payloads exist, the route switches to a catalog layout with top-right icon actions (`New payload`, `Delete selected`), expandable rows, and column headers for payload, type, runners, and actions.
 - Newly created adversaries are persisted as STIX intrusion-set objects and now use `intrusion-set--<uuid>` identifiers in saved manifests and API responses.
 - Adversary `Detail` and `Edit` now open a dedicated central workspace view (no modal/backdrop), with a single header containing back navigation, title/subtitle, and context actions.
@@ -123,7 +136,7 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Rules catalog keeps focused filtering by rule type (SIEM/IDS/Content), confidence, TLP/PAP and observable type.
 - Rules catalog includes observable-type filtering and a dedicated observables column (e.g., `process`, `file`, `artifact`) persisted with rule metadata and reused for dashboard statistics.
 - Rule metadata includes TLP/PAP comboboxes with normative colors and supports multiple `indicates` relations (STIX ID + object name), validated server-side and visualized with non-intrusive badges/listing in catalog and detail flows.
-- STIX objects are presented as an `STIX objects` catalog: when no objects exist, the route stays in a centered welcome state with `Create new STIX object`, `Import STIX objects`, and `Consult STIX standard`; once objects exist, it switches directly to the catalog table.
+- STIX objects are presented as an `STIX objects` catalog: when no objects exist, the route stays in a centered welcome state with `Create new STIX object` and `Import STIX objects`, plus an inline reference link to the STIX standard in the description; once objects exist, it switches directly to the catalog table.
 - The STIX objects catalog view (`id`, inferred `type`, `name`) is aggregated from stored `indicates` relations; catalog table actions keep icon-only controls with localized tooltips (`Create`, `Export selected`, `Delete selected`) aligned at the top-right, row click expands a full-details accordion per object, and the catalog avoids duplicate section headings.
 - `Create indicates relation` is restricted to selecting an existing STIX catalog object; STIX ID/name fields are read-only and shown for context only.
 - New STIX objects are created from the dedicated STIX Objects workspace (`Create new object`), not from the relation modal.
@@ -177,7 +190,9 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Learning toolbar controls use overflow-safe search, path and progress areas so `Solo pendientes`/`Only pending` and completion counts remain readable without overlap.
 - Learning progress is persisted locally in browser storage (completed exercises and active learning filters), and restored on next visit.
 - User Management panel for user creation, role/enabled edits, revocation, deletion, and password change.
-- Destructive actions (bulk deletions and user deletion) use an in-app confirmation modal instead of browser-native confirmation popups.
+- Destructive actions (bulk deletions and user deletion) use an in-app confirmation modal instead of browser-native confirmation popups, with verb-specific destructive buttons (`Delete rules`, `Delete adversaries`, etc.) grouped together on the right side of the footer.
+- Shared comboboxes (`select`) use a compact project-wide style, and simple single-value selects are progressively enhanced into SPUC-styled dropdowns with a custom trigger and menu; `multiple` selectors stay as listboxes with their own compact treatment so filters do not visually dominate the workspace.
+- Adversary creation starts with a compact modal for minimum metadata, then continues in the main builder view once the analyst confirms the draft; confidence is tuned later from the main overview with a slider.
 
 ## Localization
 

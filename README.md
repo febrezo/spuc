@@ -121,12 +121,13 @@ Use `spuc sigma update-config` to force a fresh runtime discovery and overwrite 
 - If `spuc-gui` cannot start the `spuc` sidecar, it exits with a clear error. Build `spuc` first with `cargo build -p spuc-cli --bin spuc`, keep both binaries together, put `spuc` in `PATH`, or set `SPUC_SERVER_BIN=/path/to/spuc`.
 - Linux desktop prerequisites: install WebKitGTK, JavaScriptCoreGTK, GTK and GLib development packages. On Fedora: `sudo dnf install glib2-devel gtk3-devel webkit2gtk4.1-devel javascriptcoregtk4.1-devel libappindicator-gtk3-devel librsvg2-devel libxdo-devel pkgconf-pkg-config`. On Ubuntu/WSL: install `libwebkit2gtk-4.1-dev`, `libjavascriptcoregtk-4.1-dev`, `libgtk-3-dev`, `libglib2.0-dev`, `libappindicator3-dev`, `librsvg2-dev`, `libxdo-dev`, and `pkg-config`.
 - `spuc web --port 8090 --admin-user admin --admin-password <password>` starts the localized web UI on localhost.
-- `spuc web --no-login` hides credential-based login and uses a deliberate two-phase local start: the UI first shows a branded SPUC presentation gate with an explicit `Enter SPUC` / `Entrar en SPUC` action, then opens the app shell as local administrator and hides logout plus user-management controls.
+- `spuc web --no-login` hides credential-based login and uses a deliberate two-phase local start: the UI first shows a branded SPUC presentation gate with an explicit `Enter SPUC` / `Entrar en SPUC` action, then opens the app shell as local administrator and hides logout while keeping `Settings` available for local administration.
 - If `--admin-password` is omitted, SPUC generates a 25-character password and prints it in startup logs.
 - Authentication supports local user/password accounts persisted in `<config_root>/web_users.json`.
 - Google/GitHub OAuth login supports authorization code callback flow configured by environment variables (`SPUC_WEB_GOOGLE_CLIENT_ID`, `SPUC_WEB_GOOGLE_CLIENT_SECRET`, `SPUC_WEB_GOOGLE_REDIRECT_URI`, `SPUC_WEB_GITHUB_CLIENT_ID`, `SPUC_WEB_GITHUB_CLIENT_SECRET`, `SPUC_WEB_GITHUB_REDIRECT_URI`).
 - Typical local callback URIs are `http://127.0.0.1:8090/api/login/oauth/google/callback` and `http://127.0.0.1:8090/api/login/oauth/github/callback`.
-- In `User management`, administrators can explicitly authorize/disable Google and GitHub login per provider; this policy is persisted in `<config_root>/web_oauth_policy.json` and is enforced in login.
+- In `Settings`, administrators can explicitly authorize/disable Google and GitHub login per provider; this policy is persisted in `<config_root>/web_oauth_policy.json` and is enforced in login.
+- `Settings` also centralizes per-user theme/language/display-name preferences plus admin-only defaults for theme/language, Sigma translation server connectivity and local user/password management.
 - Login/start screen is centered and includes branded logo/title/subtitle plus multi-row footer attribution (coded-with-love by febrezo, GitHub project, license).
 - The web UI is localized in English and Spanish only. CLI and JSON-RPC remain unchanged.
 
