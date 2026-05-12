@@ -1237,6 +1237,12 @@ struct RuleBundleExportRequest {
 }
 
 #[derive(Debug, Deserialize)]
+struct StixObjectsBundleExportRequest {
+    #[serde(default)]
+    stix_ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
 struct PatternBundleExportRequest {
     rule: String,
     #[serde(default)]
@@ -1522,7 +1528,31 @@ pub(crate) fn route(request: HttpRequest, state: &WebState) -> Result<HttpRespon
         return Ok(HttpResponse::css(assets::APP_CSS));
     }
     if request.method == "GET" && request.path == "/app.js" {
+        return Ok(HttpResponse::javascript(assets::APP_ENTRY_JS));
+    }
+    if request.method == "GET" && request.path == "/boot.js" {
         return Ok(HttpResponse::javascript(assets::APP_JS));
+    }
+    if request.method == "GET" && request.path == "/api-client.js" {
+        return Ok(HttpResponse::javascript(assets::API_CLIENT_JS));
+    }
+    if request.method == "GET" && request.path == "/store.js" {
+        return Ok(HttpResponse::javascript(assets::STORE_JS));
+    }
+    if request.method == "GET" && request.path == "/action-registry.js" {
+        return Ok(HttpResponse::javascript(assets::ACTION_REGISTRY_JS));
+    }
+    if request.method == "GET" && request.path == "/ui/dom.js" {
+        return Ok(HttpResponse::javascript(assets::UI_DOM_JS));
+    }
+    if request.method == "GET" && request.path == "/ui/toast.js" {
+        return Ok(HttpResponse::javascript(assets::UI_TOAST_JS));
+    }
+    if request.method == "GET" && request.path == "/ui/modal.js" {
+        return Ok(HttpResponse::javascript(assets::UI_MODAL_JS));
+    }
+    if request.method == "GET" && request.path == "/features/rules/index.js" {
+        return Ok(HttpResponse::javascript(assets::RULES_FEATURE_JS));
     }
     if request.method == "GET" && request.path == "/assets/logo-sputnik.png" {
         return Ok(HttpResponse::text(
@@ -1616,6 +1646,7 @@ pub(crate) fn route(request: HttpRequest, state: &WebState) -> Result<HttpRespon
         ("GET", ["api", "stix-objects"]) => list_stix_objects(),
         ("POST", ["api", "stix-objects"]) => create_stix_object(&request),
         ("DELETE", ["api", "stix-objects", stix_id]) => delete_stix_object(stix_id),
+        ("POST", ["api", "stix-objects", "export", "bundle"]) => export_stix_objects_bundle(&request),
         ("GET", ["api", "mitre-attack"]) => Ok(HttpResponse::text(
             200,
             "application/json; charset=utf-8",
@@ -2760,6 +2791,72 @@ fn export_bundle_from_pattern(request: &HttpRequest) -> Result<HttpResponse> {
     )
 }
 
+fn export_stix_objects_bundle(request: &HttpRequest) -> Result<HttpResponse> {
+    let payload: StixObjectsBundleExportRequest = request.json()?;
+    if payload.stix_ids.is_empty() {
+        return HttpResponse::json(400, &json!({ "error": "stix_ids_required" }));
+    }
+    let catalog_entries = load_stix_catalog();
+    let selected: Vec<StixCatalogEntry> = payload
+        .stix_ids
+        .iter()
+        .filter_map(|id| {
+            catalog_entries
+                .iter()
+                .find(|e| e.stix_id.eq_ignore_ascii_case(id))
+                .cloned()
+        })
+        .collect();
+    if selected.is_empty() {
+        return HttpResponse::json(400, &json!({ "error": "stix_objects_not_found" }));
+    }
+    let bundle = build_stix_bundle_from_objects(&selected)?;
+    let pretty = serde_json::to_vec_pretty(&bundle)?;
+    Ok(
+        HttpResponse::text(200, "application/json; charset=utf-8", pretty).with_header(
+            "Content-Disposition",
+            "attachment; filename=\"spuc-stix-objects-bundle.json\"",
+        ),
+    )
+}
+
+fn build_stix_bundle_from_objects(selected: &[StixCatalogEntry]) -> Result<serde_json::Value> {
+    let now = Utc::now().to_rfc3339();
+    let mut objects = Vec::new();
+
+    for entry in selected {
+        let mut obj = json!({
+            "type": entry.stix_type,
+            "spec_version": "2.1",
+            "id": entry.stix_id,
+            "created": entry.created_at.as_deref().unwrap_or(&now),
+            "modified": now,
+            "name": entry.name,
+        });
+        if let Some(desc) = &entry.description {
+            obj["description"] = json!(desc);
+        }
+        if let Some(tlp) = &entry.tlp {
+            obj["tlp"] = json!(tlp);
+        }
+        if let Some(pap) = &entry.pap {
+            obj["pap"] = json!(pap);
+        }
+        objects.push(obj);
+    }
+
+    let bundle = json!({
+        "type": "bundle",
+        "spec_version": "2.1",
+        "id": new_stix_id("bundle"),
+        "objects": objects,
+        "created": now,
+        "modified": now,
+    });
+
+    Ok(bundle)
+}
+
 fn build_stix_bundle_from_rules(selected: &[CatalogRuleEntry]) -> Result<serde_json::Value> {
     let now = Utc::now().to_rfc3339();
     let mut objects = Vec::new();
@@ -3432,22 +3529,13 @@ fn create_adversary(request: &HttpRequest, state: &WebState) -> Result<HttpRespo
     if payload.name.trim().is_empty() {
         return HttpResponse::json(400, &serde_json::json!({ "error": "name_required" }));
     }
-    if payload.ability_ids.is_empty() {
-        return HttpResponse::json(400, &serde_json::json!({ "error": "ability_ids_required" }));
-    }
     let confidence = payload.confidence.unwrap_or(70);
-    let target_platform = payload
+    let requested_target_platform = payload
         .target_platform
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(|value| value.to_ascii_lowercase());
-    let Some(target_platform) = target_platform else {
-        return HttpResponse::json(
-            400,
-            &serde_json::json!({ "error": "target_platform_required" }),
-        );
-    };
     if confidence > 100 {
         return HttpResponse::json(
             400,
@@ -3457,12 +3545,21 @@ fn create_adversary(request: &HttpRequest, state: &WebState) -> Result<HttpRespo
 
     let catalog = AbilityCatalog::from_default_root()?;
     let abilities = catalog.select_by_ids(&payload.ability_ids)?;
-    if abilities.iter().any(|ability| {
-        !ability
-            .supported_platforms
-            .iter()
-            .any(|platform| platform.eq_ignore_ascii_case(&target_platform))
-    }) {
+    let target_platform = requested_target_platform
+        .clone()
+        .or_else(|| first_supported_platform_from_abilities(&abilities));
+    let has_platform_mismatch =
+        requested_target_platform
+            .as_deref()
+            .is_some_and(|target_platform| {
+                abilities.iter().any(|ability| {
+                    !ability
+                        .supported_platforms
+                        .iter()
+                        .any(|platform| platform.eq_ignore_ascii_case(target_platform))
+                })
+            });
+    if has_platform_mismatch {
         return HttpResponse::json(
             400,
             &serde_json::json!({ "error": "abilities_platform_mismatch" }),
@@ -3482,7 +3579,7 @@ fn create_adversary(request: &HttpRequest, state: &WebState) -> Result<HttpRespo
         payload.tlp.as_deref(),
         payload.pap.as_deref(),
         None,
-        Some(target_platform.as_str()),
+        target_platform.as_deref(),
         None,
         None,
     )
@@ -3528,9 +3625,6 @@ fn update_adversary(selector: &str, request: &HttpRequest) -> Result<HttpRespons
     if payload.name.trim().is_empty() {
         return HttpResponse::json(400, &serde_json::json!({ "error": "name_required" }));
     }
-    if payload.ability_ids.is_empty() {
-        return HttpResponse::json(400, &serde_json::json!({ "error": "ability_ids_required" }));
-    }
     let confidence = payload.confidence.unwrap_or(70);
     if confidence > 100 {
         return HttpResponse::json(
@@ -3543,28 +3637,36 @@ fn update_adversary(selector: &str, request: &HttpRequest) -> Result<HttpRespons
     let entry = resolve_adversary_selector(selector, &adversaries, None)?;
     let existing = emu_campaign::load_campaign_yaml(&entry.path)?;
     let existing_meta = decode_rule_metadata_description(Some(existing.description.clone()));
-    let target_platform = payload
+    let requested_target_platform = payload
         .target_platform
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(|value| value.to_ascii_lowercase())
-        .or_else(|| existing_meta.target_platform.clone())
+        .map(|value| value.to_ascii_lowercase());
+    let inherited_target_platform = existing_meta
+        .target_platform
+        .clone()
         .or_else(|| updated_platform_from_steps(&existing.steps));
-    let Some(target_platform) = target_platform else {
-        return HttpResponse::json(
-            400,
-            &serde_json::json!({ "error": "target_platform_required" }),
-        );
-    };
+    let enforced_target_platform = requested_target_platform
+        .clone()
+        .or_else(|| inherited_target_platform.clone());
     let ordered_ids = normalize_ability_order(&payload.ability_ids, &payload.order);
     let abilities = catalog.select_by_ids(&ordered_ids)?;
-    if abilities.iter().any(|ability| {
-        !ability
-            .supported_platforms
-            .iter()
-            .any(|platform| platform.eq_ignore_ascii_case(&target_platform))
-    }) {
+    let target_platform = enforced_target_platform
+        .clone()
+        .or_else(|| first_supported_platform_from_abilities(&abilities));
+    let has_platform_mismatch =
+        enforced_target_platform
+            .as_deref()
+            .is_some_and(|target_platform| {
+                abilities.iter().any(|ability| {
+                    !ability
+                        .supported_platforms
+                        .iter()
+                        .any(|platform| platform.eq_ignore_ascii_case(target_platform))
+                })
+            });
+    if has_platform_mismatch {
         return HttpResponse::json(
             400,
             &serde_json::json!({ "error": "abilities_platform_mismatch" }),
@@ -3580,7 +3682,7 @@ fn update_adversary(selector: &str, request: &HttpRequest) -> Result<HttpRespons
         payload.tlp.as_deref().or(Some(existing_meta.tlp.as_str())),
         payload.pap.as_deref().or(Some(existing_meta.pap.as_str())),
         None,
-        Some(target_platform.as_str()),
+        target_platform.as_deref(),
         None,
         None,
     )
@@ -4321,6 +4423,16 @@ fn updated_platform_from_steps(
         .first()
         .map(|step| step.platform.trim().to_ascii_lowercase())
         .filter(|value| !value.is_empty())
+}
+
+fn first_supported_platform_from_abilities(
+    abilities: &[spuc::emulation::ability::Ability],
+) -> Option<String> {
+    abilities
+        .iter()
+        .flat_map(|ability| ability.supported_platforms.iter())
+        .map(|platform| platform.trim().to_ascii_lowercase())
+        .find(|platform| !platform.is_empty())
 }
 
 fn normalize_ability_order(ability_ids: &[String], order: &[String]) -> Vec<String> {
@@ -5296,6 +5408,38 @@ mod tests {
             updated_platform_from_steps(&steps).as_deref(),
             Some("linux")
         );
+    }
+
+    #[test]
+    fn create_adversary_allows_initial_empty_plan_without_platform() {
+        with_test_config_dir("adversary_empty_create", || {
+            let state = WebState::new("admin", "secret-pass", false, false).expect("state");
+            let request = HttpRequest {
+                method: "POST".to_string(),
+                path: "/api/adversaries".to_string(),
+                query: HashMap::new(),
+                headers: HashMap::new(),
+                body: serde_json::json!({
+                    "name": "Draft adversary",
+                    "description": "Draft description",
+                    "confidence": 70,
+                    "target_platform": "",
+                    "ability_ids": [],
+                    "order": []
+                })
+                .to_string()
+                .into_bytes(),
+            };
+
+            let response = create_adversary(&request, &state).expect("create adversary");
+            assert_eq!(response.status, 200);
+            let body: serde_json::Value =
+                serde_json::from_slice(&response.body).expect("json response");
+            assert!(body["id"].as_str().unwrap_or("").starts_with("adversary-"));
+            assert_eq!(body["name"], "Draft adversary");
+            assert_eq!(body["steps"], 0);
+            assert_eq!(body["platforms"].as_array().expect("platforms").len(), 0);
+        });
     }
 
     #[test]

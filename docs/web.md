@@ -68,6 +68,7 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - `Most used destinations` is restricted to defensive detection targets and includes dynamic `sigma-to-*` targets when `sigma` is available at startup.
 - Home (`Inicio`) route is available above Overview and provides a centered welcome-view with stacked action rows (icon, title, short description) for Laboratory, Rules Catalog, Adversary Catalog, Learning, and Donate.
 - In no-login mode, the web UI keeps a two-phase start: it first shows a branded SPUC presentation gate with logo and an explicit `Enter SPUC` / `Entrar en SPUC` action; only after that action does the standard app shell open on Home.
+- The gate Start/Enter action uses both delegated action routing and a direct button click binding as a fallback, so entering the app remains available even if later UI handlers fail during boot.
 - Sidebar footer exposes compact `About SPUC` and support actions that open a polished `Acerca de SPUC` dialog with project metadata, version, repository/license/releases/docs links, license/credits, and integrated donation method selection with centered Monero, Bitcoin, and GitHub Sponsors cards.
 - In the `About SPUC` donation cards, crypto addresses are rendered in a stable single-line readonly text field so the card height does not change between methods.
 - `Settings` is always visible in the sidebar and now uses a 3-tab layout: `Personal settings`, `Application settings`, and `User management`.
@@ -189,7 +190,7 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Learning panel fed by challenge and guidance endpoints.
 - Learning exercises run in an embedded STIX practice editor with realtime challenge validation, compact learning-path progress chips, grouped exercise rows, search + learning-path filters, hint-first UX, and completion counters.
 - Learning toolbar controls use overflow-safe search, path and progress areas so `Solo pendientes`/`Only pending` and completion counts remain readable without overlap.
-- Learning progress is persisted locally in browser storage (completed exercises and active learning filters), and restored on next visit.
+- Learning progress is persisted in browser storage per tab/window session (completed exercises and active learning filters), with fallback support for previously stored local data.
 - User Management panel for user creation, role/enabled edits, revocation, deletion, and password change.
 - Destructive actions (bulk deletions and user deletion) use an in-app confirmation modal instead of browser-native confirmation popups, with verb-specific destructive buttons (`Delete rules`, `Delete adversaries`, etc.) grouped together on the right side of the footer.
 - Shared comboboxes (`select`) use a compact project-wide style, and simple single-value selects are progressively enhanced into SPUC-styled dropdowns with a custom trigger and menu; `multiple` selectors stay as listboxes with their own compact treatment so filters do not visually dominate the workspace.
@@ -218,8 +219,9 @@ The web interface reuses the same local files as the rest of SPUC:
 Web-only state in browser storage (not in `<config_root>`):
 
 - custom payload catalog: `spuc-web-custom-payloads`
-- learning progress and filters: `spuc-web-learning-progress`
-- last route and view preferences: `spuc-web-last-route`, `spuc-web-rules-view-mode`, `spuc-web-adversaries-view-mode`
+- learning progress and filters (session-scoped per tab/window): `spuc-web-learning-progress`
+- last route (session-scoped per tab/window): `spuc-web-last-route`
+- view preferences (shared browser-wide): `spuc-web-rules-view-mode`, `spuc-web-adversaries-view-mode`
 
 ## Notes
 

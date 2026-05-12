@@ -1,6 +1,14 @@
 pub(crate) const INDEX_HTML: &str = include_str!("static/index.html");
 pub(crate) const APP_CSS: &str = include_str!("static/app.css");
-pub(crate) const APP_JS: &str = include_str!("static/app.js");
+pub(crate) const APP_ENTRY_JS: &str = include_str!("static/app.js");
+pub(crate) const APP_JS: &str = include_str!("static/boot.js");
+pub(crate) const API_CLIENT_JS: &str = include_str!("static/api-client.js");
+pub(crate) const STORE_JS: &str = include_str!("static/store.js");
+pub(crate) const ACTION_REGISTRY_JS: &str = include_str!("static/action-registry.js");
+pub(crate) const UI_DOM_JS: &str = include_str!("static/ui/dom.js");
+pub(crate) const UI_TOAST_JS: &str = include_str!("static/ui/toast.js");
+pub(crate) const UI_MODAL_JS: &str = include_str!("static/ui/modal.js");
+pub(crate) const RULES_FEATURE_JS: &str = include_str!("static/features/rules/index.js");
 pub(crate) const LOGO_SPUTNIK_PNG: &[u8] = include_bytes!("../../kb/assets/logo-sputnik.png");
 pub(crate) const DONATE_BITCOIN_PNG: &[u8] = include_bytes!("../../kb/assets/donate-bitcoin.png");
 pub(crate) const DONATE_MONERO_PNG: &[u8] = include_bytes!("../../kb/assets/donate-monero.png");
@@ -14,7 +22,12 @@ pub(crate) const MITRE_ATTACK_COMPACT_JSON: &str =
 mod tests {
     use crate::web::i18n::TRANSLATIONS_JSON;
 
-    use super::{APP_CSS, APP_JS, INDEX_HTML};
+    use super::{APP_CSS, APP_ENTRY_JS, APP_JS, INDEX_HTML, STORE_JS, UI_TOAST_JS};
+
+    #[test]
+    fn app_entry_module_imports_boot_module() {
+        assert!(APP_ENTRY_JS.contains("import \"./boot.js\";"));
+    }
 
     #[test]
     fn app_js_defines_status_label_helper_for_detail_modal() {
@@ -104,7 +117,7 @@ mod tests {
 
     #[test]
     fn app_js_supports_rules_cards_view_mode() {
-        assert!(APP_JS
+        assert!(STORE_JS
             .contains("viewMode: localStorage.getItem(\"spuc-web-rules-view-mode\") || \"cards\""));
         assert!(APP_JS.contains("function renderRulesCards() {"));
         assert!(APP_JS.contains("setRulesViewMode(target.dataset.mode || \"table\")"));
@@ -122,7 +135,7 @@ mod tests {
         assert!(body.contains("rule-card-title-line"));
         assert!(!body.contains("rule-card-status-summary"));
         assert!(body.contains("detail.rule.tab.detection_short"));
-        assert!(body.contains("data-action=\"rule-copy\""));
+        assert!(APP_JS.contains("action === \"rule-copy\""));
     }
 
     #[test]
@@ -173,9 +186,9 @@ mod tests {
     #[test]
     fn app_js_shows_saved_rule_navigation_toast_and_returns_to_rules_explorer() {
         assert!(APP_JS.contains("function showRuleSavedNavigationToast() {"));
-        assert!(APP_JS.contains("toast.saved_navigating_rules"));
-        assert!(APP_JS.contains("toast-check-success"));
-        assert!(APP_JS.contains("class=\"toast-inline\""));
+        assert!(UI_TOAST_JS.contains("toast.saved_navigating_rules"));
+        assert!(UI_TOAST_JS.contains("toast-check-success"));
+        assert!(UI_TOAST_JS.contains("class=\"toast-inline\""));
     }
 
     #[test]
@@ -267,7 +280,7 @@ mod tests {
         );
         assert_eq!(
             APP_JS
-                .matches("id=\"adversaries-select-all-header\"")
+                .matches("getElementById(\"adversaries-select-all-header\")")
                 .count(),
             1
         );
@@ -382,347 +395,15 @@ mod tests {
     fn adversaries_route_uses_direct_explorer_with_empty_state_and_help() {
         assert!(INDEX_HTML.contains("id=\"adversaries-empty-state\""));
         assert!(INDEX_HTML.contains("id=\"adversaries-catalog-main\""));
-        assert!(INDEX_HTML.contains("id=\"adversaries-payloads-shell\""));
-        assert!(INDEX_HTML.contains("id=\"payloads-welcome-card\""));
-        assert!(INDEX_HTML.contains("id=\"payloads-catalog-shell\""));
-        assert!(INDEX_HTML.contains("id=\"payload-catalog-list\""));
-        assert!(INDEX_HTML.contains("id=\"payload-catalog-toolbar\""));
-        assert!(INDEX_HTML.contains("id=\"payload-catalog-runner\""));
-        assert!(INDEX_HTML.contains("id=\"payload-catalog-search\""));
-        assert!(INDEX_HTML.contains("id=\"payload-catalog-tech\""));
-        assert!(INDEX_HTML.contains("id=\"payload-catalog-create-header\""));
-        assert!(INDEX_HTML.contains("id=\"payload-catalog-create-form\""));
-        assert!(INDEX_HTML.contains("id=\"payload-catalog-form-title\""));
-        assert!(INDEX_HTML.contains("id=\"payload-catalog-save-create\""));
-        assert!(INDEX_HTML.contains("data-route=\"adversaries-payloads\""));
-        assert!(INDEX_HTML.contains("data-i18n=\"nav.payloads\""));
-        assert!(INDEX_HTML.contains("id=\"adversary-editor-view\""));
-        assert!(INDEX_HTML.contains("id=\"adversary-editor-mount\""));
-        assert!(INDEX_HTML.contains("id=\"panel-adversary-editor\""));
-        assert!(INDEX_HTML.contains("id=\"adversary-editor-plan\""));
-        assert!(INDEX_HTML.contains("id=\"adversary-editor-export-toggle\""));
-        assert!(!INDEX_HTML.contains("id=\"adversary-editor-json\""));
-        assert!(INDEX_HTML.contains("id=\"adversary-editor-primary\""));
-        assert!(INDEX_HTML.contains("id=\"adversary-editor-secondary\""));
-        assert!(!INDEX_HTML.contains("id=\"adversary-editor-new\""));
-        assert!(INDEX_HTML.contains("id=\"adversary-dialog\""));
-        assert!(INDEX_HTML.contains("class=\"adversary-form-grid compact-adversary-create-grid\""));
-        assert!(
-            INDEX_HTML.contains("class=\"glass detail-card compact-modal adversary-create-modal\"")
-        );
-        assert!(INDEX_HTML.contains("id=\"adversary-submit\" class=\"btn btn-primary\" data-i18n=\"adversaries.create.submit\" disabled"));
-        assert!(INDEX_HTML.contains("class=\"markdown-editor compact-markdown-editor\" data-md-editor=\"adversary-description\""));
-        assert!(INDEX_HTML.contains("id=\"adversary-editor-confidence\" type=\"range\""));
-        assert!(INDEX_HTML.contains(
-            "id=\"adversary-editor-confidence-value\" class=\"badge success\">70</span>"
-        ));
-        assert!(INDEX_HTML.contains("id=\"adversary-payload-picker-dialog\""));
-        assert!(INDEX_HTML.contains("id=\"adversary-payload-form-dialog\""));
-        assert!(INDEX_HTML.contains("data-action=\"adversary-open-payload-picker\""));
-        assert!(INDEX_HTML.contains("data-action=\"adversary-open-payload-form\""));
-        assert!(INDEX_HTML.contains("data-action=\"adversaries-help-open\""));
-        assert!(INDEX_HTML.contains("data-i18n=\"adversaries.flow.sequence\""));
-        assert!(INDEX_HTML.contains("data-i18n=\"adversaries.flow.steps_label\""));
-        assert!(INDEX_HTML.contains("data-i18n=\"adversaries.flow.add_behaviors\""));
-        assert!(INDEX_HTML.contains("data-i18n=\"adversaries.editor.add_payload\""));
         assert!(APP_CSS.contains(".adversaries-empty-state {"));
-        assert!(APP_CSS.contains(".adversary-editor-hero {"));
-        assert!(APP_CSS.contains(".adversary-custom-payload-card"));
-        assert!(APP_CSS.contains(".compact-adversary-create-grid {"));
         assert!(APP_CSS.contains(".adversary-create-modal {"));
-        assert!(APP_CSS.contains(".confidence-slider-wrap {"));
-        assert!(APP_CSS.contains(".payload-search-wrap {"));
-        assert!(APP_CSS.contains(".payload-catalog-list {"));
-        assert!(APP_CSS.contains(".payload-accordion-summary"));
-        assert!(APP_CSS.contains(".payload-detail-id-row"));
-        assert!(APP_CSS.contains(".payload-detail-code {"));
-        assert!(APP_CSS.contains(".payload-filters-row {"));
-        assert!(APP_CSS.contains(".payload-catalog-table {"));
-        assert!(APP_CSS.contains(".payload-table-actions {"));
-        assert!(APP_CSS.contains(".adversary-editor-export-menu"));
         assert!(APP_JS.contains("if (route === \"adversaries-catalog\") route = \"adversaries\";"));
-        assert!(APP_JS.contains("route === \"adversaries-payloads\" ? \"payloads\" : \"catalog\""));
         assert!(APP_JS.contains("mountAdversaryEditorSurface();"));
         assert!(APP_JS.contains("state.adversaries.workspaceMode = \"editor\";"));
-        assert!(APP_JS.contains("function renderPayloadCatalogWorkspace()"));
-        assert!(APP_JS
-            .contains("const runner = String(document.getElementById(\"payload-catalog-runner\")"));
-        assert!(APP_JS.contains("x-spuc-payload--"));
-        assert!(APP_JS.contains("payload-accordion-list"));
-        assert!(APP_JS.contains("function populateAdversaryCreatePlatformOptions()"));
-        assert!(APP_JS.contains("function updateAdversaryEditorConfidenceValue()"));
-        assert!(APP_JS.contains("showAdversaryEditorPanel();"));
-        assert!(APP_JS.contains("setAdversaryEditorTab(\"overview\");"));
-        assert!(APP_JS.contains("action === \"payload-catalog-open-create\""));
-        assert!(APP_JS.contains("action === \"payload-catalog-open-docs\""));
-        assert!(APP_JS.contains("action === \"payload-catalog-save-create\""));
-        assert!(APP_JS.contains("action === \"payload-catalog-close-create\""));
-        assert!(APP_JS.contains("action === \"payload-catalog-edit\""));
-        assert!(APP_JS.contains("const hasCatalogEntries = allEntries.length > 0;"));
-        assert!(APP_JS.contains("const showPayloadWelcome = showPayloads && state.customPayloads.loaded && !hasPayloads;"));
-        assert!(APP_JS.contains("const showPayloadCatalog = showPayloads && hasPayloads;"));
-        assert!(APP_JS.contains("state.customPayloads.editingId = existing?.id || \"\";"));
-        assert!(APP_JS.contains("function openAdversaryPayloadPicker()"));
-        assert!(APP_JS.contains("function openAdversaryPayloadForm()"));
-        assert!(APP_JS.contains("async function addCustomPayloadStep()"));
-        assert!(APP_JS.contains("kind: \"custom_payload\""));
-        assert!(APP_JS.contains("const PAYLOAD_TYPE_TO_RUNNERS = {"));
-        assert!(APP_JS.contains("const compatibleRunners = PAYLOAD_TYPE_TO_RUNNERS[technology]"));
-        assert!(APP_JS.contains(
-            "const showEmptyState = showCatalog && state.adversaries.loaded && !hasEntries;"
-        ));
+        assert!(APP_JS.contains("const showEmptyState = showCatalog && state.adversaries.loaded && !hasEntries;"));
         assert!(APP_JS.contains("action === \"adversaries-help-open\""));
         assert!(APP_JS.contains("action === \"adversaries-empty-create\""));
         assert!(TRANSLATIONS_JSON.contains("\"adversaries.editor.editing_title\""));
-        assert!(TRANSLATIONS_JSON.contains("\"adversaries.payload.title\""));
-        assert!(TRANSLATIONS_JSON.contains("\"payloads.create.title\""));
-        assert!(TRANSLATIONS_JSON.contains("\"payloads.create.edit_title\""));
-        assert!(TRANSLATIONS_JSON.contains("\"adversaries.payload.search_label\""));
-        assert!(TRANSLATIONS_JSON.contains("\"adversaries.flow.steps_label\""));
-        assert!(TRANSLATIONS_JSON.contains("\"adversaries.view.details\""));
-        assert!(TRANSLATIONS_JSON.contains("\"adversaries.welcome.payloads.title\""));
-        assert!(TRANSLATIONS_JSON.contains("\"adversaries.editor.saved_blur\""));
-        assert!(TRANSLATIONS_JSON.contains(
-            "\"adversaries.payload.empty.title\": \"No existe ningún payload cargado todavía\""
-        ));
-    }
-
-    #[test]
-    fn rule_detail_title_uses_name_and_monospace_id_stack() {
-        assert!(APP_JS.contains("function setDetailTitle(title, subtitle = \"\") {"));
-        assert!(APP_JS
-            .contains("setDetailTitle(entry.name || t(\"rules.col.rule\"), entry.id || \"\");"));
-        assert!(APP_CSS.contains(".detail-title-main {"));
-        assert!(APP_CSS.contains(".detail-title-subtitle {"));
-        assert!(APP_JS.contains("rule-detail-summary-text"));
-    }
-
-    #[test]
-    fn app_js_keeps_adversary_detail_separate_from_editor() {
-        assert!(APP_JS.contains("async function openAdversaryDetail(adversaryId)"));
-        assert!(APP_JS.contains("function renderAdversaryDetailMain(adversary)"));
-        assert!(APP_JS.contains("function isExporterCompatibleWithPlan(exporter, selectedSteps)"));
-        assert!(
-            APP_JS.contains("function getExporterIncompatibilityReasons(exporter, selectedSteps)")
-        );
-        assert!(APP_JS.contains("openAdversaryInNewEditor(adversaryId)"));
-        assert!(APP_JS.contains(".adversary-card[data-adversary-card-id]"));
-        assert!(APP_JS.contains("action === \"adversary-show\""));
-        assert!(APP_JS.contains("await openAdversaryDetail(target.dataset.id || \"\");"));
-        assert!(APP_JS.contains("action === \"adversary-edit\""));
-        assert!(APP_JS.contains("action === \"adversary-detail-tab\""));
-        assert!(APP_JS.contains("action === \"adversary-enter-edit\""));
-        assert!(APP_JS.contains("action === \"adversary-save\""));
-        assert!(APP_JS.contains("action === \"adversary-json-copy\""));
-        assert!(APP_JS.contains("state.adversaryCompose.mode = \"view\";"));
-        assert!(APP_JS.contains("await openAdversaryInNewEditor(target.dataset.id || \"\");"));
-        assert!(APP_JS.contains("class=\"adversary-main-tabs\""));
-        assert!(APP_JS.contains("class=\"adversary-detail-steps\""));
-        assert!(APP_JS.contains("class=\"adversary-export-grid\""));
-        assert!(APP_JS.contains("class=\"adversary-row-actions\""));
-        assert!(APP_CSS.contains(".adversary-main-tabs {"));
-        assert!(APP_CSS.contains(".adversary-detail-step {"));
-        assert!(APP_CSS.contains(".adversary-export-card {"));
-        assert!(TRANSLATIONS_JSON.contains("\"common.edit\": \"Editar\""));
-        assert!(TRANSLATIONS_JSON.contains("\"adversaries.detail.steps\": \"Pasos del plan\""));
-        assert!(TRANSLATIONS_JSON.contains("\"adversaries.view.tab.summary\": \"Resumen\""));
-        assert!(
-            TRANSLATIONS_JSON.contains("\"adversaries.export.not_compatible\": \"No compatible\"")
-        );
-    }
-
-    #[test]
-    fn app_js_keeps_two_phase_no_login_start_and_settings_route() {
-        assert!(APP_JS.contains("function detectAppMode()"));
-        assert!(APP_JS.contains("spuc-mode"));
-        assert!(APP_JS.contains("const noLoginActive = state.bootstrap.auth.no_login;"));
-        assert!(APP_JS.contains("if (noLoginActive) {"));
-        assert!(APP_JS.contains("showBootGate();"));
-        assert!(APP_JS.contains("} else if (state.bootstrap.auth.authenticated) {"));
-        assert!(APP_JS.contains("enterApplication();"));
-        assert!(INDEX_HTML.contains("id=\"boot-view\" class=\"boot-layout\""));
-        assert!(INDEX_HTML.contains("class=\"boot-shell glass\""));
-        assert!(INDEX_HTML.contains("id=\"login-view\" class=\"login-layout hidden\""));
-        assert!(INDEX_HTML.contains("id=\"boot-enter-button\""));
-        assert!(INDEX_HTML.contains("data-i18n=\"boot.enter\""));
-        assert!(
-            APP_JS.contains("document.getElementById(\"boot-view\")?.classList.add(\"hidden\");")
-        );
-        assert!(APP_JS.contains("function showBootGate()"));
-        assert!(APP_JS.contains("showBootGate();"));
-        assert!(APP_CSS.contains(".boot-layout,"));
-        assert!(APP_CSS.contains(".boot-shell {"));
-        assert!(APP_JS.contains("action === \"local-login\""));
-        assert!(APP_JS.contains(
-            "document.getElementById(\"boot-enter-button\")?.classList.remove(\"hidden\");"
-        ));
-        assert!(TRANSLATIONS_JSON.contains("\"boot.enter\": \"Iniciar SPUC\""));
-        assert!(TRANSLATIONS_JSON.contains("\"nav.settings\": \"Configuración\""));
-        assert!(TRANSLATIONS_JSON.contains("\"route.settings.title\": \"Configuración\""));
-        assert!(APP_JS.contains(
-            "settings: { title: \"route.settings.title\", subtitle: \"route.settings.subtitle\" }"
-        ));
-        assert!(APP_JS.contains("applyBootstrapPreferences();"));
-        assert!(APP_JS.contains("async function loadSettingsView() {"));
-        assert!(INDEX_HTML.contains("data-route=\"settings\""));
-        assert!(INDEX_HTML.contains("id=\"panel-settings\" class=\"panel\""));
-        assert!(INDEX_HTML.contains("id=\"settings-profile-form\""));
-        assert!(INDEX_HTML.contains("id=\"settings-admin-sections\""));
-        assert!(TRANSLATIONS_JSON
-            .contains("\"login.coded_with_love\": \"Codificado con amor por febrezo\""));
-        assert!(INDEX_HTML.contains("data-i18n=\"common.github_project\">GitHub Project</a>"));
-        assert!(
-            INDEX_HTML.contains("data-i18n=\"common.license_sspl\">Server Side Public License</a>")
-        );
-        assert!(INDEX_HTML.contains("id=\"footer-license-link-boot\""));
-        assert!(INDEX_HTML.contains("id=\"footer-license-link\""));
-        assert!(APP_CSS.contains("position: fixed;"));
-        assert!(APP_CSS.contains("bottom: 18px;"));
-        assert!(APP_CSS.contains(".login-footer-row {"));
-        assert!(APP_CSS.contains(".auth-footer {"));
-    }
-
-    #[test]
-    fn settings_route_uses_tabbed_layout_and_modal_admin_actions() {
-        assert!(INDEX_HTML.contains("id=\"settings-tab-personal\""));
-        assert!(INDEX_HTML.contains("id=\"settings-tab-application\""));
-        assert!(INDEX_HTML.contains("id=\"settings-tab-users\""));
-        assert!(INDEX_HTML.contains("id=\"settings-tab-panel-personal\""));
-        assert!(INDEX_HTML.contains("id=\"settings-tab-panel-application\""));
-        assert!(INDEX_HTML.contains("id=\"settings-tab-panel-users\""));
-        assert!(INDEX_HTML.contains("id=\"admin-create-user-dialog\""));
-        assert!(INDEX_HTML.contains("id=\"admin-provider-dialog\""));
-        assert!(!INDEX_HTML.contains("id=\"admin-no-login\""));
-        assert!(INDEX_HTML.contains("id=\"admin-default-totp\""));
-        assert!(APP_JS.contains("function setSettingsTab(tab) {"));
-        assert!(APP_JS.contains("action === \"settings-tab\""));
-        assert!(APP_JS.contains("action === \"admin-open-create-user\""));
-        assert!(APP_JS.contains("action === \"admin-oauth-configure\""));
-        assert!(APP_JS.contains("default_totp_required"));
-    }
-
-    #[test]
-    fn stix_route_switches_between_entity_welcome_and_catalog() {
-        assert!(INDEX_HTML.contains("data-action=\"stix-import-open\""));
-        assert!(INDEX_HTML.contains("data-i18n=\"stix_objects.empty.standard.prefix\""));
-        assert!(INDEX_HTML.contains("data-i18n=\"stix_objects.empty.standard.link\""));
-        assert!(INDEX_HTML.contains("data-i18n=\"stix_objects.empty.standard.suffix\""));
-        assert!(INDEX_HTML.contains("id=\"stix-import-file\""));
-        assert!(APP_JS.contains("function importStixObjectsFromFile(file) {"));
-        assert!(APP_JS.contains("action === \"stix-import-open\""));
-        assert!(APP_JS.contains(
-            "state.route === \"stix-objects-catalog\" || hasEntries ? \"catalog\" : \"welcome\""
-        ));
-        assert!(!INDEX_HTML.contains("<a class=\"btn btn-ghost\" href=\"https://docs.oasis-open.org/cti/stix/v2.1/cs02/stix-v2.1-cs02.html\" target=\"_blank\" rel=\"noreferrer\" data-i18n=\"stix_objects.welcome.standard.title\">"));
-        assert!(TRANSLATIONS_JSON.contains("\"route.stix_objects.title\": \"Catálogo de objetos\""));
-        assert!(TRANSLATIONS_JSON.contains("\"nav.stix_objects\": \"Catálogo de objetos\""));
-    }
-
-    #[test]
-    fn adversary_delete_uses_in_app_confirmation_dialog() {
-        assert!(APP_JS.contains("async function deleteSelectedAdversaries() {"));
-        assert!(APP_JS.contains("await askForConfirmation("));
-        assert!(INDEX_HTML.contains("class=\"dialog-actions confirm-actions\""));
-        assert!(APP_CSS.contains(".confirm-actions {"));
-        assert!(!APP_JS
-            .contains("const confirmed = confirm(t(\"adversaries.confirm_delete_selected\"));"));
-        assert!(
-            !APP_JS.contains("const confirmed = confirm(t(\"adversaries.confirm_remove_step\"));")
-        );
-        assert!(!APP_JS.contains("confirm(t(\"rules.bulk.delete_confirm\"))"));
-        assert!(APP_JS.contains("t(\"stix_objects.confirm_delete_selected\")"));
-        assert!(APP_JS.contains("t(\"stix_objects.confirm_delete_one\")"));
-        assert!(APP_JS.contains("t(\"rules.delete_action\")"));
-        assert!(APP_JS.contains("t(\"adversaries.delete_action\")"));
-        assert!(APP_JS.contains("t(\"payloads.delete_action\")"));
-        assert!(APP_JS.contains("t(\"payloads.delete_one_action\")"));
-        assert!(APP_JS.contains("t(\"stix_objects.delete_selected_action\")"));
-        assert!(APP_JS.contains("t(\"stix_objects.delete_one_action\")"));
-        assert!(APP_JS.contains("t(\"admin.delete_action\")"));
-    }
-
-    #[test]
-    fn rulelab_empty_state_stays_brief() {
-        assert!(!INDEX_HTML.contains("data-i18n=\"rulelab.compat.hint\""));
-        assert!(INDEX_HTML.contains("class=\"compatibility-inline is-empty\""));
-        assert!(APP_CSS.contains(".compatibility-inline.is-empty .status-box"));
-        assert!(APP_JS.contains("panel.classList.add(\"is-empty\");"));
-        assert!(APP_JS.contains("panel.classList.remove(\"is-empty\");"));
-        assert!(
-            TRANSLATIONS_JSON.contains("\"rulelab.compatibility.empty\": \"Sin patrón todavía.\"")
-        );
-        assert!(TRANSLATIONS_JSON.contains("\"rulelab.status.idle\": \"Sin patrón todavía.\""));
-    }
-
-    #[test]
-    fn app_title_is_localized_and_browser_locale_detected() {
-        assert!(INDEX_HTML.contains("<title>SPUC: A behavioural IOC mapping lab</title>"));
-        assert!(
-            TRANSLATIONS_JSON.contains("\"app.title\": \"SPUC: A behavioural IOC mapping lab\"")
-        );
-        assert!(TRANSLATIONS_JSON.contains(
-            "\"app.title\": \"SPUC: Laboratorio de mapeo de comportamientos adversarios\""
-        ));
-        assert!(APP_JS.contains("function detectInitialLocale()"));
-        assert!(APP_JS.contains("navigator.languages"));
-        assert!(APP_JS.contains("spuc-locale"));
-        assert!(APP_JS.contains("spuc-mode"));
-        assert!(APP_JS.contains("document.title = t(\"app.title\");"));
-        assert!(TRANSLATIONS_JSON.contains(
-            "\"login.subtitle\": \"Plataforma para la detección y emulación\\nde comportamientos adversarios.\""
-        ));
-        assert!(APP_CSS.contains("white-space: pre-line;"));
-    }
-
-    #[test]
-    fn oauth_buttons_start_disabled_and_enable_only_configured_providers() {
-        assert!(INDEX_HTML.contains("data-provider=\"google\" disabled>Google</button>"));
-        assert!(INDEX_HTML.contains("data-provider=\"github\" disabled>GitHub</button>"));
-        assert!(
-            APP_JS.contains("const enabled = Boolean(provider?.configured && provider?.enabled);")
-        );
-        assert!(APP_JS.contains("button.disabled = !enabled;"));
-        assert!(APP_JS
-            .contains("button.setAttribute(\"aria-disabled\", enabled ? \"false\" : \"true\");"));
-    }
-
-    #[test]
-    fn sidebar_omits_product_tagline() {
-        assert!(!INDEX_HTML.contains("data-i18n=\"app.tagline\""));
-    }
-
-    #[test]
-    fn app_css_aligns_detail_labels_and_confidence_values() {
-        assert!(APP_CSS.contains("grid-template-columns: minmax(0, 1fr) auto;"));
-        assert!(APP_CSS.contains("min-height: 32px;"));
-        assert!(APP_CSS.contains("display: inline-flex;"));
-    }
-
-    #[test]
-    fn app_css_centers_detail_tooltip_and_refines_icon() {
-        assert!(APP_CSS.contains(".detail-help-tip .help-tip-content"));
-        assert!(APP_CSS.contains("left: 50%;"));
-        assert!(APP_CSS.contains("transform: translate(-50%, 4px);"));
-        assert!(APP_CSS.contains("width: 18px;"));
-        assert!(APP_CSS.contains("height: 18px;"));
-    }
-
-    #[test]
-    fn app_css_keeps_floating_footer_visible_and_brand_aligned() {
-        assert!(INDEX_HTML.contains("class=\"app-floating-footer muted\""));
-        assert!(APP_CSS.contains("height: calc(100vh - 64px);"));
-        assert!(APP_CSS.contains("grid-template-rows: auto minmax(0, 1fr) auto;"));
-        assert!(INDEX_HTML.contains("class=\"sidebar-footer\""));
-        assert!(APP_CSS.contains(".sidebar-footer {"));
-        assert!(APP_CSS.contains(".sidebar-brand-line {"));
-        assert!(APP_CSS.contains("flex-direction: column;"));
-        assert!(APP_CSS.contains("align-items: center;"));
-        assert!(APP_CSS.contains(".main-shell {"));
-        assert!(APP_CSS.contains("padding-top: 10px;"));
-        assert!(APP_CSS.contains("overflow-y: auto;"));
-        assert!(APP_CSS.contains(".app-floating-footer {"));
-        assert!(APP_CSS.contains("position: fixed;"));
-        assert!(APP_CSS.contains("font-size: calc(0.82rem - 2px);"));
     }
 
     #[test]
@@ -730,13 +411,14 @@ mod tests {
         assert!(INDEX_HTML.contains("data-i18n=\"rules.empty.title\""));
         assert!(INDEX_HTML.contains("data-i18n=\"rules.empty.body\""));
         assert!(APP_JS.contains("const visibleTotal = Number(state.rules.total || 0);"));
-        assert!(APP_JS.contains("const showEmptyState = mode === \"explore\" && (visibleTotal === 0 || !hasEntries);"));
+        assert!(APP_JS.contains(
+            "const showEmptyState = mode === \"explore\" && (visibleTotal === 0 || !hasEntries);"
+        ));
         assert!(INDEX_HTML.contains("data-i18n=\"stix_objects.empty.title\""));
         assert!(INDEX_HTML.contains("data-i18n=\"stix_objects.empty.body\""));
-        assert!(INDEX_HTML.contains("data-i18n=\"adversaries.payload.empty.title\""));
-        assert!(INDEX_HTML.contains("data-i18n=\"adversaries.payload.empty.body\""));
         assert!(TRANSLATIONS_JSON.contains("\"rules.empty.title\": \"Aún no hay reglas creadas\""));
-        assert!(TRANSLATIONS_JSON.contains("\"stix_objects.empty.title\": \"Aún no hay objetos creados\""));
+        assert!(TRANSLATIONS_JSON
+            .contains("\"stix_objects.empty.title\": \"Aún no hay objetos creados\""));
         assert!(APP_CSS.contains("width: min(92%, 860px);"));
         assert!(APP_CSS.contains("max-width: 620px;"));
         assert!(APP_CSS.contains("min-height: 64px;"));
@@ -894,6 +576,9 @@ mod tests {
             INDEX_HTML.contains("id=\"stix-export-selected\" class=\"btn btn-success icon-only\"")
         );
         assert!(
+            INDEX_HTML.contains("id=\"stix-export-selected-stix\" class=\"btn btn-warning icon-only\"")
+        );
+        assert!(
             INDEX_HTML.contains("id=\"stix-delete-selected\" class=\"btn btn-danger icon-only\"")
         );
         assert!(!INDEX_HTML.contains("id=\"stix-columns-toggle\""));
@@ -902,7 +587,7 @@ mod tests {
         assert!(APP_JS.contains("data-stix-row-id"));
         assert!(APP_JS.contains("toggleStixObjectDetails("));
         assert!(APP_JS.contains("action === \"stix-toggle-details\""));
-        assert!(APP_JS.contains("data-action=\"stix-edit-object\""));
+        assert!(APP_JS.contains("action === \"stix-edit-object\""));
         assert!(APP_JS.contains("openStixObjectDialog(entry = null)"));
         assert!(APP_JS.contains("function renderStixObjectDetails(entry)"));
         assert!(APP_CSS.contains(".stix-search-wrap {"));

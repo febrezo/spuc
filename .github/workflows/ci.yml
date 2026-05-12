@@ -30,3 +30,6 @@ jobs:
 
       - name: Cargo test
         run: cargo test -q
+
+      - name: Build release binaries
+        run: cargo build --release -q -p spuc-cli --bins

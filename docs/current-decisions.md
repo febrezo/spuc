@@ -149,6 +149,7 @@ Last updated: 2026-03-15
 - The web interface is localized in English and Spanish only.
 - Authentication supports local username/password users persisted in `web_users.json`.
 - Google/GitHub sign-in uses authorization-code callback flow with environment bootstrap plus explicit admin authorization flags per provider.
+- Frontend JavaScript now uses native ES modules served by the existing web server: `app.js` is a minimal entry wrapper that imports `boot.js`, with incremental extraction modules for `api-client.js`, `store.js`, `action-registry.js`, `ui/*`, and `features/rules/*`.
 - The STIX objects catalog uses a left-aligned text search field, right-aligned icon-only bulk actions, and a compact disclosure that only shows ID plus markdown description; the pencil button reopens the upsert modal for the selected object.
 - `spuc web --no-login` is supported for local standalone mode (implicit admin principal, no logout, branded two-phase entry gate, and `Settings` still available for local administration).
 - Login/start view is centered and branded with the SPUC logo, app title/subtitle and multi-row footer attribution for coded-with-love, project and license links.
@@ -160,3 +161,10 @@ Last updated: 2026-03-15
 - Web-only payload catalog and learning progress are browser-local (`localStorage`) and are intentionally separate from `<config_root>` file persistence.
 - Cataloged rule rows are represented in UI/API as STIX Indicator IDs (`indicator--...`) because saved rules model source STIX indicator patterns.
 - Newly created adversary plans persist `intrusion_set_id` using STIX intrusion-set object identifiers (`intrusion-set--<uuid>`), while legacy `intrusion-set-...` ids remain readable for backward compatibility.
+- Analyst catalog routes align populated result views to the top; only true empty/welcome states use centered workspace cards. Payload catalog search shows all saved payloads when the search field is empty.
+- Adversary creation starts from name + description only and immediately persists an empty editable plan; target platform remains optional and is derived later from selected abilities/payload abilities unless the advanced editor explicitly sets it. Payloads added to adversary flows are materialized into catalog abilities before adversary persistence.
+- Payload creation modals use neutral cancel actions, primary create/save actions, require name + description + content before enabling save, and syntax-highlight payload content according to the selected payload type where supported.
+- The payload catalog uses the same table pattern as other populated catalogs: search and global actions remain in the top toolbar, saved payloads render as one real table row per payload by default, and filters only narrow the already visible result set.
+- The web sidebar keeps navigation section spacing compact enough for common workspaces to stay visible while preserving section separators and readable item targets.
+- Populated catalog result containers for rules, adversaries, payloads and STIX objects stretch to the available workspace height for consistent screen framing; centered empty/help/welcome cards keep their natural centered layout.
+- Exercises use a compact training dashboard layout: introduction and controls stay in a short top band, learning paths are compact filter chips, and exercise groups render in a responsive grid so future formations can be added without creating wide empty gaps.

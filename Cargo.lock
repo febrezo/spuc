@@ -3472,7 +3472,7 @@ dependencies = [
 
 [[package]]
 name = "spuc-cli"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -3482,7 +3482,7 @@ dependencies = [
 
 [[package]]
 name = "spuc-core"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3502,7 +3502,7 @@ dependencies = [
 
 [[package]]
 name = "spuc-gui"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "open",

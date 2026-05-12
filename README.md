@@ -6,30 +6,38 @@ When `sigma` is available, SPUC also discovers compatible Sigma backends dynamic
 ```mermaid
 flowchart LR
   A[STIX Pattern] --> B[Parser]
-  B --> D[Verify]
-  D --> E[Translate]
-  D --> Z[Emulate]
-  E --> F[EQL]
-  E --> G[KQL]
-  E --> H[Sigma]
-  E --> I[Snort]
-  E --> J[Suricata]
-  E --> K[YARA]
-  H -->|via sigma| L[sigma-to-<backend>]
-  Z -->|via atomic-red-team| Z1[Atomic Red Team]
-  Z -->|via bash| Z2[Bash]
-  Z -->|via mitre-caldera| Z3[MITRE Caldera]
-  Z -->|via powershell| Z4[PowerShell]
-  Z -->|via spuc-agent| Z5[SPUC Agent]
+  B --> C[AST]
+  C --> D[Normalize]
+  D --> E[IR]
 
-  classDef stix fill:#edf4ff,stroke:#3b82f6,stroke-width:2px,color:#1e3a8a
+  E --> F[Verify Command]
+  E --> G[Translate Command]
+  E --> H[Emulate Command]
+  E --> I[Plan Command]
+
+  G --> J[EQL/KQL/Sigma/Snort/Suricata/YARA]
+  J --> K[sigma-to-<backend>]
+  H --> L[spuc-agent/bash/powershell/atomic-red-team/mitre-caldera]
+  I --> M[Intrusion Set Artifacts]
+
+  N[Catalog Cache] <--> G
+  N <--> H
+  O[Web/TUI] --> N
+  O --> G
+  O --> H
+  O --> I
+
+  classDef core fill:#edf4ff,stroke:#3b82f6,stroke-width:2px,color:#1e3a8a
   classDef command fill:#eafaf0,stroke:#16a34a,stroke-width:2px,color:#166534
-  classDef targets fill:#fff8eb,stroke:#d97706,stroke-width:2px,color:#9a3412
-  classDef sigmaTargets fill:#f1f5f9,stroke:#94a3b8,stroke-width:2px,color:#334155
+  classDef outputs fill:#fff8eb,stroke:#d97706,stroke-width:2px,color:#9a3412
+  classDef storage fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#334155
+  classDef ui fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
 
-  class D,E command
-  class F,G,H,I,J,K,Z1,Z2,Z3,Z4,Z5 targets
-  class L sigmaTargets
+  class B,C,D,E core
+  class F,G,H,I command
+  class J,K,L,M outputs
+  class N storage
+  class O ui
 ```
 
 ## Status
@@ -72,6 +80,90 @@ Behavior notes:
 - `emulate` prints only emulation output.
 - Both commands always run a background dual-flow update for catalog convertibility (translation + emulation matrices), cached by normalized `rule_hash` + engine version.
 - Use `--refresh` to force cache recomputation.
+
+## Easy Linux Setup (Two Modes)
+
+Use one of these two paths depending on your goal.
+
+### 1) User mode (download latest release manually)
+
+Use this if you just want to run SPUC.
+
+1. Open the GitHub Releases page of this repository.
+2. Download the newest Linux asset for your architecture.
+   - Typical names: `spuc-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz` (or `.zip`).
+3. Extract the archive.
+4. Install binaries into your personal Linux path:
+
+```bash
+mkdir -p "$HOME/.local/bin"
+install -m 0755 ./spuc "$HOME/.local/bin/spuc"
+# Optional desktop binary if present in the archive
+if [ -f ./spuc-gui ]; then
+  install -m 0755 ./spuc-gui "$HOME/.local/bin/spuc-gui"
+fi
+```
+
+5. Ensure your shell can find that directory:
+
+```bash
+grep -q 'HOME/.local/bin' "$HOME/.bashrc" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+source "$HOME/.bashrc"
+```
+
+6. Validate install:
+
+```bash
+spuc --version
+```
+
+Optional system-wide install (all users):
+
+```bash
+sudo install -m 0755 ./spuc /usr/local/bin/spuc
+sudo install -m 0755 ./spuc-gui /usr/local/bin/spuc-gui  # if available
+```
+
+### 2) Development mode (update source + compile)
+
+Use this if you are modifying SPUC and want fresh binaries after pulling changes.
+
+1. Get latest source:
+
+```bash
+git pull --ff-only
+```
+
+2. Build release binaries:
+
+```bash
+cargo build --release -p spuc-cli --bin spuc
+cargo build --release -p spuc-gui
+```
+
+3. Install compiled binaries into your Linux path:
+
+```bash
+mkdir -p "$HOME/.local/bin"
+install -m 0755 ./target/release/spuc "$HOME/.local/bin/spuc"
+install -m 0755 ./target/release/spuc-gui "$HOME/.local/bin/spuc-gui"
+```
+
+4. Verify:
+
+```bash
+spuc --version
+spuc-gui --version
+```
+
+```mermaid
+flowchart LR
+  A[git pull --ff-only] --> B[cargo build --release]
+  B --> C[target/release/spuc + spuc-gui]
+  C --> D[install to ~/.local/bin]
+  D --> E[spuc --version]
+  D --> F[spuc-gui]
+```
 
 ## CLI Help Sample
 
@@ -146,6 +238,22 @@ curl -X POST 'http://127.0.0.1:8080/rpc' \
 ```
 
 ## Source Layout
+
+```mermaid
+flowchart TB
+  R[src]
+  R --> C1[core: parser/ast/ir/normalize/emitters]
+  R --> C2[domain: catalog + emulation domain]
+  R --> C3[app: runtime services and orchestration]
+  R --> C4[commands: CLI adapters]
+  R --> C5[web: HTTP + localized UI]
+  R --> C6[tui: interactive terminal workflows]
+  R --> C7[ui: terminal rendering helpers]
+
+  W[crates/spuc-cli] --> C4
+  W --> C3
+  G[crates/spuc-gui] --> C5
+```
 
 - repository root package `spuc-core`: reusable core library package (`lib` name `spuc`, entrypoint at `src/lib.rs`)
 - `crates/spuc-cli/`: `spuc` and `spuc-agent` binaries
