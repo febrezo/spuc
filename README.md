@@ -92,6 +92,8 @@ Use this if you just want to run SPUC.
 1. Open the GitHub Releases page of this repository.
 2. Download the newest Linux asset for your architecture.
    - Typical names: `spuc-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz` (or `.zip`).
+   - Desktop-capable targets bundle `spuc-gui` in the same archive as `spuc` and `spuc-agent`.
+   - Current CLI-only targets remain `x86_64-unknown-linux-musl` and `armv7-unknown-linux-gnueabihf`.
 3. Extract the archive.
 4. Install binaries into your personal Linux path:
 
@@ -208,6 +210,7 @@ Use `spuc sigma update-config` to force a fresh runtime discovery and overwrite 
 - `spuc` is provided by crate `spuc-cli` and runs the current CLI, including `spuc web`.
 - `spuc web` binds to `127.0.0.1` only, supports `--no-login`, opens the system browser by default, supports `--no-open` for sidecar/embedded use, and exposes `GET /healthz`.
 - `spuc-gui` is a separate Tauri app titled `SPUC: A behavioural IOC mapping lab` that starts `spuc web --no-login --no-open` as a sidecar on an available localhost port, shows a local SPUC loading screen while the sidecar becomes ready, and then loads the local URL in a native window.
+- Standard GitHub release archives for desktop-capable targets now ship `spuc`, `spuc-agent`, and `spuc-gui` together in the same versioned asset.
 - `spuc-gui` uses `SPUC_LOCALE`, `LC_ALL`, `LC_MESSAGES`, or `LANG` to choose the native window title language at startup and pass the default locale to the embedded web UI; browser mode uses browser language when no saved language preference exists.
 - In `spuc-gui`, external links (`https://...`, `mailto:`) open in the system browser while local SPUC routes stay inside the GUI window.
 - If `spuc-gui` cannot start the `spuc` sidecar, it exits with a clear error. Build `spuc` first with `cargo build -p spuc-cli --bin spuc`, keep both binaries together, put `spuc` in `PATH`, or set `SPUC_SERVER_BIN=/path/to/spuc`.
@@ -216,6 +219,7 @@ Use `spuc sigma update-config` to force a fresh runtime discovery and overwrite 
 - `spuc web --no-login` hides credential-based login and uses a deliberate two-phase local start: the UI first shows a branded SPUC presentation gate with an explicit `Enter SPUC` / `Entrar en SPUC` action, then opens the app shell as local administrator and hides logout while keeping `Settings` available for local administration.
 - If `--admin-password` is omitted, SPUC generates a 25-character password and prints it in startup logs.
 - Authentication supports local user/password accounts persisted in `<config_root>/web_users.json`.
+- User STIX source settings support a local catalog by default and optional per-user OpenCTI GraphQL configuration. Saved OpenCTI API keys are never returned to the frontend, and OpenCTI failures fall back to the local catalog.
 - Google/GitHub OAuth login supports authorization code callback flow configured by environment variables (`SPUC_WEB_GOOGLE_CLIENT_ID`, `SPUC_WEB_GOOGLE_CLIENT_SECRET`, `SPUC_WEB_GOOGLE_REDIRECT_URI`, `SPUC_WEB_GITHUB_CLIENT_ID`, `SPUC_WEB_GITHUB_CLIENT_SECRET`, `SPUC_WEB_GITHUB_REDIRECT_URI`).
 - Typical local callback URIs are `http://127.0.0.1:8090/api/login/oauth/google/callback` and `http://127.0.0.1:8090/api/login/oauth/github/callback`.
 - In `Settings`, administrators can explicitly authorize/disable Google and GitHub login per provider; this policy is persisted in `<config_root>/web_oauth_policy.json` and is enforced in login.
@@ -281,8 +285,8 @@ This repository is prepared for automated builds in GitHub Actions:
   - runs `cargo fmt --check`, `cargo check -q`, and `cargo test -q` on push/PR.
 - `.github/workflows/release.yml`
   - builds `spuc` server binaries for Linux, macOS, and Windows.
-  - builds `spuc-gui` binaries for Linux, macOS, and Windows.
-  - desktop artifacts include the `spuc` sidecar binary required at runtime.
+  - builds `spuc-gui` binaries for the desktop-capable release targets and bundles them into the standard versioned archive with `spuc` and `spuc-agent`.
+  - keeps `x86_64-unknown-linux-musl` and `armv7-unknown-linux-gnueabihf` as CLI-only assets because those targets are not supported desktop builds.
   - includes ARM targets for Raspberry Pi (`aarch64-unknown-linux-gnu` and `armv7-unknown-linux-gnueabihf`) plus `x86_64-unknown-linux-musl`.
   - packages artifacts with the current app version in filename (`spuc-v<version>-<target>.tar.gz` / `.zip`).
   - uploads build artifacts on each run.

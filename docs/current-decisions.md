@@ -137,8 +137,9 @@ Last updated: 2026-03-15
 
 - GitHub release archives for Unix targets derive the version from the root `Cargo.toml` and must be emitted as `spuc-v<version>-<target>.tar.gz`.
 - Windows release archives follow the same versioned naming pattern with `.zip` suffix.
-- CLI bundles include both `spuc` and `spuc-agent` binaries.
-- Desktop bundles include `spuc`, `spuc-agent`, and `spuc-gui` binaries.
+- Every release archive includes `spuc` and `spuc-agent`.
+- Desktop-capable release targets also include `spuc-gui` in that same standard archive instead of publishing a separate desktop-only bundle.
+- Current CLI-only release targets are `x86_64-unknown-linux-musl` and `armv7-unknown-linux-gnueabihf`.
 
 ## Known Limitations
 

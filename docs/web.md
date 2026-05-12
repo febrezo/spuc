@@ -16,6 +16,7 @@ spuc web --port 8090 --no-login --no-open
 - `spuc web` binds to `127.0.0.1` and exposes `GET /healthz` for sidecar readiness checks.
 - `spuc web` opens the system browser by default; use `--no-open` when another shell, desktop wrapper, or test harness will load the URL.
 - `spuc-gui` starts `spuc web --no-login --no-open` on an available localhost port, marks the embedded web URL with `spuc-mode=gui`, shows a centered SPUC loading screen while the sidecar becomes ready, and then shows it in a native Tauri window titled `SPUC: A behavioural IOC mapping lab` or the Spanish equivalent.
+- Standard GitHub release archives for desktop-capable targets include `spuc-gui` together with the required `spuc` sidecar and `spuc-agent` in the same versioned asset.
 - `spuc-gui` reads `SPUC_LOCALE`, `LC_ALL`, `LC_MESSAGES`, or `LANG` to choose the native window title language at startup and passes that default locale to the embedded web UI. Browser mode uses the browser language when no saved language preference exists, and the page title stays synchronized with the language preference stored in `Settings`.
 - In `spuc-gui`, local SPUC navigation remains inside the webview and external links open in the system browser.
 - If `spuc-gui` cannot start the `spuc` sidecar, startup fails fast with guidance to build `spuc`, place it beside `spuc-gui`/in `PATH`, or set `SPUC_SERVER_BIN`.
@@ -24,6 +25,7 @@ spuc web --port 8090 --no-login --no-open
 - Linux desktop prerequisites: WebKitGTK, JavaScriptCoreGTK, GTK and GLib development packages.
 - Fedora: `sudo dnf install glib2-devel gtk3-devel webkit2gtk4.1-devel javascriptcoregtk4.1-devel libappindicator-gtk3-devel librsvg2-devel libxdo-devel pkgconf-pkg-config`.
 - Ubuntu/WSL: install `libwebkit2gtk-4.1-dev`, `libjavascriptcoregtk-4.1-dev`, `libgtk-3-dev`, `libglib2.0-dev`, `libappindicator3-dev`, `librsvg2-dev`, `libxdo-dev`, and `pkg-config`.
+- CLI-only release targets remain `x86_64-unknown-linux-musl` and `armv7-unknown-linux-gnueabihf`; those archives intentionally omit `spuc-gui`.
 
 If `--admin-password` is omitted, SPUC generates a random 25-character administrator password and prints it in startup logs.
 When `--admin-password` is provided explicitly, SPUC keeps that credential synchronized for the configured admin user at startup.
@@ -72,8 +74,13 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Sidebar footer exposes compact `About SPUC` and support actions that open a polished `Acerca de SPUC` dialog with project metadata, version, repository/license/releases/docs links, license/credits, and integrated donation method selection with centered Monero, Bitcoin, and GitHub Sponsors cards.
 - In the `About SPUC` donation cards, crypto addresses are rendered in a stable single-line readonly text field so the card height does not change between methods.
 - `Settings` is always visible in the sidebar and now uses a 3-tab layout: `Personal settings`, `Application settings`, and `User management`.
+- In personal settings, the first accordion is `Profile settings` / `Configuración del perfil` and groups display-name, password, and TOTP controls; the profile save action stays disabled until the analyst changes profile fields.
+- The personal OpenCTI/local-source accordion is labeled `Document management` / `Gestión documental`, uses `Information repository` / `Repositorio de información` as the source selector label, and only reveals the extra OpenCTI fields when that repository is selected.
 - `Settings` replaces the old top-right language/theme controls, so the header now keeps only navigation, session identity and logout.
 - In `Personal settings`, account ID is read-only, display-name/language/theme remain editable, and `Change password` is hidden entirely in `--no-login` mode.
+- `Personal settings` includes personal API token management (create, rotate, revoke), and this section is available in `--no-login` because the session resolves to the bootstrap admin principal.
+- OpenCTI personal settings keep the saved API key unless a new non-empty key is provided explicitly in the API key field.
+- OpenCTI-specific configuration fields (enable toggle, endpoint, API key, connection test) are only shown when `STIX catalog source` is set to `OpenCTI`.
 - `Application settings` centralizes Sigma JSON-RPC endpoint/token plus default language/theme/TOTP policy for new users; in `--no-login` mode, identity-related defaults and external login provider controls stay visible but disabled.
 - External OAuth providers (Google/GitHub) are configured through a dedicated provider dialog launched from the `Configure` action in `Application settings`.
 - `User management` keeps the users table plus filter controls and create-user modal; this tab is visible but disabled in `--no-login` mode.
@@ -89,13 +96,13 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Laboratory is promoted as a main sidebar item and appears above Rules.
 - Clicking top-level `Rules` now opens the catalog explorer directly (no intermediate chooser view).
 - Clicking top-level `Emulation` now opens the adversaries explorer directly (no intermediate chooser view).
-- The sidebar now includes a direct `Payloads` entry so reusable payloads can be explored outside the adversary editor.
+- The sidebar includes a direct `Payloads` entry to manage reusable payloads in catalog mode (welcome state + table state).
 - When `Rules`, `Payloads`, or `STIX objects` have no catalog entries yet, the route shows a centered localized welcome/empty-state card instead of an empty table shell.
 - `Rules` now keeps that guided empty-state card visible whenever the catalog is empty, avoiding the intermediate empty grid/table flash.
 - In `Rules`, the same guided empty-state is also shown when active search/filters leave zero visible entries (`0/0`) so analysts always get next-step actions instead of a dead-end table.
 - In `STIX objects` empty state, the official reference URL is attached directly to the `standard/estándar oficial` wording in the helper sentence.
 - These centered empty-state cards use the same wider dialog treatment and uniform stacked CTA sizing so primary/secondary actions stay visually consistent even when labels wrap.
-- `Payloads` keeps a centered welcome card when no reusable payloads exist yet, with direct actions to create a payload or open the project documentation; once payloads exist, the route switches to a catalog layout with top-right icon actions (`New payload`, `Delete selected`), expandable rows, and column headers for payload, type, runners, and actions.
+- `Payloads` keeps a centered welcome card when no reusable payloads exist yet, with direct actions to create a payload or open the project documentation; once payloads exist, the route switches to the same table-shell pattern used by the STIX objects catalog, with a left search field, right-side icon actions, selectable rows, and expandable detail rows.
 - Newly created adversaries are persisted as STIX intrusion-set objects and now use `intrusion-set--<uuid>` identifiers in saved manifests and API responses.
 - Adversary `Detail` and `Edit` now open a dedicated central workspace view (no modal/backdrop), with a single header containing back navigation, title/subtitle, and context actions.
 - Emulation workspace includes a dedicated `Custom payloads` view to search, preview, create, remove, and reuse payloads before planning adversaries.
@@ -163,6 +170,7 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Rule laboratory analysis is fully reactive: syntax and compatibility are re-evaluated automatically on each input change (no explicit verify action required).
 - Rule Lab opens in playground-first mode (no metadata form visible by default).
 - Saving from Rule Lab is manual: the top-right `Save Rule` action opens a dialog with rule title, description, TLP, and STIX-related-object combobox before persisting. When a catalog rule is opened for editing, the lab and save dialog show an explicit existing-rule editing banner.
+- Rule-save feedback uses a non-blocking ephemeral toast with manual close (`x`) and auto-dismiss; successful and failed save attempts are rendered with distinct visual styles and messages.
 - Rule Lab save dialog and relation labels are fully localized in English and Spanish, including the `Related STIX objects` block and empty state.
 - Rule Lab save and STIX bundle export actions are grouped together as top-right icons with tooltips; save stays disabled until STIX pattern syntax is valid.
 - Empty STIX editor state remains neutral (no error styling/message) until content is provided.
@@ -170,7 +178,7 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Rule Lab and rule detail modal include `Copy LLM prompt` actions that generate deterministic structured prompts from existing rule metadata (context, observables, indicators, conversion statuses, emulation capability, current STIX pattern, and task).
 - Rule laboratory target list is dynamic: at startup SPUC probes `sigma` once, discovers compatible backend plugins from `sigma plugin list`, and adds them as `sigma-to-<backend>` compatibility rows.
 - In Rule Lab compatibility rows, `Show output` is displayed only for non-`unsupported` entries that include generated output text.
-- Adversaries catalog supports clickable header sorting (name, emulability confidence, TLP, PAP, steps, platforms), row/card-click editing, explicit `View details` actions, colored exporter-availability tags per adversary, and the same cards/table plus column-visibility controls used in the rules catalog.
+- Adversaries catalog supports clickable header sorting (name, emulability confidence, TLP, PAP, steps, platforms), consistent row/card click-to-detail behavior, explicit `View details` actions, colored exporter-availability tags per adversary, and the same cards/table plus column-visibility controls used in the rules catalog.
 - Rule and adversary confidence values in catalog and detail views are rendered as horizontal color bars instead of plain numeric labels.
 - Adversary creation/editing opens as a central builder view inside Emulation, with top-level navigation back to the list, progressive Plan and Validate/Export sections, ordered step selection, and a dedicated ability-picker modal.
 - Adversary creation requires selecting a destination platform; ability catalog filtering is auto-locked to that platform by default.

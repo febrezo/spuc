@@ -3,6 +3,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::{Datelike, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
@@ -44,8 +45,13 @@ use spuc::emulation::export as emu_export;
 const OAUTH_STATE_TTL_SECONDS: i64 = 600;
 const WEB_ADMIN_SETTINGS_SCHEMA_VERSION: &str = "1.0";
 const WEB_USER_PREFERENCES_SCHEMA_VERSION: &str = "1.0";
+const WEB_USER_OPENCTI_SETTINGS_SCHEMA_VERSION: &str = "1.0";
+const WEB_USER_API_TOKENS_SCHEMA_VERSION: &str = "1.0";
 const ENV_SIGMA_RPC_URL: &str = "SIGMA_RPC_URL";
 const ENV_SIGMA_RPC_TOKEN: &str = "SPUC_SIGMA_RPC_TOKEN";
+const OPENCTI_GRAPHQL_TIMEOUT_SECONDS: u64 = 8;
+const OPENCTI_DEFAULT_LIMIT: usize = 25;
+const OPENCTI_MAX_LIMIT: usize = 100;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct AdminRuntimeSettingsStore {
@@ -107,6 +113,168 @@ struct UserPreferencesEntry {
     theme: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum StixCatalogSource {
+    #[default]
+    Local,
+    OpenCti,
+}
+
+impl StixCatalogSource {
+    fn as_str(self) -> &'static str {
+        match self {
+            StixCatalogSource::Local => "local",
+            StixCatalogSource::OpenCti => "opencti",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct UserOpenCtiSettingsStore {
+    schema_version: String,
+    #[serde(default)]
+    entries: Vec<UserOpenCtiSettingsEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct UserOpenCtiSettingsEntry {
+    user_id: String,
+    #[serde(default)]
+    opencti_enabled: bool,
+    #[serde(default)]
+    opencti_endpoint: Option<String>,
+    #[serde(default)]
+    opencti_api_key: Option<String>,
+    #[serde(default)]
+    stix_catalog_source: StixCatalogSource,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct UserOpenCtiSettingsView {
+    opencti_enabled: bool,
+    opencti_endpoint: Option<String>,
+    opencti_api_key_set: bool,
+    stix_catalog_source: &'static str,
+    effective_source: &'static str,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct UserOpenCtiSettingsUpdateRequest {
+    #[serde(default)]
+    opencti_enabled: Option<bool>,
+    #[serde(default)]
+    opencti_endpoint: Option<String>,
+    #[serde(default)]
+    opencti_api_key: Option<String>,
+    #[serde(default)]
+    stix_catalog_source: Option<StixCatalogSource>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct OpenCtiTestRequest {
+    #[serde(default)]
+    opencti_endpoint: Option<String>,
+    #[serde(default)]
+    opencti_api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct OpenCtiTestResponse {
+    ok: bool,
+    code: &'static str,
+    message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct UserApiTokenStore {
+    schema_version: String,
+    #[serde(default)]
+    entries: Vec<UserApiTokenEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct UserApiTokenEntry {
+    id: String,
+    user_id: String,
+    name: String,
+    token_hash: String,
+    created_at: String,
+    #[serde(default)]
+    revoked_at: Option<String>,
+    #[serde(default)]
+    last_used_at: Option<String>,
+    #[serde(default)]
+    expires_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct UserApiTokenView {
+    id: String,
+    user_id: String,
+    name: String,
+    created_at: String,
+    revoked_at: Option<String>,
+    last_used_at: Option<String>,
+    expires_at: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UserApiTokenCreateRequest {
+    name: String,
+    #[serde(default)]
+    expires_at: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct UserApiTokenCreateResponse {
+    token: UserApiTokenView,
+    token_value: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TranslateStixPatternRequest {
+    #[serde(rename = "type")]
+    object_type: String,
+    pattern_type: String,
+    pattern: String,
+    #[serde(default)]
+    targets: Vec<String>,
+    #[serde(default)]
+    sigma_targets: Vec<String>,
+    #[serde(default)]
+    rule_confidence: Option<u8>,
+}
+
+#[derive(Debug, Serialize)]
+struct TranslateStixPatternResponse {
+    status: &'static str,
+    comments: Vec<String>,
+    results: Vec<TranslateStixPatternResult>,
+}
+
+#[derive(Debug, Serialize)]
+struct TranslateStixPatternResult {
+    #[serde(rename = "type")]
+    object_type: &'static str,
+    pattern_type: String,
+    pattern: String,
+    confidence: u8,
+    target: String,
+    stix: TranslateStixDetectionRule,
+}
+
+#[derive(Debug, Serialize)]
+struct TranslateStixDetectionRule {
+    #[serde(rename = "type")]
+    object_type: &'static str,
+    pattern_type: String,
+    pattern: String,
+    confidence: u8,
+    description: String,
+    comments: Vec<String>,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct DownloadEntry {
     pub(crate) path: PathBuf,
@@ -142,6 +310,10 @@ pub(crate) struct WebState {
     users: Mutex<UserStore>,
     user_preferences_path: PathBuf,
     user_preferences: Mutex<UserPreferencesStore>,
+    user_opencti_settings_path: PathBuf,
+    user_opencti_settings: Mutex<UserOpenCtiSettingsStore>,
+    user_api_tokens_path: PathBuf,
+    user_api_tokens: Mutex<UserApiTokenStore>,
     oauth_policy_path: PathBuf,
     oauth_policy: Mutex<OAuthPolicyStore>,
     runtime_settings_path: PathBuf,
@@ -165,6 +337,9 @@ impl WebState {
         let (users_path, users) =
             load_or_init_users(admin_user, admin_password, !generated_password)?;
         let (user_preferences_path, user_preferences) = load_or_init_user_preferences()?;
+        let (user_opencti_settings_path, user_opencti_settings) =
+            load_or_init_user_opencti_settings()?;
+        let (user_api_tokens_path, user_api_tokens) = load_or_init_user_api_tokens()?;
         let oauth = OAuthConfig::from_env();
         let (oauth_policy_path, oauth_policy) = load_or_init_oauth_policy(&oauth)?;
         let (runtime_settings_path, runtime_settings) = load_or_init_runtime_settings(no_login)?;
@@ -196,6 +371,10 @@ impl WebState {
             users: Mutex::new(users),
             user_preferences_path,
             user_preferences: Mutex::new(user_preferences),
+            user_opencti_settings_path,
+            user_opencti_settings: Mutex::new(user_opencti_settings),
+            user_api_tokens_path,
+            user_api_tokens: Mutex::new(user_api_tokens),
             oauth_policy_path,
             oauth_policy: Mutex::new(oauth_policy),
             runtime_settings_path,
@@ -361,6 +540,200 @@ impl WebState {
         }
     }
 
+    fn opencti_settings_for(&self, user_id: &str) -> UserOpenCtiSettingsEntry {
+        self.user_opencti_settings
+            .lock()
+            .expect("OpenCTI settings mutex poisoned")
+            .entries
+            .iter()
+            .find(|entry| entry.user_id == user_id)
+            .cloned()
+            .unwrap_or_else(|| default_opencti_settings_entry(user_id))
+    }
+
+    fn current_opencti_settings_view(&self, principal: &Principal) -> UserOpenCtiSettingsView {
+        opencti_settings_view(self.opencti_settings_for(principal.user_id.as_str()))
+    }
+
+    fn update_current_opencti_settings(
+        &self,
+        principal: &Principal,
+        payload: UserOpenCtiSettingsUpdateRequest,
+    ) -> Result<UserOpenCtiSettingsView> {
+        let mut store = self
+            .user_opencti_settings
+            .lock()
+            .expect("OpenCTI settings mutex poisoned");
+        let updated_entry = {
+            let entry = user_opencti_settings_entry_mut(&mut store, principal.user_id.as_str());
+            if let Some(enabled) = payload.opencti_enabled {
+                entry.opencti_enabled = enabled;
+            }
+            if let Some(endpoint) = payload.opencti_endpoint {
+                entry.opencti_endpoint = normalize_opencti_endpoint(endpoint);
+            }
+            if let Some(api_key) = payload.opencti_api_key {
+                entry.opencti_api_key = normalize_optional_setting(api_key);
+            }
+            if let Some(source) = payload.stix_catalog_source {
+                entry.stix_catalog_source = source;
+            }
+            normalize_opencti_settings_entry(entry);
+            entry.clone()
+        };
+        persist_user_opencti_settings(&self.user_opencti_settings_path, &store)?;
+        Ok(opencti_settings_view(updated_entry))
+    }
+
+    fn create_user_api_token(
+        &self,
+        principal: &Principal,
+        name: &str,
+        expires_at: Option<String>,
+    ) -> Result<(UserApiTokenView, String)> {
+        let trimmed_name = name.trim();
+        if trimmed_name.is_empty() {
+            return Err(anyhow!("token_name_required"));
+        }
+        let token_value = format!("spuc_pat_{}", generate_secret(44));
+        let token_hash = hash_api_token(&token_value);
+        let now = Utc::now().to_rfc3339();
+        let entry = UserApiTokenEntry {
+            id: format!("tok-{}", generate_secret(14)),
+            user_id: principal.user_id.clone(),
+            name: trimmed_name.to_string(),
+            token_hash,
+            created_at: now,
+            revoked_at: None,
+            last_used_at: None,
+            expires_at: expires_at.and_then(normalize_optional_setting),
+        };
+
+        let mut store = self
+            .user_api_tokens
+            .lock()
+            .expect("API tokens mutex poisoned");
+        store.entries.push(entry.clone());
+        persist_user_api_tokens(&self.user_api_tokens_path, &store)?;
+        Ok((api_token_view(entry), token_value))
+    }
+
+    fn list_user_api_tokens(&self, principal: &Principal) -> Vec<UserApiTokenView> {
+        let mut tokens = self
+            .user_api_tokens
+            .lock()
+            .expect("API tokens mutex poisoned")
+            .entries
+            .iter()
+            .filter(|entry| entry.user_id == principal.user_id)
+            .cloned()
+            .map(api_token_view)
+            .collect::<Vec<_>>();
+        tokens.sort_by(|a, b| {
+            b.created_at
+                .cmp(&a.created_at)
+                .then_with(|| a.id.cmp(&b.id))
+        });
+        tokens
+    }
+
+    fn revoke_user_api_token(
+        &self,
+        principal: &Principal,
+        token_id: &str,
+    ) -> Result<UserApiTokenView> {
+        let mut store = self
+            .user_api_tokens
+            .lock()
+            .expect("API tokens mutex poisoned");
+        let updated = {
+            let Some(entry) = store
+                .entries
+                .iter_mut()
+                .find(|entry| entry.user_id == principal.user_id && entry.id == token_id)
+            else {
+                return Err(anyhow!("token_not_found"));
+            };
+            if entry.revoked_at.is_none() {
+                entry.revoked_at = Some(Utc::now().to_rfc3339());
+            }
+            entry.clone()
+        };
+        persist_user_api_tokens(&self.user_api_tokens_path, &store)?;
+        Ok(api_token_view(updated))
+    }
+
+    fn rotate_user_api_token(
+        &self,
+        principal: &Principal,
+        token_id: &str,
+    ) -> Result<(UserApiTokenView, String)> {
+        let mut store = self
+            .user_api_tokens
+            .lock()
+            .expect("API tokens mutex poisoned");
+        let (name, expires_at) = {
+            let Some(source) = store
+                .entries
+                .iter_mut()
+                .find(|entry| entry.user_id == principal.user_id && entry.id == token_id)
+            else {
+                return Err(anyhow!("token_not_found"));
+            };
+            if source.revoked_at.is_some() {
+                return Err(anyhow!("token_revoked"));
+            }
+            source.revoked_at = Some(Utc::now().to_rfc3339());
+            (source.name.clone(), source.expires_at.clone())
+        };
+
+        let token_value = format!("spuc_pat_{}", generate_secret(44));
+        let new_entry = UserApiTokenEntry {
+            id: format!("tok-{}", generate_secret(14)),
+            user_id: principal.user_id.clone(),
+            name,
+            token_hash: hash_api_token(&token_value),
+            created_at: Utc::now().to_rfc3339(),
+            revoked_at: None,
+            last_used_at: None,
+            expires_at,
+        };
+        store.entries.push(new_entry.clone());
+        persist_user_api_tokens(&self.user_api_tokens_path, &store)?;
+        Ok((api_token_view(new_entry), token_value))
+    }
+
+    fn resolve_principal_from_api_token(&self, token: &str) -> Option<Principal> {
+        let token_hash = hash_api_token(token);
+        let now = Utc::now();
+        let mut store = self
+            .user_api_tokens
+            .lock()
+            .expect("API tokens mutex poisoned");
+        let entry = store.entries.iter_mut().find(|entry| {
+            entry.token_hash == token_hash
+                && entry.revoked_at.is_none()
+                && !is_token_expired(entry.expires_at.as_deref(), now)
+        })?;
+        entry.last_used_at = Some(now.to_rfc3339());
+        let principal = self
+            .users
+            .lock()
+            .expect("users mutex poisoned")
+            .users
+            .iter()
+            .find(|user| user.id == entry.user_id && user.enabled)
+            .map(|user| Principal {
+                user_id: user.id.clone(),
+                username: user.username.clone(),
+                role: user.role,
+            });
+        if principal.is_some() {
+            let _ = persist_user_api_tokens(&self.user_api_tokens_path, &store);
+        }
+        principal
+    }
+
     fn update_current_user_settings(
         &self,
         principal: &Principal,
@@ -522,6 +895,20 @@ impl WebState {
                 .expect("user preferences mutex poisoned");
             preferences.entries.retain(|entry| entry.user_id != user_id);
             persist_user_preferences(&self.user_preferences_path, &preferences)?;
+            let mut opencti_settings = self
+                .user_opencti_settings
+                .lock()
+                .expect("OpenCTI settings mutex poisoned");
+            opencti_settings
+                .entries
+                .retain(|entry| entry.user_id != user_id);
+            persist_user_opencti_settings(&self.user_opencti_settings_path, &opencti_settings)?;
+            let mut api_tokens = self
+                .user_api_tokens
+                .lock()
+                .expect("API tokens mutex poisoned");
+            api_tokens.entries.retain(|entry| entry.user_id != user_id);
+            persist_user_api_tokens(&self.user_api_tokens_path, &api_tokens)?;
         }
         Ok(deleted)
     }
@@ -692,6 +1079,18 @@ fn user_preferences_path() -> Result<PathBuf> {
     Ok(root.join("web_user_preferences.json"))
 }
 
+fn user_opencti_settings_path() -> Result<PathBuf> {
+    let root = spuc_config_root().ok_or_else(|| anyhow!("cannot resolve config root"))?;
+    fs::create_dir_all(&root)?;
+    Ok(root.join("user_opencti_settings.json"))
+}
+
+fn user_api_tokens_path() -> Result<PathBuf> {
+    let root = spuc_config_root().ok_or_else(|| anyhow!("cannot resolve config root"))?;
+    fs::create_dir_all(&root)?;
+    Ok(root.join("web_user_api_tokens.json"))
+}
+
 fn load_or_init_runtime_settings(
     no_login_default: bool,
 ) -> Result<(PathBuf, AdminRuntimeSettingsStore)> {
@@ -773,6 +1172,55 @@ fn load_or_init_user_preferences() -> Result<(PathBuf, UserPreferencesStore)> {
     Ok((path, store))
 }
 
+fn load_or_init_user_opencti_settings() -> Result<(PathBuf, UserOpenCtiSettingsStore)> {
+    let path = user_opencti_settings_path()?;
+    if !path.exists() {
+        let store = UserOpenCtiSettingsStore {
+            schema_version: WEB_USER_OPENCTI_SETTINGS_SCHEMA_VERSION.to_string(),
+            entries: Vec::new(),
+        };
+        persist_user_opencti_settings(&path, &store)?;
+        return Ok((path, store));
+    }
+
+    let raw = fs::read_to_string(&path)?;
+    let mut store: UserOpenCtiSettingsStore = serde_json::from_str(&raw)?;
+    if store.schema_version.trim().is_empty() {
+        store.schema_version = WEB_USER_OPENCTI_SETTINGS_SCHEMA_VERSION.to_string();
+    }
+    store
+        .entries
+        .retain(|entry| !entry.user_id.trim().is_empty());
+    for entry in &mut store.entries {
+        normalize_opencti_settings_entry(entry);
+    }
+    persist_user_opencti_settings(&path, &store)?;
+    Ok((path, store))
+}
+
+fn load_or_init_user_api_tokens() -> Result<(PathBuf, UserApiTokenStore)> {
+    let path = user_api_tokens_path()?;
+    if !path.exists() {
+        let store = UserApiTokenStore {
+            schema_version: WEB_USER_API_TOKENS_SCHEMA_VERSION.to_string(),
+            entries: Vec::new(),
+        };
+        persist_user_api_tokens(&path, &store)?;
+        return Ok((path, store));
+    }
+
+    let raw = fs::read_to_string(&path)?;
+    let mut store: UserApiTokenStore = serde_json::from_str(&raw)?;
+    if store.schema_version.trim().is_empty() {
+        store.schema_version = WEB_USER_API_TOKENS_SCHEMA_VERSION.to_string();
+    }
+    store
+        .entries
+        .retain(|entry| !entry.id.trim().is_empty() && !entry.user_id.trim().is_empty());
+    persist_user_api_tokens(&path, &store)?;
+    Ok((path, store))
+}
+
 fn persist_runtime_settings(path: &Path, settings: &AdminRuntimeSettingsStore) -> Result<()> {
     let raw = serde_json::to_string_pretty(settings)?;
     fs::write(path, raw)?;
@@ -785,12 +1233,158 @@ fn persist_user_preferences(path: &Path, settings: &UserPreferencesStore) -> Res
     Ok(())
 }
 
+fn persist_user_opencti_settings(path: &Path, settings: &UserOpenCtiSettingsStore) -> Result<()> {
+    let raw = serde_json::to_string_pretty(settings)?;
+    fs::write(path, raw)?;
+    restrict_file_to_owner(path)?;
+    Ok(())
+}
+
+fn persist_user_api_tokens(path: &Path, store: &UserApiTokenStore) -> Result<()> {
+    let raw = serde_json::to_string_pretty(store)?;
+    fs::write(path, raw)?;
+    restrict_file_to_owner(path)?;
+    Ok(())
+}
+
+fn hash_api_token(token: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+fn is_token_expired(expires_at: Option<&str>, now: chrono::DateTime<Utc>) -> bool {
+    let Some(value) = expires_at else {
+        return false;
+    };
+    let Ok(expires) = chrono::DateTime::parse_from_rfc3339(value) else {
+        return false;
+    };
+    expires.with_timezone(&Utc) <= now
+}
+
+fn api_token_view(entry: UserApiTokenEntry) -> UserApiTokenView {
+    UserApiTokenView {
+        id: entry.id,
+        user_id: entry.user_id,
+        name: entry.name,
+        created_at: entry.created_at,
+        revoked_at: entry.revoked_at,
+        last_used_at: entry.last_used_at,
+        expires_at: entry.expires_at,
+    }
+}
+
+#[cfg(unix)]
+fn restrict_file_to_owner(path: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn restrict_file_to_owner(_path: &Path) -> Result<()> {
+    Ok(())
+}
+
 fn normalize_optional_setting(value: String) -> Option<String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         None
     } else {
         Some(trimmed.to_string())
+    }
+}
+
+fn normalize_opencti_endpoint(value: String) -> Option<String> {
+    let trimmed = value.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        Some(trimmed.to_string())
+    } else {
+        None
+    }
+}
+
+fn normalize_opencti_settings_entry(entry: &mut UserOpenCtiSettingsEntry) {
+    entry.opencti_endpoint = entry
+        .opencti_endpoint
+        .take()
+        .and_then(normalize_opencti_endpoint);
+    entry.opencti_api_key = entry
+        .opencti_api_key
+        .take()
+        .and_then(normalize_optional_setting);
+    if !opencti_settings_configured(entry) {
+        entry.opencti_enabled = false;
+        entry.stix_catalog_source = StixCatalogSource::Local;
+    }
+}
+
+fn opencti_settings_configured(entry: &UserOpenCtiSettingsEntry) -> bool {
+    entry
+        .opencti_endpoint
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty())
+        && entry
+            .opencti_api_key
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+}
+
+fn opencti_effective_source(entry: &UserOpenCtiSettingsEntry) -> StixCatalogSource {
+    if entry.opencti_enabled
+        && entry.stix_catalog_source == StixCatalogSource::OpenCti
+        && opencti_settings_configured(entry)
+    {
+        StixCatalogSource::OpenCti
+    } else {
+        StixCatalogSource::Local
+    }
+}
+
+fn default_opencti_settings_entry(user_id: &str) -> UserOpenCtiSettingsEntry {
+    UserOpenCtiSettingsEntry {
+        user_id: user_id.to_string(),
+        opencti_enabled: false,
+        opencti_endpoint: None,
+        opencti_api_key: None,
+        stix_catalog_source: StixCatalogSource::Local,
+    }
+}
+
+fn user_opencti_settings_entry_mut<'a>(
+    store: &'a mut UserOpenCtiSettingsStore,
+    user_id: &str,
+) -> &'a mut UserOpenCtiSettingsEntry {
+    if let Some(index) = store
+        .entries
+        .iter()
+        .position(|entry| entry.user_id == user_id)
+    {
+        return &mut store.entries[index];
+    }
+    store.entries.push(default_opencti_settings_entry(user_id));
+    store
+        .entries
+        .last_mut()
+        .expect("OpenCTI settings entry inserted")
+}
+
+fn opencti_settings_view(entry: UserOpenCtiSettingsEntry) -> UserOpenCtiSettingsView {
+    let effective_source = opencti_effective_source(&entry);
+    UserOpenCtiSettingsView {
+        opencti_enabled: entry.opencti_enabled,
+        opencti_endpoint: entry.opencti_endpoint,
+        opencti_api_key_set: entry
+            .opencti_api_key
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty()),
+        stix_catalog_source: entry.stix_catalog_source.as_str(),
+        effective_source: effective_source.as_str(),
     }
 }
 
@@ -915,6 +1509,19 @@ impl HttpRequest {
             }
         }
         None
+    }
+
+    fn bearer_token(&self) -> Option<String> {
+        let raw = self.headers.get("authorization")?.trim();
+        let value = raw
+            .strip_prefix("Bearer ")
+            .or_else(|| raw.strip_prefix("bearer "))?;
+        let token = value.trim();
+        if token.is_empty() {
+            None
+        } else {
+            Some(token.to_string())
+        }
     }
 }
 
@@ -1320,7 +1927,7 @@ struct StixCatalogEntry {
     first_seen: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct StixObjectView {
     stix_id: String,
     stix_type: String,
@@ -1335,6 +1942,85 @@ struct StixObjectView {
     created_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     first_seen: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    aliases: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    external_references: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+struct StixProviderSearch {
+    query: Option<String>,
+    types: Vec<String>,
+    limit: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct StixProviderErrorView {
+    code: &'static str,
+    message: String,
+    go_to_user_settings: bool,
+}
+
+#[derive(Debug, Clone)]
+struct StixProviderError {
+    code: &'static str,
+    message: String,
+}
+
+type StixProviderResult<T> = std::result::Result<T, StixProviderError>;
+
+impl StixProviderError {
+    fn new(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+        }
+    }
+
+    fn view(&self) -> StixProviderErrorView {
+        StixProviderErrorView {
+            code: self.code,
+            message: self.message.clone(),
+            go_to_user_settings: true,
+        }
+    }
+}
+
+#[allow(dead_code)]
+trait StixCatalogProvider {
+    fn search_objects(
+        &self,
+        search: &StixProviderSearch,
+    ) -> StixProviderResult<Vec<StixObjectView>>;
+    fn get_object_by_id(&self, id: &str) -> StixProviderResult<Option<StixObjectView>>;
+    fn create_object(
+        &self,
+        payload: &CreateStixObjectRequest,
+    ) -> StixProviderResult<StixObjectView>;
+    fn find_similar_objects(
+        &self,
+        payload: &CreateStixObjectRequest,
+    ) -> StixProviderResult<Vec<StixObjectView>>;
+}
+
+struct LocalStixCatalogProvider;
+
+struct OpenCtiStixCatalogProvider {
+    endpoint: String,
+    api_key: String,
+}
+
+#[derive(Debug, Serialize)]
+struct StixObjectsResponse {
+    entries: Vec<StixObjectView>,
+    source: &'static str,
+    effective_source: &'static str,
+    fallback_used: bool,
+    message: Option<String>,
+    error: Option<StixProviderErrorView>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1629,6 +2315,10 @@ pub(crate) fn route(request: HttpRequest, state: &WebState) -> Result<HttpRespon
         });
     }
 
+    if request.method == "POST" && request.path == "/api/translate/stix-pattern" {
+        return translate_stix_pattern_with_token(&request, state);
+    }
+
     let Some(principal) = principal else {
         return HttpResponse::json(
             401,
@@ -1643,10 +2333,12 @@ pub(crate) fn route(request: HttpRequest, state: &WebState) -> Result<HttpRespon
         ("GET", ["api", "overview"]) => overview_response(),
         ("GET", ["api", "rules"]) => list_rules(&request),
         ("GET", ["api", "rules", selector]) => show_rule(selector),
-        ("GET", ["api", "stix-objects"]) => list_stix_objects(),
-        ("POST", ["api", "stix-objects"]) => create_stix_object(&request),
+        ("GET", ["api", "stix-objects"]) => list_stix_objects(&request, &principal, state),
+        ("POST", ["api", "stix-objects"]) => create_stix_object(&request, &principal, state),
         ("DELETE", ["api", "stix-objects", stix_id]) => delete_stix_object(stix_id),
-        ("POST", ["api", "stix-objects", "export", "bundle"]) => export_stix_objects_bundle(&request),
+        ("POST", ["api", "stix-objects", "export", "bundle"]) => {
+            export_stix_objects_bundle(&request)
+        }
         ("GET", ["api", "mitre-attack"]) => Ok(HttpResponse::text(
             200,
             "application/json; charset=utf-8",
@@ -1689,6 +2381,23 @@ pub(crate) fn route(request: HttpRequest, state: &WebState) -> Result<HttpRespon
         ("GET", ["api", "settings", "profile"]) => settings_get_profile(&principal, state),
         ("POST", ["api", "settings", "profile"]) => {
             settings_update_profile(&principal, &request, state)
+        }
+        ("GET", ["api", "user", "tokens"]) => user_list_tokens(&principal, state),
+        ("POST", ["api", "user", "tokens"]) => user_create_token(&principal, &request, state),
+        ("DELETE", ["api", "user", "tokens", token_id]) => {
+            user_revoke_token(&principal, token_id, state)
+        }
+        ("POST", ["api", "user", "tokens", token_id, "rotate"]) => {
+            user_rotate_token(&principal, token_id, state)
+        }
+        ("GET", ["api", "user", "settings", "stix-source"]) => {
+            user_get_stix_source_settings(&principal, state)
+        }
+        ("PUT", ["api", "user", "settings", "stix-source"]) => {
+            user_update_stix_source_settings(&principal, &request, state)
+        }
+        ("POST", ["api", "user", "settings", "opencti", "test"]) => {
+            user_test_opencti_settings(&principal, &request, state)
         }
         ("GET", ["api", "admin", "users"]) => admin_list_users(&principal, state),
         ("POST", ["api", "admin", "users"]) => admin_create_user(&principal, &request, state),
@@ -2015,6 +2724,279 @@ fn settings_update_profile(
     let payload: UserSettingsUpdateRequest = request.json()?;
     let entry = state.update_current_user_settings(principal, payload)?;
     HttpResponse::json(200, &serde_json::json!({ "ok": true, "entry": entry }))
+}
+
+fn user_get_stix_source_settings(principal: &Principal, state: &WebState) -> Result<HttpResponse> {
+    HttpResponse::json(
+        200,
+        &serde_json::json!({ "entry": state.current_opencti_settings_view(principal) }),
+    )
+}
+
+fn user_update_stix_source_settings(
+    principal: &Principal,
+    request: &HttpRequest,
+    state: &WebState,
+) -> Result<HttpResponse> {
+    let payload: UserOpenCtiSettingsUpdateRequest = request.json()?;
+    let entry = state.update_current_opencti_settings(principal, payload)?;
+    HttpResponse::json(200, &serde_json::json!({ "ok": true, "entry": entry }))
+}
+
+fn user_test_opencti_settings(
+    principal: &Principal,
+    request: &HttpRequest,
+    state: &WebState,
+) -> Result<HttpResponse> {
+    let payload: OpenCtiTestRequest = request.json().unwrap_or(OpenCtiTestRequest {
+        opencti_endpoint: None,
+        opencti_api_key: None,
+    });
+    let saved = state.opencti_settings_for(principal.user_id.as_str());
+    let endpoint = payload
+        .opencti_endpoint
+        .and_then(normalize_opencti_endpoint)
+        .or(saved.opencti_endpoint);
+    let api_key = payload
+        .opencti_api_key
+        .and_then(normalize_optional_setting)
+        .or(saved.opencti_api_key);
+    let Some(endpoint) = endpoint else {
+        return HttpResponse::json(
+            400,
+            &OpenCtiTestResponse {
+                ok: false,
+                code: "opencti_not_configured",
+                message: "OpenCTI endpoint is not configured.".to_string(),
+            },
+        );
+    };
+    let Some(api_key) = api_key else {
+        return HttpResponse::json(
+            400,
+            &OpenCtiTestResponse {
+                ok: false,
+                code: "opencti_not_configured",
+                message: "OpenCTI API key is not configured.".to_string(),
+            },
+        );
+    };
+
+    let provider = OpenCtiStixCatalogProvider { endpoint, api_key };
+    match provider.test_connection() {
+        Ok(()) => HttpResponse::json(
+            200,
+            &OpenCtiTestResponse {
+                ok: true,
+                code: "ok",
+                message: "OpenCTI connection test succeeded.".to_string(),
+            },
+        ),
+        Err(error) => HttpResponse::json(
+            502,
+            &OpenCtiTestResponse {
+                ok: false,
+                code: error.code,
+                message: error.message,
+            },
+        ),
+    }
+}
+
+fn user_list_tokens(principal: &Principal, state: &WebState) -> Result<HttpResponse> {
+    HttpResponse::json(
+        200,
+        &serde_json::json!({ "entries": state.list_user_api_tokens(principal) }),
+    )
+}
+
+fn user_create_token(
+    principal: &Principal,
+    request: &HttpRequest,
+    state: &WebState,
+) -> Result<HttpResponse> {
+    let payload: UserApiTokenCreateRequest = request.json()?;
+    let (token, token_value) =
+        state.create_user_api_token(principal, payload.name.as_str(), payload.expires_at)?;
+    HttpResponse::json(
+        200,
+        &serde_json::json!({
+            "ok": true,
+            "entry": UserApiTokenCreateResponse { token, token_value }
+        }),
+    )
+}
+
+fn user_revoke_token(
+    principal: &Principal,
+    token_id: &str,
+    state: &WebState,
+) -> Result<HttpResponse> {
+    match state.revoke_user_api_token(principal, token_id) {
+        Ok(entry) => HttpResponse::json(200, &serde_json::json!({ "ok": true, "entry": entry })),
+        Err(error) if error.to_string().contains("token_not_found") => {
+            HttpResponse::json(404, &serde_json::json!({ "error": "token_not_found" }))
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn user_rotate_token(
+    principal: &Principal,
+    token_id: &str,
+    state: &WebState,
+) -> Result<HttpResponse> {
+    match state.rotate_user_api_token(principal, token_id) {
+        Ok((token, token_value)) => HttpResponse::json(
+            200,
+            &serde_json::json!({
+                "ok": true,
+                "entry": UserApiTokenCreateResponse { token, token_value }
+            }),
+        ),
+        Err(error) if error.to_string().contains("token_not_found") => {
+            HttpResponse::json(404, &serde_json::json!({ "error": "token_not_found" }))
+        }
+        Err(error) if error.to_string().contains("token_revoked") => {
+            HttpResponse::json(409, &serde_json::json!({ "error": "token_revoked" }))
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn translate_stix_pattern_with_token(
+    request: &HttpRequest,
+    state: &WebState,
+) -> Result<HttpResponse> {
+    let Some(token) = request.bearer_token() else {
+        return HttpResponse::json(401, &serde_json::json!({ "error": "missing_api_token" }));
+    };
+    let Some(_principal) = state.resolve_principal_from_api_token(token.as_str()) else {
+        return HttpResponse::json(
+            401,
+            &serde_json::json!({ "error": "invalid_or_revoked_api_token" }),
+        );
+    };
+
+    let payload: TranslateStixPatternRequest = match request.json() {
+        Ok(payload) => payload,
+        Err(error) => {
+            return HttpResponse::json(
+                400,
+                &serde_json::json!({
+                    "error": "invalid_request_payload",
+                    "message": error.to_string()
+                }),
+            )
+        }
+    };
+    if !payload.object_type.eq_ignore_ascii_case("indicator") {
+        return HttpResponse::json(
+            400,
+            &TranslateStixPatternResponse {
+                status: "error",
+                comments: vec!["Only STIX indicator input is supported".to_string()],
+                results: vec![],
+            },
+        );
+    }
+    if !payload.pattern_type.eq_ignore_ascii_case("stix") {
+        return HttpResponse::json(
+            400,
+            &TranslateStixPatternResponse {
+                status: "error",
+                comments: vec!["pattern_type must be 'stix'".to_string()],
+                results: vec![],
+            },
+        );
+    }
+    if payload.pattern.trim().is_empty() {
+        return HttpResponse::json(
+            400,
+            &TranslateStixPatternResponse {
+                status: "error",
+                comments: vec!["pattern is required".to_string()],
+                results: vec![],
+            },
+        );
+    }
+
+    let targets = if payload.targets.is_empty() {
+        available_detection_target_labels()
+    } else {
+        payload.targets
+    };
+
+    let rows = match evaluate_rule(TranslationRequest {
+        rule: payload.pattern.as_str(),
+        targets: &targets,
+        description: None,
+        sigma_targets: &payload.sigma_targets,
+        mode: ConversionMode::Strict,
+        rule_confidence: payload.rule_confidence,
+    }) {
+        Ok(rows) => rows,
+        Err(error) => {
+            return HttpResponse::json(
+                200,
+                &TranslateStixPatternResponse {
+                    status: "error",
+                    comments: vec![error.to_string()],
+                    results: vec![],
+                },
+            )
+        }
+    };
+
+    let results = rows
+        .into_iter()
+        .filter_map(|row| {
+            let output = row.output.clone()?;
+            if output.trim().is_empty() || row.runtime_status.eq_ignore_ascii_case("unsupported") {
+                return None;
+            }
+            let pattern_type = if row.target.starts_with("sigma") {
+                "sigma".to_string()
+            } else {
+                row.target.clone()
+            };
+            Some(TranslateStixPatternResult {
+                object_type: "indicator",
+                pattern_type: pattern_type.clone(),
+                pattern: output.clone(),
+                confidence: row.conversion_confidence,
+                target: row.target,
+                stix: TranslateStixDetectionRule {
+                    object_type: "indicator",
+                    pattern_type: pattern_type.clone(),
+                    pattern: output.clone(),
+                    confidence: row.conversion_confidence,
+                    description: row.summary,
+                    comments: row.notes,
+                },
+            })
+        })
+        .collect::<Vec<_>>();
+
+    if results.is_empty() {
+        return HttpResponse::json(
+            200,
+            &TranslateStixPatternResponse {
+                status: "error",
+                comments: vec!["No translation results for the provided STIX pattern".to_string()],
+                results,
+            },
+        );
+    }
+
+    HttpResponse::json(
+        200,
+        &TranslateStixPatternResponse {
+            status: "success",
+            comments: vec![],
+            results,
+        },
+    )
 }
 
 fn admin_list_users(principal: &Principal, state: &WebState) -> Result<HttpResponse> {
@@ -2378,11 +3360,11 @@ fn save_stix_catalog(entries: &[StixCatalogEntry]) -> Result<()> {
     Ok(fs::write(&path, data)?)
 }
 
-fn list_stix_objects() -> Result<HttpResponse> {
+fn local_stix_catalog_views() -> Result<Vec<StixObjectView>> {
     let catalog_entries = load_stix_catalog();
     let (_, _, rules, _) = load_catalog_data()?;
     let mut from_rules = collect_stix_objects_from_rules(&rules);
-    // Merge: catalog entries take priority; supplement with rule-derived entries
+    // Merge: catalog entries take priority; supplement with rule-derived entries.
     let catalog_ids: BTreeSet<String> = catalog_entries
         .iter()
         .map(|e| e.stix_id.to_ascii_lowercase())
@@ -2399,6 +3381,9 @@ fn list_stix_objects() -> Result<HttpResponse> {
             pap: e.pap,
             created_at: e.created_at,
             first_seen: e.first_seen,
+            source: Some("local".to_string()),
+            aliases: Vec::new(),
+            external_references: Vec::new(),
         })
         .collect();
     catalog_views.append(&mut from_rules);
@@ -2408,7 +3393,127 @@ fn list_stix_objects() -> Result<HttpResponse> {
             .then_with(|| a.name.cmp(&b.name))
             .then_with(|| a.stix_id.cmp(&b.stix_id))
     });
-    HttpResponse::json(200, &serde_json::json!({ "entries": catalog_views }))
+    Ok(catalog_views)
+}
+
+fn parse_stix_object_query(request: &HttpRequest) -> StixProviderSearch {
+    let types = request
+        .query
+        .get("types")
+        .map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_ascii_lowercase)
+                .filter(|value| is_valid_stix_object_name(value))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let limit = request
+        .query
+        .get("limit")
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(OPENCTI_DEFAULT_LIMIT)
+        .clamp(1, OPENCTI_MAX_LIMIT);
+    StixProviderSearch {
+        query: request.query.get("q").cloned(),
+        types,
+        limit,
+    }
+}
+
+fn stix_provider_for_settings(
+    settings: &UserOpenCtiSettingsEntry,
+) -> Option<OpenCtiStixCatalogProvider> {
+    if opencti_effective_source(settings) != StixCatalogSource::OpenCti {
+        return None;
+    }
+    Some(OpenCtiStixCatalogProvider {
+        endpoint: settings.opencti_endpoint.clone()?,
+        api_key: settings.opencti_api_key.clone()?,
+    })
+}
+
+fn list_stix_objects(
+    request: &HttpRequest,
+    principal: &Principal,
+    state: &WebState,
+) -> Result<HttpResponse> {
+    let search = parse_stix_object_query(request);
+    let settings = state.opencti_settings_for(principal.user_id.as_str());
+    if let Some(provider) = stix_provider_for_settings(&settings) {
+        if search
+            .query
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("")
+            .is_empty()
+        {
+            return HttpResponse::json(
+                200,
+                &StixObjectsResponse {
+                    entries: Vec::new(),
+                    source: "opencti",
+                    effective_source: "opencti",
+                    fallback_used: false,
+                    message: Some(
+                        "Search OpenCTI objects by name, alias, type or external reference."
+                            .to_string(),
+                    ),
+                    error: None,
+                },
+            );
+        }
+        match provider.search_objects(&search) {
+            Ok(entries) => {
+                return HttpResponse::json(
+                    200,
+                    &StixObjectsResponse {
+                        entries,
+                        source: "opencti",
+                        effective_source: "opencti",
+                        fallback_used: false,
+                        message: None,
+                        error: None,
+                    },
+                );
+            }
+            Err(error) => {
+                let local_entries = LocalStixCatalogProvider
+                    .search_objects(&search)
+                    .map_err(|err| anyhow!(err.message))?;
+                return HttpResponse::json(
+                    200,
+                    &StixObjectsResponse {
+                        entries: local_entries,
+                        source: "opencti",
+                        effective_source: "local",
+                        fallback_used: true,
+                        message: Some(
+                            "OpenCTI is unavailable. Showing local catalog results.".to_string(),
+                        ),
+                        error: Some(error.view()),
+                    },
+                );
+            }
+        }
+    }
+
+    let entries = LocalStixCatalogProvider
+        .search_objects(&search)
+        .map_err(|err| anyhow!(err.message))?;
+    HttpResponse::json(
+        200,
+        &StixObjectsResponse {
+            entries,
+            source: "local",
+            effective_source: "local",
+            fallback_used: false,
+            message: None,
+            error: None,
+        },
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -2425,10 +3530,52 @@ struct CreateStixObjectRequest {
     created_at: Option<String>,
     #[serde(default)]
     first_seen: Option<String>,
+    #[serde(default)]
+    force_create: bool,
 }
 
-fn create_stix_object(request: &HttpRequest) -> Result<HttpResponse> {
+fn create_stix_object(
+    request: &HttpRequest,
+    principal: &Principal,
+    state: &WebState,
+) -> Result<HttpResponse> {
     let payload: CreateStixObjectRequest = request.json()?;
+    let settings = state.opencti_settings_for(principal.user_id.as_str());
+    if let Some(provider) = stix_provider_for_settings(&settings) {
+        if !payload.force_create {
+            let similar = provider
+                .find_similar_objects(&payload)
+                .map_err(|err| anyhow!(err.message))?;
+            if !similar.is_empty() {
+                return HttpResponse::json(
+                    409,
+                    &serde_json::json!({
+                        "error": "similar_objects_found",
+                        "message": "Possible similar STIX objects were found. Review them before creating a new object.",
+                        "candidates": similar
+                    }),
+                );
+            }
+        }
+        return match provider.create_object(&payload) {
+            Ok(created) => HttpResponse::json(
+                200,
+                &serde_json::json!({ "ok": true, "stix_id": created.stix_id, "entry": created }),
+            ),
+            Err(error) => HttpResponse::json(
+                502,
+                &serde_json::json!({
+                    "error": error.code,
+                    "message": error.message,
+                    "go_to_user_settings": true
+                }),
+            ),
+        };
+    }
+    create_local_stix_object(payload)
+}
+
+fn create_local_stix_object(payload: CreateStixObjectRequest) -> Result<HttpResponse> {
     let stix_id = payload.stix_id.trim().to_string();
     let name = payload.name.trim().to_string();
     if stix_id.is_empty() || name.is_empty() {
@@ -2487,6 +3634,477 @@ fn create_stix_object(request: &HttpRequest) -> Result<HttpResponse> {
     }
     save_stix_catalog(&catalog)?;
     HttpResponse::json(200, &serde_json::json!({ "ok": true, "stix_id": stix_id }))
+}
+
+impl StixCatalogProvider for LocalStixCatalogProvider {
+    fn search_objects(
+        &self,
+        search: &StixProviderSearch,
+    ) -> StixProviderResult<Vec<StixObjectView>> {
+        let query = search.query.as_deref().map(str::trim).unwrap_or("");
+        let query_lower = query.to_ascii_lowercase();
+        let type_filter = search
+            .types
+            .iter()
+            .map(|value| value.to_ascii_lowercase())
+            .collect::<BTreeSet<_>>();
+        let mut entries = local_stix_catalog_views()
+            .map_err(|error| StixProviderError::new("local_catalog_error", error.to_string()))?;
+        entries.retain(|entry| {
+            let type_matches = type_filter.is_empty()
+                || type_filter.contains(&entry.stix_type.to_ascii_lowercase());
+            if !type_matches {
+                return false;
+            }
+            if query_lower.is_empty() {
+                return true;
+            }
+            stix_object_matches_query(entry, &query_lower)
+        });
+        entries.truncate(search.limit);
+        Ok(entries)
+    }
+
+    fn get_object_by_id(&self, id: &str) -> StixProviderResult<Option<StixObjectView>> {
+        let id_lower = id.trim().to_ascii_lowercase();
+        Ok(local_stix_catalog_views()
+            .map_err(|error| StixProviderError::new("local_catalog_error", error.to_string()))?
+            .into_iter()
+            .find(|entry| entry.stix_id.to_ascii_lowercase() == id_lower))
+    }
+
+    fn create_object(
+        &self,
+        payload: &CreateStixObjectRequest,
+    ) -> StixProviderResult<StixObjectView> {
+        let request_payload = CreateStixObjectRequest {
+            stix_id: payload.stix_id.clone(),
+            name: payload.name.clone(),
+            description: payload.description.clone(),
+            tlp: payload.tlp.clone(),
+            pap: payload.pap.clone(),
+            created_at: payload.created_at.clone(),
+            first_seen: payload.first_seen.clone(),
+            force_create: payload.force_create,
+        };
+        create_local_stix_object(request_payload)
+            .map_err(|error| StixProviderError::new("local_catalog_error", error.to_string()))?;
+        self.get_object_by_id(payload.stix_id.as_str())?
+            .ok_or_else(|| {
+                StixProviderError::new("local_catalog_error", "created object not found")
+            })
+    }
+
+    fn find_similar_objects(
+        &self,
+        payload: &CreateStixObjectRequest,
+    ) -> StixProviderResult<Vec<StixObjectView>> {
+        let search = StixProviderSearch {
+            query: Some(payload.name.clone()),
+            types: vec![stix_object_type_from_id(&payload.stix_id)],
+            limit: 10,
+        };
+        self.search_objects(&search)
+    }
+}
+
+impl OpenCtiStixCatalogProvider {
+    fn test_connection(&self) -> StixProviderResult<()> {
+        match self.graphql(
+            "query SpucOpenCtiHealth { me { id name } }",
+            serde_json::json!({}),
+        ) {
+            Ok(_) => Ok(()),
+            Err(error) if error.code == "unexpected_graphql_response" => self
+                .graphql(
+                    "query SpucOpenCtiHealth { __typename }",
+                    serde_json::json!({}),
+                )
+                .map(|_| ()),
+            Err(error) => Err(error),
+        }
+    }
+
+    fn graphql(
+        &self,
+        query: &str,
+        variables: serde_json::Value,
+    ) -> StixProviderResult<serde_json::Value> {
+        let agent = ureq::AgentBuilder::new()
+            .timeout(std::time::Duration::from_secs(
+                OPENCTI_GRAPHQL_TIMEOUT_SECONDS,
+            ))
+            .build();
+        let auth_header = format!("Bearer {}", self.api_key);
+        let response = agent
+            .post(self.endpoint.as_str())
+            .set("Authorization", auth_header.as_str())
+            .set("Accept", "application/json")
+            .send_json(serde_json::json!({
+                "query": query,
+                "variables": variables
+            }))
+            .map_err(map_opencti_ureq_error)?;
+        let payload = response.into_json::<serde_json::Value>().map_err(|error| {
+            StixProviderError::new("unexpected_graphql_response", error.to_string())
+        })?;
+        if let Some(errors) = payload.get("errors").and_then(|value| value.as_array()) {
+            if !errors.is_empty() {
+                let message = errors
+                    .first()
+                    .and_then(|error| error.get("message"))
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("OpenCTI returned a GraphQL error.");
+                return Err(classify_opencti_graphql_error(message));
+            }
+        }
+        if payload.get("data").is_none() {
+            return Err(StixProviderError::new(
+                "unexpected_graphql_response",
+                "OpenCTI response did not include a data object.",
+            ));
+        }
+        Ok(payload)
+    }
+}
+
+impl StixCatalogProvider for OpenCtiStixCatalogProvider {
+    fn search_objects(
+        &self,
+        search: &StixProviderSearch,
+    ) -> StixProviderResult<Vec<StixObjectView>> {
+        let query_text = search.query.as_deref().map(str::trim).unwrap_or("");
+        let payload = self.graphql(
+            r#"
+            query SpucSearchStix($search: String, $types: [String], $first: Int) {
+              stixCoreObjects(search: $search, types: $types, first: $first) {
+                edges {
+                  node {
+                    id
+                    standard_id
+                    entity_type
+                    parent_types
+                    representative
+                    main_value
+                    name
+                    description
+                    aliases
+                    x_opencti_aliases
+                    created
+                    first_seen
+                    externalReferences {
+                      edges {
+                        node {
+                          source_name
+                          external_id
+                          url
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            "#,
+            serde_json::json!({
+                "search": query_text,
+                "types": if search.types.is_empty() { serde_json::Value::Null } else { serde_json::json!(search.types) },
+                "first": search.limit
+            }),
+        )?;
+        let entries = payload
+            .pointer("/data/stixCoreObjects/edges")
+            .and_then(|value| value.as_array())
+            .ok_or_else(|| {
+                StixProviderError::new(
+                    "unexpected_graphql_response",
+                    "OpenCTI search response did not include stixCoreObjects edges.",
+                )
+            })?
+            .iter()
+            .filter_map(|edge| edge.get("node"))
+            .filter_map(opencti_node_to_stix_view)
+            .collect::<Vec<_>>();
+        Ok(entries)
+    }
+
+    fn get_object_by_id(&self, id: &str) -> StixProviderResult<Option<StixObjectView>> {
+        let payload = self.graphql(
+            r#"
+            query SpucGetStix($id: String!) {
+              stixCoreObject(id: $id) {
+                id
+                standard_id
+                entity_type
+                parent_types
+                representative
+                main_value
+                name
+                description
+                aliases
+                x_opencti_aliases
+                created
+                first_seen
+              }
+            }
+            "#,
+            serde_json::json!({ "id": id }),
+        )?;
+        Ok(payload
+            .pointer("/data/stixCoreObject")
+            .and_then(opencti_node_to_stix_view))
+    }
+
+    fn create_object(
+        &self,
+        payload: &CreateStixObjectRequest,
+    ) -> StixProviderResult<StixObjectView> {
+        let stix_type = stix_object_type_from_id(payload.stix_id.as_str());
+        let (mutation_name, input_type) = opencti_create_mutation_for_type(stix_type.as_str())?;
+        let description = payload
+            .description
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("");
+        let mutation = format!(
+            "mutation SpucCreateStix($input: {input_type}!) {{ {mutation_name}(input: $input) {{ id standard_id entity_type name description }} }}"
+        );
+        let response = self.graphql(
+            mutation.as_str(),
+            serde_json::json!({
+                "input": {
+                    "name": payload.name.trim(),
+                    "description": description
+                }
+            }),
+        )?;
+        response
+            .pointer(&format!("/data/{mutation_name}"))
+            .and_then(opencti_node_to_stix_view)
+            .ok_or_else(|| {
+                StixProviderError::new(
+                    "unexpected_graphql_response",
+                    "OpenCTI create response did not include the created STIX object.",
+                )
+            })
+    }
+
+    fn find_similar_objects(
+        &self,
+        payload: &CreateStixObjectRequest,
+    ) -> StixProviderResult<Vec<StixObjectView>> {
+        let search = StixProviderSearch {
+            query: Some(payload.name.clone()),
+            types: vec![stix_object_type_from_id(payload.stix_id.as_str())],
+            limit: 10,
+        };
+        self.search_objects(&search)
+    }
+}
+
+fn stix_object_matches_query(entry: &StixObjectView, query_lower: &str) -> bool {
+    [
+        entry.name.as_str(),
+        entry.stix_id.as_str(),
+        entry.stix_type.as_str(),
+        entry.description.as_deref().unwrap_or(""),
+    ]
+    .iter()
+    .any(|value| value.to_ascii_lowercase().contains(query_lower))
+        || entry
+            .aliases
+            .iter()
+            .any(|value| value.to_ascii_lowercase().contains(query_lower))
+        || entry
+            .external_references
+            .iter()
+            .any(|value| value.to_ascii_lowercase().contains(query_lower))
+}
+
+fn map_opencti_ureq_error(error: ureq::Error) -> StixProviderError {
+    match error {
+        ureq::Error::Status(401, _) => StixProviderError::new(
+            "invalid_api_key",
+            "OpenCTI rejected the configured API key.",
+        ),
+        ureq::Error::Status(403, _) => StixProviderError::new(
+            "permissions_insufficient",
+            "The OpenCTI API key does not have permission for this operation.",
+        ),
+        ureq::Error::Status(429, _) => StixProviderError::new(
+            "rate_limited",
+            "OpenCTI rate-limited the request. SPUC kept the local catalog available.",
+        ),
+        ureq::Error::Status(status, response) => StixProviderError::new(
+            "endpoint_unavailable",
+            format!(
+                "OpenCTI endpoint returned HTTP {} {}.",
+                status,
+                response.status_text()
+            ),
+        ),
+        ureq::Error::Transport(error) => {
+            let message = error.to_string();
+            if message.to_ascii_lowercase().contains("timeout") {
+                StixProviderError::new(
+                    "timeout",
+                    "OpenCTI request timed out. SPUC kept the local catalog available.",
+                )
+            } else {
+                StixProviderError::new(
+                    "endpoint_unavailable",
+                    format!("OpenCTI endpoint is unavailable: {message}"),
+                )
+            }
+        }
+    }
+}
+
+fn classify_opencti_graphql_error(message: &str) -> StixProviderError {
+    let lower = message.to_ascii_lowercase();
+    if lower.contains("unauthorized") || lower.contains("authentication") {
+        StixProviderError::new(
+            "invalid_api_key",
+            "OpenCTI rejected the configured API key.",
+        )
+    } else if lower.contains("forbidden") || lower.contains("permission") {
+        StixProviderError::new(
+            "permissions_insufficient",
+            "The OpenCTI API key does not have permission for this operation.",
+        )
+    } else if lower.contains("rate") && lower.contains("limit") {
+        StixProviderError::new(
+            "rate_limited",
+            "OpenCTI rate-limited the request. SPUC kept the local catalog available.",
+        )
+    } else {
+        StixProviderError::new("unexpected_graphql_response", message.to_string())
+    }
+}
+
+fn opencti_node_to_stix_view(node: &serde_json::Value) -> Option<StixObjectView> {
+    let stix_id = node
+        .get("standard_id")
+        .and_then(|value| value.as_str())
+        .or_else(|| node.get("id").and_then(|value| value.as_str()))
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if stix_id.is_empty() {
+        return None;
+    }
+    let stix_type = node
+        .get("entity_type")
+        .and_then(|value| value.as_str())
+        .map(str::to_ascii_lowercase)
+        .or_else(|| Some(stix_object_type_from_id(stix_id.as_str())))
+        .unwrap_or_default();
+    let name = node
+        .get("name")
+        .and_then(|value| value.as_str())
+        .or_else(|| node.get("representative").and_then(|value| value.as_str()))
+        .or_else(|| node.get("main_value").and_then(|value| value.as_str()))
+        .unwrap_or(stix_id.as_str())
+        .to_string();
+    Some(StixObjectView {
+        stix_id,
+        stix_type,
+        name,
+        description: node
+            .get("description")
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
+        tlp: None,
+        pap: None,
+        created_at: node
+            .get("created")
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
+        first_seen: node
+            .get("first_seen")
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
+        source: Some("opencti".to_string()),
+        aliases: opencti_aliases(node),
+        external_references: opencti_external_references(node),
+    })
+}
+
+fn opencti_aliases(node: &serde_json::Value) -> Vec<String> {
+    node.get("aliases")
+        .or_else(|| node.get("x_opencti_aliases"))
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn opencti_external_references(node: &serde_json::Value) -> Vec<String> {
+    node.pointer("/externalReferences/edges")
+        .and_then(|value| value.as_array())
+        .map(|edges| {
+            edges
+                .iter()
+                .filter_map(|edge| edge.get("node"))
+                .filter_map(|reference| {
+                    let source = reference
+                        .get("source_name")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("");
+                    let external_id = reference
+                        .get("external_id")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("");
+                    let url = reference
+                        .get("url")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("");
+                    let label = [source, external_id, url]
+                        .into_iter()
+                        .filter(|value| !value.trim().is_empty())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    if label.is_empty() {
+                        None
+                    } else {
+                        Some(label)
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn opencti_create_mutation_for_type(
+    stix_type: &str,
+) -> StixProviderResult<(&'static str, &'static str)> {
+    match stix_type {
+        "intrusion-set" => Ok(("intrusionSetAdd", "IntrusionSetAddInput")),
+        "malware" => Ok(("malwareAdd", "MalwareAddInput")),
+        "tool" => Ok(("toolAdd", "ToolAddInput")),
+        "campaign" => Ok(("campaignAdd", "CampaignAddInput")),
+        "attack-pattern" => Ok(("attackPatternAdd", "AttackPatternAddInput")),
+        "vulnerability" => Ok(("vulnerabilityAdd", "VulnerabilityAddInput")),
+        "identity" => Ok(("identityAdd", "IdentityAddInput")),
+        // TODO(opencti-integration): indicator creation needs a real STIX pattern from the
+        // translation/auth API branch; do not invent indicator semantics from name-only UI input.
+        "indicator" => Err(StixProviderError::new(
+            "unsupported_object_creation",
+            "Creating OpenCTI indicators requires a STIX pattern payload.",
+        )),
+        _ => Err(StixProviderError::new(
+            "unsupported_object_creation",
+            format!("Creating '{stix_type}' objects in OpenCTI is not supported yet."),
+        )),
+    }
 }
 
 fn delete_stix_object(stix_id: &str) -> Result<HttpResponse> {
@@ -4235,6 +5853,9 @@ fn collect_stix_objects_from_rules(rules: &[CatalogRuleEntry]) -> Vec<StixObject
                     pap: None,
                     created_at: None,
                     first_seen: None,
+                    source: Some("local".to_string()),
+                    aliases: Vec::new(),
+                    external_references: Vec::new(),
                 });
         }
     }
@@ -5047,6 +6668,55 @@ mod tests {
     }
 
     #[test]
+    fn save_rule_accepts_valid_payload() {
+        with_test_config_dir("save_rule_ok", || {
+            let request = HttpRequest {
+                method: "POST".to_string(),
+                path: "/api/rules/save".to_string(),
+                query: HashMap::new(),
+                headers: HashMap::new(),
+                body: serde_json::json!({
+                    "rule": "[process:name = 'cmd.exe']",
+                    "name": "Save test rule",
+                    "description": "Rule saved from API test",
+                    "confidence": 70,
+                    "tlp": "TLP:GREEN",
+                    "pap": "PAP:GREEN"
+                })
+                .to_string()
+                .into_bytes(),
+            };
+
+            let response = save_rule(&request).expect("save rule response");
+            assert_eq!(response.status, 200);
+        });
+    }
+
+    #[test]
+    fn save_rule_rejects_confidence_out_of_range() {
+        with_test_config_dir("save_rule_invalid_confidence", || {
+            let request = HttpRequest {
+                method: "POST".to_string(),
+                path: "/api/rules/save".to_string(),
+                query: HashMap::new(),
+                headers: HashMap::new(),
+                body: serde_json::json!({
+                    "rule": "[process:name = 'cmd.exe']",
+                    "name": "Invalid confidence rule",
+                    "confidence": 101
+                })
+                .to_string()
+                .into_bytes(),
+            };
+
+            let response = save_rule(&request).expect("save rule response");
+            assert_eq!(response.status, 400);
+            let body: serde_json::Value = serde_json::from_slice(&response.body).expect("json");
+            assert_eq!(body["error"], "confidence_out_of_range");
+        });
+    }
+
+    #[test]
     fn status_severity_maps_expected_values() {
         assert_eq!(status_severity("exact"), "success");
         assert_eq!(status_severity("schema-dependent"), "warning");
@@ -5526,6 +7196,74 @@ mod tests {
     }
 
     #[test]
+    fn opencti_settings_default_to_empty_local_source() {
+        with_test_config_dir("opencti_empty_settings", || {
+            let state = WebState::new("admin", "secret-pass", false, false).expect("state");
+            let principal = state
+                .authenticate_local("admin", "secret-pass")
+                .expect("admin principal");
+
+            let view = state.current_opencti_settings_view(&principal);
+            assert!(!view.opencti_enabled);
+            assert_eq!(view.opencti_endpoint, None);
+            assert!(!view.opencti_api_key_set);
+            assert_eq!(view.stix_catalog_source, "local");
+            assert_eq!(view.effective_source, "local");
+        });
+    }
+
+    #[test]
+    fn opencti_failure_falls_back_to_local_catalog() {
+        with_test_config_dir("opencti_local_fallback", || {
+            let state = WebState::new("admin", "secret-pass", false, false).expect("state");
+            let principal = state
+                .authenticate_local("admin", "secret-pass")
+                .expect("admin principal");
+            save_stix_catalog(&[StixCatalogEntry {
+                stix_id: "malware--01234567-89ab-4def-8abc-0123456789ab".to_string(),
+                stix_type: "malware".to_string(),
+                name: "Emotet".to_string(),
+                description: Some("Local fallback fixture".to_string()),
+                tlp: Some("TLP:GREEN".to_string()),
+                pap: Some("PAP:GREEN".to_string()),
+                created_at: Some("2026-01-01".to_string()),
+                first_seen: Some("2026-01-01".to_string()),
+            }])
+            .expect("save local stix object");
+            state
+                .update_current_opencti_settings(
+                    &principal,
+                    UserOpenCtiSettingsUpdateRequest {
+                        opencti_enabled: Some(true),
+                        opencti_endpoint: Some("http://127.0.0.1:9/graphql".to_string()),
+                        opencti_api_key: Some("test-key".to_string()),
+                        stix_catalog_source: Some(StixCatalogSource::OpenCti),
+                    },
+                )
+                .expect("update OpenCTI settings");
+
+            let mut query = HashMap::new();
+            query.insert("q".to_string(), "emotet".to_string());
+            let request = HttpRequest {
+                method: "GET".to_string(),
+                path: "/api/stix-objects".to_string(),
+                query,
+                headers: HashMap::new(),
+                body: Vec::new(),
+            };
+            let response =
+                list_stix_objects(&request, &principal, &state).expect("list stix objects");
+            assert_eq!(response.status, 200);
+            let body: serde_json::Value =
+                serde_json::from_slice(&response.body).expect("json response");
+            assert_eq!(body["source"], "opencti");
+            assert_eq!(body["effective_source"], "local");
+            assert_eq!(body["fallback_used"], true);
+            assert_eq!(body["entries"][0]["name"], "Emotet");
+        });
+    }
+
+    #[test]
     fn bootstrap_admin_and_no_login_disable_self_password_rotation() {
         with_test_config_dir("password_policy", || {
             let state = WebState::new("admin", "secret-pass", false, false).expect("state");
@@ -5676,5 +7414,273 @@ mod tests {
         assert_eq!(value["executor"], "spuc-agent");
         assert_eq!(value["manifest"], "campaign.yaml");
         assert!(value["artifacts"].is_array());
+    }
+
+    #[test]
+    fn user_can_create_and_list_multiple_api_tokens() {
+        with_test_config_dir("api_tokens_multi", || {
+            let state = WebState::new("admin", "secret-pass", false, false).expect("state");
+            let principal = state
+                .authenticate_local("admin", "secret-pass")
+                .expect("principal");
+
+            state
+                .create_user_api_token(&principal, "Token A", None)
+                .expect("token a");
+            state
+                .create_user_api_token(&principal, "Token B", None)
+                .expect("token b");
+
+            let entries = state.list_user_api_tokens(&principal);
+            assert_eq!(entries.len(), 2);
+        });
+    }
+
+    #[test]
+    fn invalid_and_revoked_tokens_are_rejected() {
+        with_test_config_dir("api_tokens_reject", || {
+            let state = WebState::new("admin", "secret-pass", false, false).expect("state");
+            let principal = state
+                .authenticate_local("admin", "secret-pass")
+                .expect("principal");
+
+            let (entry, token_value) = state
+                .create_user_api_token(&principal, "Token", None)
+                .expect("token create");
+            assert!(state
+                .resolve_principal_from_api_token(token_value.as_str())
+                .is_some());
+            assert!(state
+                .resolve_principal_from_api_token("invalid-token")
+                .is_none());
+
+            state
+                .revoke_user_api_token(&principal, entry.id.as_str())
+                .expect("revoke token");
+            assert!(state
+                .resolve_principal_from_api_token(token_value.as_str())
+                .is_none());
+        });
+    }
+
+    #[test]
+    fn token_auth_updates_last_used_at() {
+        with_test_config_dir("api_tokens_last_used", || {
+            let state = WebState::new("admin", "secret-pass", false, false).expect("state");
+            let principal = state
+                .authenticate_local("admin", "secret-pass")
+                .expect("principal");
+
+            let (created, token_value) = state
+                .create_user_api_token(&principal, "Token", None)
+                .expect("token create");
+            let before = state
+                .list_user_api_tokens(&principal)
+                .into_iter()
+                .find(|entry| entry.id == created.id)
+                .expect("entry")
+                .last_used_at;
+            assert!(before.is_none());
+
+            assert!(state
+                .resolve_principal_from_api_token(token_value.as_str())
+                .is_some());
+            let after = state
+                .list_user_api_tokens(&principal)
+                .into_iter()
+                .find(|entry| entry.id == created.id)
+                .expect("entry")
+                .last_used_at;
+            assert!(after.is_some());
+        });
+    }
+
+    #[test]
+    fn translate_endpoint_requires_and_honors_api_tokens() {
+        with_test_config_dir("translate_token_auth", || {
+            let state = WebState::new("admin", "secret-pass", false, false).expect("state");
+            let principal = state
+                .authenticate_local("admin", "secret-pass")
+                .expect("principal");
+            let (entry, token_value) = state
+                .create_user_api_token(&principal, "Translate token", None)
+                .expect("token create");
+
+            let missing = HttpRequest {
+                method: "POST".to_string(),
+                path: "/api/translate/stix-pattern".to_string(),
+                query: HashMap::new(),
+                headers: HashMap::new(),
+                body: serde_json::json!({
+                    "type": "indicator",
+                    "pattern_type": "stix",
+                    "pattern": "[process:name = 'cmd.exe']"
+                })
+                .to_string()
+                .into_bytes(),
+            };
+            let missing_resp = route(missing, &state).expect("missing token response");
+            assert_eq!(missing_resp.status, 401);
+
+            let mut ok_headers = HashMap::new();
+            ok_headers.insert(
+                "authorization".to_string(),
+                format!("Bearer {}", token_value),
+            );
+            let valid = HttpRequest {
+                method: "POST".to_string(),
+                path: "/api/translate/stix-pattern".to_string(),
+                query: HashMap::new(),
+                headers: ok_headers,
+                body: serde_json::json!({
+                    "type": "indicator",
+                    "pattern_type": "stix",
+                    "pattern": "[process:name = 'cmd.exe']",
+                    "targets": ["sigma"]
+                })
+                .to_string()
+                .into_bytes(),
+            };
+            let valid_resp = route(valid, &state).expect("valid translate response");
+            assert_eq!(valid_resp.status, 200);
+            let valid_body: serde_json::Value =
+                serde_json::from_slice(&valid_resp.body).expect("json");
+            assert_eq!(valid_body["status"], "success");
+            let first = valid_body["results"][0].clone();
+            assert!(first.get("stix").is_some());
+            assert!(first["stix"]["confidence"].as_u64().is_some());
+            assert!(first["stix"]["description"].is_string());
+            assert!(first["stix"]["comments"].is_array());
+
+            let default_targets = HttpRequest {
+                method: "POST".to_string(),
+                path: "/api/translate/stix-pattern".to_string(),
+                query: HashMap::new(),
+                headers: {
+                    let mut headers = HashMap::new();
+                    headers.insert(
+                        "authorization".to_string(),
+                        format!("Bearer {}", token_value),
+                    );
+                    headers
+                },
+                body: serde_json::json!({
+                    "type": "indicator",
+                    "pattern_type": "stix",
+                    "pattern": "[process:name = 'cmd.exe']"
+                })
+                .to_string()
+                .into_bytes(),
+            };
+            let default_targets_resp =
+                route(default_targets, &state).expect("default targets translate response");
+            assert_eq!(default_targets_resp.status, 200);
+            let default_targets_body: serde_json::Value =
+                serde_json::from_slice(&default_targets_resp.body).expect("json");
+            assert_eq!(default_targets_body["status"], "success");
+
+            state
+                .revoke_user_api_token(&principal, entry.id.as_str())
+                .expect("revoke token");
+            let mut revoked_headers = HashMap::new();
+            revoked_headers.insert(
+                "authorization".to_string(),
+                format!("Bearer {}", token_value),
+            );
+            let revoked = HttpRequest {
+                method: "POST".to_string(),
+                path: "/api/translate/stix-pattern".to_string(),
+                query: HashMap::new(),
+                headers: revoked_headers,
+                body: serde_json::json!({
+                    "type": "indicator",
+                    "pattern_type": "stix",
+                    "pattern": "[process:name = 'cmd.exe']"
+                })
+                .to_string()
+                .into_bytes(),
+            };
+            let revoked_resp = route(revoked, &state).expect("revoked token response");
+            assert_eq!(revoked_resp.status, 401);
+        });
+    }
+
+    #[test]
+    fn translate_endpoint_reports_invalid_pattern_and_empty_results() {
+        with_test_config_dir("translate_endpoint_errors", || {
+            let state = WebState::new("admin", "secret-pass", false, false).expect("state");
+            let principal = state
+                .authenticate_local("admin", "secret-pass")
+                .expect("principal");
+            let (_entry, token_value) = state
+                .create_user_api_token(&principal, "Translate token", None)
+                .expect("token create");
+
+            let mut headers = HashMap::new();
+            headers.insert(
+                "authorization".to_string(),
+                format!("Bearer {}", token_value),
+            );
+            let invalid = HttpRequest {
+                method: "POST".to_string(),
+                path: "/api/translate/stix-pattern".to_string(),
+                query: HashMap::new(),
+                headers: headers.clone(),
+                body: serde_json::json!({
+                    "type": "indicator",
+                    "pattern_type": "stix",
+                    "pattern": "[process:name = 'cmd.exe'"
+                })
+                .to_string()
+                .into_bytes(),
+            };
+            let invalid_resp = route(invalid, &state).expect("invalid pattern response");
+            assert_eq!(invalid_resp.status, 200);
+            let invalid_body: serde_json::Value =
+                serde_json::from_slice(&invalid_resp.body).expect("json");
+            assert_eq!(invalid_body["status"], "error");
+
+            let empty = HttpRequest {
+                method: "POST".to_string(),
+                path: "/api/translate/stix-pattern".to_string(),
+                query: HashMap::new(),
+                headers,
+                body: serde_json::json!({
+                    "type": "indicator",
+                    "pattern_type": "stix",
+                    "pattern": "[process:name = 'cmd.exe']",
+                    "targets": ["unknown-only"]
+                })
+                .to_string()
+                .into_bytes(),
+            };
+            let empty_resp = route(empty, &state).expect("empty result response");
+            assert_eq!(empty_resp.status, 200);
+            let empty_body: serde_json::Value =
+                serde_json::from_slice(&empty_resp.body).expect("json");
+            assert_eq!(empty_body["status"], "error");
+            assert_eq!(empty_body["results"].as_array().map(|v| v.len()), Some(0));
+
+            let malformed = HttpRequest {
+                method: "POST".to_string(),
+                path: "/api/translate/stix-pattern".to_string(),
+                query: HashMap::new(),
+                headers: {
+                    let mut headers = HashMap::new();
+                    headers.insert(
+                        "authorization".to_string(),
+                        format!("Bearer {}", token_value),
+                    );
+                    headers
+                },
+                body: br#"{ \"type\": \"indicator\", \"pattern_type\": \"stix\" }"#
+                    .to_vec(),
+            };
+            let malformed_resp = route(malformed, &state).expect("malformed payload response");
+            assert_eq!(malformed_resp.status, 400);
+            let malformed_body: serde_json::Value =
+                serde_json::from_slice(&malformed_resp.body).expect("json");
+            assert_eq!(malformed_body["error"], "invalid_request_payload");
+        });
     }
 }

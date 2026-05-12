@@ -187,8 +187,41 @@ mod tests {
     fn app_js_shows_saved_rule_navigation_toast_and_returns_to_rules_explorer() {
         assert!(APP_JS.contains("function showRuleSavedNavigationToast() {"));
         assert!(UI_TOAST_JS.contains("toast.saved_navigating_rules"));
+        assert!(APP_JS.contains("toast.rule_save_success"));
+        assert!(APP_JS.contains("toast.rule_save_error"));
+        assert!(UI_TOAST_JS.contains("class=\"toast-close\""));
+        assert!(UI_TOAST_JS.contains("toast-variant-warning"));
         assert!(UI_TOAST_JS.contains("toast-check-success"));
         assert!(UI_TOAST_JS.contains("class=\"toast-inline\""));
+        assert!(
+            TRANSLATIONS_JSON.contains("\"toast.rule_save_success\": \"Rule saved successfully\"")
+        );
+        assert!(TRANSLATIONS_JSON
+            .contains("\"toast.rule_save_error\": \"The rule could not be saved\""));
+    }
+
+    #[test]
+    fn app_js_supports_opencti_visibility_and_personal_api_tokens() {
+        assert!(APP_JS.contains("function toggleOpenCtiConfigVisibility(sourceValue) {"));
+        assert!(APP_JS.contains("function renderTranslationCurlExample() {"));
+        assert!(APP_JS.contains("function installSettingsPersonalAccordionBehavior() {"));
+        assert!(APP_JS.contains("settings-opencti-config-fields"));
+        assert!(APP_JS.contains("settings-opencti-curl-example"));
+        assert!(APP_JS.contains("settings-opencti-curl-copy"));
+        assert!(APP_JS.contains("settings-opencti-curl-endpoint"));
+        assert!(APP_JS.contains("settings-opencti-curl-token"));
+        assert!(APP_JS.contains("/api/user/tokens"));
+        assert!(APP_JS.contains("settings-token-rotate"));
+        assert!(APP_JS.contains("settings-token-revoke"));
+        assert!(APP_JS.contains("settings-api-token-secret-copy"));
+        assert!(TRANSLATIONS_JSON
+            .contains("\"settings.opencti.curl_title\": \"Translation API curl example\""));
+        assert!(TRANSLATIONS_JSON
+            .contains("\"settings.opencti.curl_title\": \"Ejemplo curl de la API de traducción\""));
+        assert!(TRANSLATIONS_JSON.contains("\"settings.api_tokens.title\": \"Personal API tokens\""));
+        assert!(TRANSLATIONS_JSON.contains("\"settings.api_tokens.title\": \"Tokens API personales\""));
+        assert!(TRANSLATIONS_JSON.contains("\"settings.personal.storage_group_title\": \"Document management\""));
+        assert!(TRANSLATIONS_JSON.contains("\"settings.personal.api_group_title\": \"Tokens API personales y API de traducción\""));
     }
 
     #[test]
@@ -215,8 +248,14 @@ mod tests {
         assert!(APP_CSS.contains(".compact-list"));
         assert!(APP_CSS.contains(".rule-tech-comments"));
         assert!(APP_CSS.contains(".toast-check-success"));
+        assert!(APP_CSS.contains(".toast-variant-success"));
+        assert!(APP_CSS.contains(".toast-variant-error"));
+        assert!(APP_CSS.contains(".toast-variant-warning"));
+        assert!(APP_CSS.contains(".toast-close"));
         assert!(APP_CSS.contains("@keyframes toast-check-pop"));
         assert!(APP_CSS.contains("@keyframes toast-check-pulse"));
+        assert!(APP_CSS.contains(".settings-personal-accordion {"));
+        assert!(APP_CSS.contains(".settings-personal-accordion-summary {"));
         assert!(APP_CSS.contains(".detail-tab-content"));
         assert!(APP_CSS.contains(".detail-tab-icon"));
         assert!(APP_CSS.contains(".rule-preview-more"));
@@ -224,6 +263,17 @@ mod tests {
         assert!(APP_CSS.contains(".rule-confidence-meter"));
         assert!(APP_CSS.contains(".rule-output-empty"));
         assert!(APP_CSS.contains("#adversaries-catalog-shell .icon-only"));
+    }
+
+    #[test]
+    fn app_js_keeps_adversary_row_and_card_click_handlers_complete() {
+        assert!(APP_JS.contains(
+            "const row = target.closest(\"#adversaries-table tbody tr[data-adversary-row-id]\")"
+        ));
+        assert!(APP_JS.contains(
+            "const card = target.closest(\".adversary-card[data-adversary-card-id]\")"
+        ));
+        assert!(APP_JS.contains("await openAdversaryDetail(adversaryId);"));
     }
 
     #[test]
@@ -242,6 +292,21 @@ mod tests {
         assert!(INDEX_HTML.contains("adversaries-view-table"));
         assert!(INDEX_HTML.contains("adversaries-table-wrap"));
         assert!(INDEX_HTML.contains("adversaries-cards"));
+    }
+
+    #[test]
+    fn index_html_includes_settings_api_tokens_and_opencti_fields_container() {
+        assert!(INDEX_HTML.contains("id=\"settings-storage-opencti-accordion\""));
+        assert!(INDEX_HTML.contains("id=\"settings-api-translation-accordion\""));
+        assert!(INDEX_HTML.contains("id=\"settings-opencti-config-fields\""));
+        assert!(INDEX_HTML.contains("id=\"settings-opencti-curl-example\""));
+        assert!(INDEX_HTML.contains("id=\"settings-opencti-curl-copy\""));
+        assert!(INDEX_HTML.contains("id=\"settings-opencti-curl-endpoint\""));
+        assert!(INDEX_HTML.contains("id=\"settings-opencti-curl-token\""));
+        assert!(INDEX_HTML.contains("id=\"settings-api-token-form\""));
+        assert!(INDEX_HTML.contains("id=\"settings-api-token-name\""));
+        assert!(INDEX_HTML.contains("id=\"settings-api-tokens-list\""));
+        assert!(INDEX_HTML.contains("id=\"settings-api-token-secret\""));
     }
 
     #[test]
@@ -352,10 +417,11 @@ mod tests {
     fn index_html_keeps_rulelab_save_button_visible() {
         assert!(INDEX_HTML.contains("class=\"rulelab-head-actions\""));
         assert!(INDEX_HTML.contains("id=\"rulelab-export-bundle\""));
-        assert!(INDEX_HTML.contains("id=\"rulelab-save\" class=\"btn btn-success icon-only\""));
-        assert!(INDEX_HTML.contains("id=\"rulelab-save\" class=\"btn btn-success icon-only\" data-i18n-title=\"rulelab.save\""));
-        assert!(INDEX_HTML.contains("id=\"rulelab-save\" class=\"btn btn-success icon-only\" data-i18n-title=\"rulelab.save\" aria-label=\"Save Rule\" title=\"Save Rule\" disabled"));
+        assert!(INDEX_HTML.contains("id=\"rulelab-save\" class=\"btn btn-ghost rulelab-save-button\""));
+        assert!(INDEX_HTML.contains("id=\"rulelab-save\" class=\"btn btn-ghost rulelab-save-button\" data-i18n=\"rulelab.save\""));
+        assert!(INDEX_HTML.contains("id=\"rulelab-save\" class=\"btn btn-ghost rulelab-save-button\" data-i18n=\"rulelab.save\" aria-label=\"Save Rule\" title=\"Save Rule\" disabled"));
         assert!(APP_CSS.contains(".rulelab-head-actions {"));
+        assert!(APP_CSS.contains(".rulelab-save-button {"));
         assert!(INDEX_HTML.contains("id=\"rulelab-save-dialog\""));
         assert!(INDEX_HTML.contains("id=\"rulelab-save-form\""));
         assert!(INDEX_HTML.contains("id=\"rulelab-editing-banner\""));
@@ -400,7 +466,9 @@ mod tests {
         assert!(APP_JS.contains("if (route === \"adversaries-catalog\") route = \"adversaries\";"));
         assert!(APP_JS.contains("mountAdversaryEditorSurface();"));
         assert!(APP_JS.contains("state.adversaries.workspaceMode = \"editor\";"));
-        assert!(APP_JS.contains("const showEmptyState = showCatalog && state.adversaries.loaded && !hasEntries;"));
+        assert!(APP_JS.contains(
+            "const showEmptyState = showCatalog && state.adversaries.loaded && !hasEntries;"
+        ));
         assert!(APP_JS.contains("action === \"adversaries-help-open\""));
         assert!(APP_JS.contains("action === \"adversaries-empty-create\""));
         assert!(TRANSLATIONS_JSON.contains("\"adversaries.editor.editing_title\""));
@@ -575,9 +643,8 @@ mod tests {
         assert!(
             INDEX_HTML.contains("id=\"stix-export-selected\" class=\"btn btn-success icon-only\"")
         );
-        assert!(
-            INDEX_HTML.contains("id=\"stix-export-selected-stix\" class=\"btn btn-warning icon-only\"")
-        );
+        assert!(INDEX_HTML
+            .contains("id=\"stix-export-selected-stix\" class=\"btn btn-warning icon-only\""));
         assert!(
             INDEX_HTML.contains("id=\"stix-delete-selected\" class=\"btn btn-danger icon-only\"")
         );

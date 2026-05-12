@@ -33,3 +33,52 @@ jobs:
 
       - name: Build release binaries
         run: cargo build --release -q -p spuc-cli --bins
+
+  desktop-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            pkg-config \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libgtk-3-dev
+
+      - name: Cargo test (spuc-gui)
+        run: cargo test -q -p spuc-gui
+
+      - name: Build release desktop binaries
+        run: |
+          cargo build --release -q -p spuc-cli --bins
+          cargo build --release -q -p spuc-gui
+
+      - name: Verify release bundle contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(awk -F'\"' '/^version[[:space:]]*=/{print $2; exit}' Cargo.toml)"
+          OUT="dist/spuc-v${VERSION}-x86_64-unknown-linux-gnu"
+          mkdir -p "${OUT}"
+          cp target/release/spuc "${OUT}/"
+          cp target/release/spuc-agent "${OUT}/"
+          cp target/release/spuc-gui "${OUT}/"
+          test -x "${OUT}/spuc"
+          test -x "${OUT}/spuc-agent"
+          test -x "${OUT}/spuc-gui"

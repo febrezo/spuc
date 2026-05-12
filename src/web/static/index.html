@@ -461,12 +461,12 @@
                   <input id="stix-objects-search" type="search" data-action="stix-search" data-i18n-placeholder="stix_objects.search.placeholder" placeholder="Search by name, ID or description">
                 </label>
               </div>
-              <div id="stix-bulk-edit" class="rules-bulk-edit hidden">
-                <span id="stix-bulk-count" class="muted"></span>
-                <button id="stix-bulk-clear" class="btn btn-danger" data-action="stix-bulk-clear" data-i18n="common.clear_selection">Clear selection</button>
-                <button id="stix-bulk-cancel" class="btn btn-danger" data-action="stix-bulk-cancel" data-i18n="rules.bulk.cancel">Abort</button>
-              </div>
-              <div class="stix-actions-right">
+              <div class="rules-actions-inline">
+                <button id="stix-bulk-toggle" class="btn btn-ghost icon-only" data-action="stix-bulk-toggle" data-i18n-title="rules.filters.toggle" aria-label="Filters" title="Filters"><i class="fa-solid fa-sliders" aria-hidden="true"></i></button>
+                <div class="rules-view-mode" role="group" aria-label="STIX objects view mode">
+                  <button id="stix-view-cards" class="btn btn-ghost icon-only" data-i18n-title="rules.view.cards" aria-label="Cards" title="Cards" disabled><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i></button>
+                  <button id="stix-view-table" class="btn btn-ghost icon-only active" data-i18n-title="rules.view.table" aria-label="Table" title="Table" disabled><i class="fa-solid fa-table-list" aria-hidden="true"></i></button>
+                </div>
                 <button id="stix-create-open-table" class="btn btn-primary icon-only" data-action="stix-create-open" data-i18n-title="stix_objects.create" aria-label="Create" title="Create"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
                 <label class="btn btn-primary btn-import icon-only stix-import-label" data-i18n-title="stix_objects.import" aria-label="Import STIX objects" title="Import STIX objects">
                   <i class="fa-solid fa-file-import" aria-hidden="true"></i>
@@ -474,10 +474,17 @@
                 </label>
                 <button id="stix-export-selected" class="btn btn-success icon-only" data-action="stix-export-selected" data-i18n-title="rules.bulk.export_selected" aria-label="Export selected" title="Export selected" disabled><i class="fa-solid fa-file-export" aria-hidden="true"></i></button>
                 <button id="stix-export-selected-stix" class="btn btn-warning icon-only" data-action="stix-export-selected-stix" data-i18n-title="rules.export_selected.download_bundle" aria-label="STIX" title="STIX" disabled><i class="fa-solid fa-file-code" aria-hidden="true"></i></button>
+                <button id="stix-duplicate-selected" class="btn btn-ghost icon-only" data-action="stix-duplicate-selected" data-i18n-title="rules.bulk.duplicate_selected" aria-label="Duplicate selected" title="Duplicate selected" disabled><i class="fa-regular fa-clone" aria-hidden="true"></i></button>
                 <button id="stix-delete-selected" class="btn btn-danger icon-only" data-action="stix-delete-selected" data-i18n-title="rules.bulk.delete_selected" aria-label="Delete selected" title="Delete selected" disabled><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
+              </div>
+              <div id="stix-bulk-edit" class="rules-bulk-edit hidden">
+                <span id="stix-bulk-count" class="muted"></span>
+                <button id="stix-bulk-clear" class="btn btn-danger" data-action="stix-bulk-clear" data-i18n="common.clear_selection">Clear selection</button>
+                <button id="stix-bulk-cancel" class="btn btn-danger" data-action="stix-bulk-cancel" data-i18n="rules.bulk.cancel">Abort</button>
               </div>
             </div>
             <div class="table-meta" id="stix-objects-meta"></div>
+            <div id="stix-objects-status" class="stix-source-status muted"></div>
             <div class="table-wrap"><table id="stix-objects-table"></table></div>
           </article>
         </section>
@@ -490,7 +497,6 @@
               <h3 data-i18n="rulelab.editor.title">STIX Pattern Editor</h3>
               <div class="rulelab-head-actions">
                 <button id="rulelab-export-bundle" class="btn btn-warning icon-only" data-action="rulelab-export-bundle" data-i18n-title="rulelab.export_bundle" aria-label="Export STIX bundle" title="Export STIX bundle" disabled><i class="fa-solid fa-file-export" aria-hidden="true"></i></button>
-                <button id="rulelab-save" class="btn btn-success icon-only" data-i18n-title="rulelab.save" aria-label="Save Rule" title="Save Rule" disabled><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i></button>
               </div>
             </header>
             <p class="muted rulelab-doc-link">
@@ -507,6 +513,7 @@
                 <span class="rulelab-pattern-status-label" data-i18n="rulelab.pattern_status.label">Rule status</span>
                 <span id="rulelab-pattern-status-text" class="rulelab-pattern-status-value" data-i18n="rulelab.pattern_status.empty">No pattern entered</span>
               </div>
+              <button id="rulelab-save" class="btn btn-ghost rulelab-save-button" data-i18n="rulelab.save" aria-label="Save Rule" title="Save Rule" disabled>Save rule</button>
             </div>
             <div class="compatibility-inline is-empty">
               <header class="compatibility-header">
@@ -589,7 +596,6 @@
                   <div id="adversaries-columns-menu" class="column-menu hidden"></div>
                 </div>
                 <button id="adversaries-create-open" class="btn btn-primary icon-only" data-action="adversaries-create-open" data-i18n-title="adversaries.create.submit" title="Create new adversary" aria-label="Create new adversary"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
-                <button id="adversaries-help-open" class="btn btn-ghost icon-only" data-action="adversaries-help-open" data-i18n-title="adversaries.help_agent.button" title="How to test the agent" aria-label="How to test the agent"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                 <button id="adversaries-duplicate-selected" class="btn btn-ghost icon-only" data-action="adversaries-duplicate-selected" aria-label="Duplicate selected" title="Duplicate selected" disabled><i class="fa-regular fa-clone" aria-hidden="true"></i></button>
                 <button id="adversaries-delete-selected" class="btn btn-danger icon-only" data-i18n-title="adversaries.bulk.delete_selected" aria-label="Delete selected" title="Delete selected" disabled><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
               </div>
@@ -636,6 +642,23 @@
           </article>
         </section>
 
+        <section id="adversary-editor-view" class="stack hidden">
+          <article id="panel-adversary-editor" class="glass detail-card hidden">
+            <header class="detail-head">
+              <div class="detail-head-meta">
+                <h3 id="adversary-editor-heading">Adversary</h3>
+                <p id="adversary-editor-subtitle" class="muted"></p>
+              </div>
+              <div class="detail-head-actions">
+                <button type="button" class="btn btn-ghost" data-action="adversary-back-to-list" data-i18n="common.back">Back</button>
+                <button type="button" id="adversary-editor-secondary" class="btn btn-ghost hidden"></button>
+                <button type="button" id="adversary-editor-primary" class="btn btn-primary"></button>
+              </div>
+            </header>
+            <div id="adversary-editor-mount" class="stack"></div>
+          </article>
+        </section>
+
         <section id="adversaries-payloads-shell" class="stack hidden">
           <article id="payloads-welcome-card" class="glass adversaries-empty-state hidden">
             <div class="adversaries-empty-body">
@@ -648,72 +671,53 @@
           </article>
 
           <section id="payloads-catalog-shell" class="stack hidden">
-            <article class="glass table-card">
-              <div id="payload-catalog-toolbar" class="toolbar-card payloads-toolbar">
-                <div class="payloads-top-row rules-top-row">
-                  <label class="stix-search-wrap payload-search-wrap" for="payload-catalog-search">
-                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-                    <input id="payload-catalog-search" type="search" data-i18n-placeholder="adversaries.payload.search" placeholder="Search payloads">
-                  </label>
-                  <div class="payloads-actions-inline rules-actions-inline">
-                    <button id="payload-catalog-filters-toggle" type="button" class="btn btn-ghost icon-only" data-action="payload-catalog-filters-toggle" data-i18n-title="rules.filters.toggle" title="Filters" aria-label="Filters" aria-expanded="false"><i class="fa-solid fa-sliders" aria-hidden="true"></i></button>
-                    <div class="rules-view-mode" role="group" aria-label="Payload view mode">
-                      <button id="payload-view-cards" class="btn btn-ghost icon-only" data-action="payload-view-mode" data-mode="cards" data-i18n-title="rules.view.cards" aria-label="Cards" title="Cards"><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i></button>
-                      <button id="payload-view-table" class="btn btn-ghost icon-only active" data-action="payload-view-mode" data-mode="table" data-i18n-title="rules.view.table" aria-label="Table" title="Table"><i class="fa-solid fa-table-list" aria-hidden="true"></i></button>
-                    </div>
-                    <div class="column-picker">
-                      <button id="payloads-columns-toggle" class="btn btn-ghost icon-only" data-action="payloads-columns-toggle" data-i18n-title="common.show_hide_columns" aria-label="View columns" title="View columns"><i class="fa-solid fa-table-columns" aria-hidden="true"></i></button>
-                      <div id="payloads-columns-menu" class="column-menu hidden"></div>
-                    </div>
-                    <button id="payload-catalog-export-selected" type="button" class="btn btn-success icon-only" data-action="payload-catalog-export-selected" data-i18n-title="rules.bulk.export_selected" title="Export selected" aria-label="Export selected" disabled><i class="fa-solid fa-file-export" aria-hidden="true"></i></button>
-                    <button id="payload-catalog-create-header" type="button" class="btn btn-primary icon-only" data-action="payload-catalog-open-create" data-i18n-title="adversaries.payload.catalog_create_btn" title="New payload" aria-label="New payload"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
-                    <button id="payload-catalog-delete-selected" type="button" class="btn btn-danger icon-only" data-action="payload-catalog-delete-selected" data-i18n-title="rules.bulk.delete_selected" title="Delete selected" aria-label="Delete selected" disabled><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
-                    <span id="payload-catalog-bulk-count" class="muted payload-bulk-count-inline"></span>
-                  </div>
+            <article class="table-card glass payloads-catalog-card">
+              <div class="rules-top-row">
+                <label class="stix-search-wrap rules-search-wrap" for="payload-catalog-search">
+                  <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                  <input id="payload-catalog-search" type="search" data-i18n-placeholder="adversaries.payload.search" placeholder="Search payloads">
+                </label>
+                <div class="rules-actions-inline">
+                  <button id="payload-catalog-filters-toggle" class="btn btn-ghost icon-only" type="button" data-action="payload-catalog-filters-toggle" data-i18n-title="rules.filters.toggle" title="Filters" aria-label="Filters" aria-expanded="false"><i class="fa-solid fa-sliders" aria-hidden="true"></i></button>
+                  <button id="payload-catalog-create-header" type="button" class="btn btn-primary icon-only" data-action="payload-catalog-open-create" data-i18n-title="adversaries.payload.catalog_create_btn" title="New payload" aria-label="New payload"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
+                  <button id="payload-catalog-duplicate-selected" type="button" class="btn btn-ghost icon-only" data-action="payload-catalog-duplicate-selected" data-i18n-title="rules.bulk.duplicate_selected" title="Duplicate selected" aria-label="Duplicate selected" disabled><i class="fa-regular fa-clone" aria-hidden="true"></i></button>
+                  <button id="payload-catalog-delete-selected" type="button" class="btn btn-danger icon-only" data-action="payload-catalog-delete-selected" data-i18n-title="rules.bulk.delete_selected" title="Delete selected" aria-label="Delete selected" disabled><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
                 </div>
-                <div id="payload-catalog-filters-revealer" class="payload-filters-revealer">
-                  <div class="payload-filters-revealer-inner">
-                    <div class="payload-filters-row">
-                      <label class="rules-filter-field">
-                        <span data-i18n="adversaries.payload.language">Payload type</span>
-                        <select id="payload-catalog-tech" multiple size="5">
-                          <option value="bash">Bash</option>
-                          <option value="powershell">PowerShell</option>
-                          <option value="python">Python</option>
-                          <option value="javascript">JavaScript</option>
-                          <option value="rubber_ducky">Rubber Ducky / HID</option>
-                        </select>
-                      </label>
-                      <label class="rules-filter-field">
-                        <span data-i18n="adversaries.payload.runner">Runner</span>
-                        <select id="payload-catalog-runner" multiple size="6">
-                          <option value="spuc-agent">spuc-agent</option>
-                          <option value="bash">bash</option>
-                          <option value="powershell">powershell</option>
-                          <option value="python">python</option>
-                          <option value="javascript">javascript</option>
-                          <option value="rubber_ducky">rubber_ducky / HID</option>
-                        </select>
-                      </label>
-                    </div>
-                  </div>
+              </div>
+              <div id="payload-catalog-filters-revealer" class="rules-filters-revealer">
+                <div class="rules-filters-revealer-inner toolbar-card glass">
+                  <label class="rules-filter-field">
+                    <span data-i18n="adversaries.payload.language">Payload type</span>
+                    <select id="payload-catalog-tech" multiple>
+                      <option value="bash">bash</option>
+                      <option value="powershell">powershell</option>
+                      <option value="python">python</option>
+                      <option value="javascript">javascript</option>
+                      <option value="rubber_ducky">rubber_ducky</option>
+                    </select>
+                  </label>
+                  <label class="rules-filter-field">
+                    <span data-i18n="adversaries.payload.runner">Runner</span>
+                    <select id="payload-catalog-runner" multiple>
+                      <option value="spuc-agent">spuc-agent</option>
+                      <option value="bash">bash</option>
+                      <option value="powershell">powershell</option>
+                    </select>
+                  </label>
                 </div>
               </div>
               <div class="table-meta" id="payload-catalog-meta"></div>
-              <div id="payload-catalog-table-wrap" class="table-wrap payload-catalog-table-wrap">
-                <table id="payload-catalog-table" class="payload-catalog-table"></table>
+              <div id="payload-catalog-status" class="stix-source-status muted">
+                <span id="payload-catalog-bulk-count" class="muted payload-bulk-count-inline"></span>
               </div>
-              <div id="payload-catalog-cards" class="rules-cards hidden"></div>
+              <div class="table-wrap"><table id="payload-catalog-table"></table></div>
             </article>
           </section>
         </section>
+
       </section>
 
       <section id="panel-learning" class="panel">
-        <article class="learning-intro glass">
-          <span data-i18n="learning.intro.body">STIX Patterns are declarative expressions used to model observables and detection logic in a portable way.</span>
-          <a href="https://docs.oasis-open.org/cti/stix/v2.1/cs02/stix-v2.1-cs02.html#_e8slinrhxcc9" target="_blank" rel="noreferrer" data-i18n="learning.intro.link">STIX Patterning (OASIS)</a>.
-        </article>
         <article class="learning-toolbar glass">
           <input id="learning-search" type="search" data-i18n-placeholder="learning.search.placeholder" placeholder="Search exercises...">
           <div class="learning-toolbar-controls">
@@ -764,69 +768,184 @@
           </article>
 
           <section id="settings-tab-panel-personal" class="settings-tab-panel" data-settings-panel="personal">
-            <article class="glass settings-card settings-profile-card">
-              <header class="settings-card-head">
+            <details id="settings-access-accordion" class="glass settings-card settings-personal-accordion" open>
+              <summary class="settings-personal-accordion-summary">
                 <div>
                   <h3 data-i18n="settings.profile.title">Personal settings</h3>
                   <p class="muted" data-i18n="settings.profile.subtitle">Adjust your language, theme and account display name.</p>
                 </div>
-              </header>
-              <div class="settings-profile-grid">
-                <form id="settings-profile-form" class="stack">
-                  <label>
-                    <span data-i18n="settings.profile.display_name">Display name</span>
-                    <input id="settings-display-name" data-i18n-placeholder="settings.profile.display_name_placeholder" placeholder="How your name should appear">
-                  </label>
-                  <div class="settings-form-grid">
-                    <label>
-                      <span data-i18n="settings.profile.language">Language</span>
-                      <select id="settings-locale">
-                        <option value="en">English</option>
-                        <option value="es">Español</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span data-i18n="settings.profile.theme">Theme</span>
-                      <select id="settings-theme">
-                        <option value="dark" data-i18n="settings.profile.theme_dark">Dark</option>
-                        <option value="light" data-i18n="settings.profile.theme_light">Light</option>
-                      </select>
-                    </label>
-                  </div>
-                  <label>
-                    <span data-i18n="settings.profile.account_id">Account ID</span>
-                    <input id="settings-account-id" readonly>
-                  </label>
-                  <div class="dialog-actions settings-actions-right">
-                    <button type="submit" class="btn btn-primary" data-i18n="settings.profile.save">Save profile</button>
-                  </div>
-                </form>
-
-                <div class="settings-personal-side-stack">
-                  <section id="settings-password-section" class="settings-password-card">
-                    <h4 data-i18n="settings.password.title">Change password</h4>
-                    <p class="muted" data-i18n="settings.password.subtitle">Update your local access password when this session allows it.</p>
-                    <p id="settings-password-disabled" class="muted hidden"></p>
-                    <form id="settings-password-form" class="stack">
-                      <input id="settings-current-password" type="password" data-i18n-placeholder="admin.password.current" placeholder="Current password">
-                      <input id="settings-next-password" type="password" data-i18n-placeholder="admin.password.new" placeholder="New password" required>
-                      <div class="dialog-actions settings-actions-right">
-                        <button id="settings-password-submit" type="submit" class="btn btn-primary" data-i18n="settings.password.submit">Change password</button>
-                      </div>
-                    </form>
-                  </section>
-
-                  <section class="settings-password-card">
-                    <h4 data-i18n="settings.totp.title">Two-factor authentication (TOTP)</h4>
-                    <p class="muted" data-i18n="settings.totp.subtitle">Manage your authenticator app enrollment for this account.</p>
-                    <p class="muted" data-i18n="settings.totp.not_available">TOTP enrollment is not available in this build yet.</p>
-                    <div class="dialog-actions settings-actions-right">
-                      <button type="button" class="btn btn-primary" disabled data-i18n="settings.totp.setup">Configure TOTP</button>
+                <span class="settings-personal-accordion-expander" aria-hidden="true"></span>
+              </summary>
+              <div class="settings-personal-accordion-body">
+                <div class="settings-profile-grid">
+                  <form id="settings-profile-form" class="stack">
+                    <div class="settings-form-inline-head">
+                      <span class="muted settings-form-inline-copy" data-i18n="settings.profile.access_hint">Manage your visible identity and local access preferences.</span>
+                      <button id="settings-profile-save" type="submit" class="btn btn-primary" data-i18n="settings.profile.save" disabled>Save profile</button>
                     </div>
-                  </section>
+                    <label>
+                      <span data-i18n="settings.profile.display_name">Display name</span>
+                      <input id="settings-display-name" data-i18n-placeholder="settings.profile.display_name_placeholder" placeholder="How your name should appear">
+                    </label>
+                    <div class="settings-form-grid">
+                      <label>
+                        <span data-i18n="settings.profile.language">Language</span>
+                        <select id="settings-locale">
+                          <option value="en">English</option>
+                          <option value="es">Español</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span data-i18n="settings.profile.theme">Theme</span>
+                        <select id="settings-theme">
+                          <option value="dark" data-i18n="settings.profile.theme_dark">Dark</option>
+                          <option value="light" data-i18n="settings.profile.theme_light">Light</option>
+                        </select>
+                      </label>
+                    </div>
+                    <label>
+                      <span data-i18n="settings.profile.account_id">Account ID</span>
+                      <input id="settings-account-id" readonly>
+                    </label>
+                  </form>
+
+                  <div class="settings-personal-side-stack">
+                    <section id="settings-password-section" class="settings-password-card">
+                      <h4 data-i18n="settings.password.title">Change password</h4>
+                      <p class="muted" data-i18n="settings.password.subtitle">Update your local access password when this session allows it.</p>
+                      <p id="settings-password-disabled" class="muted hidden"></p>
+                      <form id="settings-password-form" class="stack">
+                        <input id="settings-current-password" type="password" data-i18n-placeholder="admin.password.current" placeholder="Current password">
+                        <input id="settings-next-password" type="password" data-i18n-placeholder="admin.password.new" placeholder="New password" required>
+                        <div class="dialog-actions settings-actions-right">
+                          <button id="settings-password-submit" type="submit" class="btn btn-primary" data-i18n="settings.password.submit">Change password</button>
+                        </div>
+                      </form>
+                    </section>
+
+                    <section class="settings-password-card">
+                      <h4 data-i18n="settings.totp.title">Two-factor authentication (TOTP)</h4>
+                      <p class="muted" data-i18n="settings.totp.subtitle">Manage your authenticator app enrollment for this account.</p>
+                      <p class="muted" data-i18n="settings.totp.not_available">TOTP enrollment is not available in this build yet.</p>
+                      <div class="dialog-actions settings-actions-right">
+                        <button type="button" class="btn btn-primary" disabled data-i18n="settings.totp.setup">Configure TOTP</button>
+                      </div>
+                    </section>
+                  </div>
                 </div>
               </div>
-            </article>
+            </details>
+
+            <details id="settings-storage-opencti-accordion" class="glass settings-card settings-personal-accordion" open>
+              <summary class="settings-personal-accordion-summary">
+                <div>
+                  <h3 data-i18n="settings.personal.storage_group_title">Local storage and OpenCTI</h3>
+                  <p class="muted" data-i18n="settings.personal.storage_group_subtitle">Manage which STIX source your account uses and how OpenCTI connects.</p>
+                </div>
+                <span class="settings-personal-accordion-expander" aria-hidden="true"></span>
+              </summary>
+              <div class="settings-personal-accordion-body">
+                <article class="settings-card settings-personal-accordion-panel">
+                  <header class="settings-card-head">
+                    <div>
+                      <h3 data-i18n="settings.opencti.title">OpenCTI STIX source</h3>
+                      <p class="muted" data-i18n="settings.opencti.subtitle">Configure your own OpenCTI connection. If it is unavailable, SPUC keeps using the local catalog.</p>
+                    </div>
+                  </header>
+                  <form id="settings-opencti-form" class="stack">
+                    <label>
+                      <span data-i18n="settings.opencti.source">STIX catalog source</span>
+                      <select id="settings-stix-source">
+                        <option value="local" data-i18n="settings.opencti.source_local">Local catalog</option>
+                        <option value="opencti" data-i18n="settings.opencti.source_opencti">OpenCTI</option>
+                      </select>
+                    </label>
+                    <div id="settings-opencti-config-fields" class="stack hidden">
+                      <label class="admin-enabled-toggle settings-opencti-enabled-toggle">
+                        <span data-i18n="settings.opencti.enabled">Enable OpenCTI for my account</span>
+                        <input id="settings-opencti-enabled" type="checkbox">
+                      </label>
+                      <label>
+                        <span data-i18n="settings.opencti.endpoint">OpenCTI GraphQL endpoint</span>
+                        <input id="settings-opencti-endpoint" placeholder="https://opencti.example.com/graphql">
+                      </label>
+                      <label>
+                        <span data-i18n="settings.opencti.api_key">OpenCTI API key</span>
+                        <input id="settings-opencti-api-key" type="password" data-i18n-placeholder="settings.opencti.api_key_placeholder" placeholder="Paste key to set or rotate">
+                        <small id="settings-opencti-api-key-hint" class="muted"></small>
+                      </label>
+                      <p id="settings-opencti-status" class="muted"></p>
+                    </div>
+                    <div class="dialog-actions modal-actions-split">
+                      <div class="modal-actions-left">
+                        <button type="button" id="settings-opencti-test" class="btn btn-ghost" data-i18n="settings.opencti.test">Test connection</button>
+                      </div>
+                      <div class="modal-actions-right">
+                        <button type="submit" class="btn btn-primary" data-i18n="common.save">Save</button>
+                      </div>
+                    </div>
+                  </form>
+                </article>
+              </div>
+            </details>
+
+            <details id="settings-api-translation-accordion" class="glass settings-card settings-personal-accordion">
+              <summary class="settings-personal-accordion-summary">
+                <div>
+                  <h3 data-i18n="settings.personal.api_group_title">Personal API tokens and translation API</h3>
+                  <p class="muted" data-i18n="settings.personal.api_group_subtitle">Create tokens and prepare copy-paste API calls with your current endpoint and credentials.</p>
+                </div>
+                <span class="settings-personal-accordion-expander" aria-hidden="true"></span>
+              </summary>
+              <div class="settings-personal-accordion-body">
+                <article class="settings-card settings-personal-accordion-panel">
+                  <header class="settings-card-head">
+                    <div>
+                      <h3 data-i18n="settings.api_tokens.title">Personal API tokens</h3>
+                      <p class="muted" data-i18n="settings.api_tokens.subtitle">Create and rotate personal tokens for API access. Token values are only shown once.</p>
+                    </div>
+                  </header>
+                  <form id="settings-api-token-form" class="stack">
+                    <label>
+                      <span data-i18n="settings.api_tokens.name">Token name</span>
+                      <input id="settings-api-token-name" data-i18n-placeholder="settings.api_tokens.name_placeholder" placeholder="Automation token" required>
+                    </label>
+                    <div class="dialog-actions settings-actions-right">
+                      <button type="submit" class="btn btn-primary" data-i18n="settings.api_tokens.create">Create token</button>
+                    </div>
+                  </form>
+                  <section id="settings-api-token-secret-wrap" class="stack hidden">
+                    <label>
+                      <span data-i18n="settings.api_tokens.secret_label">New token value (shown once)</span>
+                      <input id="settings-api-token-secret" readonly>
+                    </label>
+                    <div class="dialog-actions settings-actions-right">
+                      <button type="button" id="settings-api-token-secret-copy" class="btn btn-ghost" data-i18n="settings.api_tokens.copy">Copy token</button>
+                    </div>
+                  </section>
+                  <div id="settings-api-tokens-list" class="admin-oauth-list"></div>
+                </article>
+
+                <article class="settings-card settings-personal-accordion-panel">
+                  <section class="stack">
+                    <h4 data-i18n="settings.opencti.curl_title">Translation API curl example</h4>
+                    <p class="muted" data-i18n="settings.opencti.curl_subtitle">Configure token and endpoint, then copy and run the example command.</p>
+                    <label>
+                      <span data-i18n="settings.opencti.curl_token">Bearer token</span>
+                      <input id="settings-opencti-curl-token" type="password" data-i18n-placeholder="settings.opencti.curl_token_placeholder" placeholder="spuc_pat_...">
+                    </label>
+                    <label>
+                      <span data-i18n="settings.opencti.curl_endpoint">Translation endpoint</span>
+                      <input id="settings-opencti-curl-endpoint" type="text" data-i18n-placeholder="settings.opencti.curl_endpoint_placeholder" placeholder="http://localhost:8080/api/translate/stix-pattern">
+                    </label>
+                    <textarea id="settings-opencti-curl-example" class="mono" rows="5" readonly></textarea>
+                    <div class="dialog-actions settings-actions-right">
+                      <button type="button" id="settings-opencti-curl-copy" class="btn btn-ghost" data-i18n="settings.opencti.curl_copy">Copy curl example</button>
+                    </div>
+                  </section>
+                </article>
+              </div>
+            </details>
           </section>
 
           <section id="settings-tab-panel-application" class="settings-tab-panel hidden" data-settings-panel="application">
@@ -1296,6 +1415,19 @@
     </article>
   </dialog>
 
+  <dialog id="confirm-dialog" class="detail-dialog">
+    <article class="glass detail-card confirm-card">
+      <header>
+        <h3 id="confirm-title" data-i18n="common.confirm_action">Confirm action</h3>
+      </header>
+      <p id="confirm-message" class="muted confirm-message"></p>
+      <div class="dialog-actions confirm-actions">
+        <button type="button" id="confirm-cancel" class="btn btn-ghost" data-i18n="common.cancel">Cancel</button>
+        <button type="button" id="confirm-accept" class="btn btn-danger" data-i18n="common.confirm">Confirm</button>
+      </div>
+    </article>
+  </dialog>
+
   <dialog id="payload-catalog-form-dialog" class="detail-dialog">
     <article class="glass detail-card compact-modal">
       <header>
@@ -1333,19 +1465,6 @@
           </div>
         </div>
       </form>
-    </article>
-  </dialog>
-
-  <dialog id="confirm-dialog" class="detail-dialog">
-    <article class="glass detail-card confirm-card">
-      <header>
-        <h3 id="confirm-title" data-i18n="common.confirm_action">Confirm action</h3>
-      </header>
-      <p id="confirm-message" class="muted confirm-message"></p>
-      <div class="dialog-actions confirm-actions">
-        <button type="button" id="confirm-cancel" class="btn btn-ghost" data-i18n="common.cancel">Cancel</button>
-        <button type="button" id="confirm-accept" class="btn btn-danger" data-i18n="common.confirm">Confirm</button>
-      </div>
     </article>
   </dialog>
 
@@ -1433,6 +1552,25 @@
           </div>
         </div>
       </form>
+    </article>
+  </dialog>
+
+  <dialog id="stix-similar-dialog" class="detail-dialog">
+    <article class="glass detail-card">
+      <header>
+        <h3 data-i18n="stix_objects.similar.title">Possible similar STIX objects</h3>
+      </header>
+      <p class="muted" data-i18n="stix_objects.similar.message">Possible similar STIX objects were found. Review them before creating a new object.</p>
+      <div id="stix-similar-list" class="stix-similar-list"></div>
+      <div class="dialog-actions modal-actions-split">
+        <div class="modal-actions-left">
+          <button type="button" id="stix-similar-cancel" class="btn btn-danger" data-i18n="common.cancel">Cancel</button>
+        </div>
+        <div class="modal-actions-right">
+          <button type="button" id="stix-similar-use-existing" class="btn btn-ghost" data-i18n="stix_objects.similar.use_existing">Use existing object</button>
+          <button type="button" id="stix-similar-create-anyway" class="btn btn-primary" data-i18n="stix_objects.similar.create_anyway">Create anyway</button>
+        </div>
+      </div>
     </article>
   </dialog>
 

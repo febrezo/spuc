@@ -266,11 +266,13 @@ function loadLearningProgress() {
     state.completedChallenges = new Set(completed.map((item) => String(item || "")).filter(Boolean));
     state.learning.search = typeof parsed?.search === "string" ? parsed.search : "";
     state.learning.pathFilter = typeof parsed?.pathFilter === "string" ? parsed.pathFilter : "";
+    state.learning.selectedPath = typeof parsed?.selectedPath === "string" ? parsed.selectedPath : "";
     state.learning.onlyPending = Boolean(parsed?.onlyPending);
   } catch (_error) {
     state.completedChallenges = new Set();
     state.learning.search = "";
     state.learning.pathFilter = "";
+    state.learning.selectedPath = "";
     state.learning.onlyPending = false;
   }
 }
@@ -280,6 +282,7 @@ function saveLearningProgress() {
     completed: [...state.completedChallenges],
     search: state.learning.search,
     pathFilter: state.learning.pathFilter,
+    selectedPath: state.learning.selectedPath,
     onlyPending: state.learning.onlyPending,
   };
   setSessionStorageItem(LEARNING_PROGRESS_STORAGE_KEY, JSON.stringify(payload));
@@ -700,9 +703,13 @@ function applyTranslations() {
     ["rules-columns-toggle", "common.show_hide_columns"],
     ["rules-view-table", "rules.view.table"],
     ["rules-view-cards", "rules.view.cards"],
+    ["stix-bulk-toggle", "rules.filters.toggle"],
+    ["stix-view-table", "rules.view.table"],
+    ["stix-view-cards", "rules.view.cards"],
     ["stix-create-open-table", "stix_objects.create"],
     ["stix-export-selected", "rules.bulk.export_selected"],
     ["stix-export-selected-stix", "rules.export_selected.download_bundle"],
+    ["stix-duplicate-selected", "rules.bulk.duplicate_selected"],
     ["stix-delete-selected", "rules.bulk.delete_selected"],
   ].forEach(([id, key]) => {
     const node = document.getElementById(id);
@@ -1497,7 +1504,6 @@ function renderAdversaryViewSummary(adversary, stepEntries) {
           <h4>${escapeHtml(t("adversaries.editor.validation_title"))}</h4>
         </div>
         <div class="adversary-detail-metrics">
-          <div><span>${escapeHtml(t("common.id"))}</span><strong>${escapeHtml(adversary.id || "")}</strong></div>
           <div><span>${escapeHtml(t("adversaries.create.target_platform"))}</span><strong>${escapeHtml(platformLabel)}</strong></div>
           <div><span>${escapeHtml(t("adversaries.col.steps"))}</span><strong>${escapeHtml(String(stepsCount))}</strong></div>
           <div><span>${escapeHtml(t("adversaries.col.confidence"))}</span><strong>${escapeHtml(String(confidence))}</strong></div>
@@ -2070,7 +2076,7 @@ async function openRuleDetail(entry, options = {}) {
                         <span class="rule-detail-relation">${escapeHtml(relationName)}</span>
                       </div>
                       <strong>${escapeHtml(relation.object_name || relation.stix_id || t("rules.indicates.object_unknown"))}</strong>
-                      <small>${escapeHtml(relation.stix_id || "-")}</small>
+                      <small><code>${escapeHtml(relation.stix_id || "-")}</code></small>
                     </article>
                   `;
                 })
@@ -2193,7 +2199,7 @@ function renderIndicatesExistingList(relations) {
         title="${escapeHtml(relation.stix_id || "")}"
       >
         <strong>${escapeHtml(relation.object_name || relation.stix_id || "-")}</strong>
-        <small>${escapeHtml(relation.stix_id || "-")}</small>
+        <small><code>${escapeHtml(relation.stix_id || "-")}</code></small>
       </button>
     `)
     .join("");
@@ -3072,13 +3078,32 @@ function renderRuleLabSaveStixOptions() {
 function renderStixObjectsTable() {
   const table = document.getElementById("stix-objects-table");
   const meta = document.getElementById("stix-objects-meta");
+  const status = document.getElementById("stix-objects-status");
   if (!table || !meta) return;
   const searchTerm = (state.stixObjectsView?.searchTerm || "").toLowerCase();
   const all = Array.isArray(state.stixObjects) ? state.stixObjects : [];
-  const entries = searchTerm
-    ? all.filter((entry) => stixObjectMatchesSearch(entry, searchTerm))
-    : all;
-  meta.textContent = `${entries.length} ${t("common.entries")}`;
+  const remoteMode = state.stixObjectsView.effectiveSource === "opencti";
+  const entries = remoteMode
+    ? all
+    : (searchTerm ? all.filter((entry) => stixObjectMatchesSearch(entry, searchTerm)) : all);
+  const providerLabel = state.stixObjectsView.source === "opencti"
+    ? (t("stix_objects.source.opencti") || "OpenCTI")
+    : (t("stix_objects.source.local") || "Local catalog");
+  meta.innerHTML = state.stixObjectsView.loading
+    ? `${escapeHtml(t("common.loading") || "Loading")}...`
+    : `${entries.length} ${escapeHtml(t("common.entries"))} (<strong>${escapeHtml(providerLabel)}</strong>)`;
+  if (status) {
+    const parts = [];
+    if (state.stixObjectsView.fallbackUsed) parts.push(t("stix_objects.fallback_used") || "Using local fallback");
+    if (state.stixObjectsView.message) parts.push(state.stixObjectsView.message);
+    if (state.stixObjectsView.error?.message) parts.push(state.stixObjectsView.error.message);
+    status.innerHTML = `${escapeHtml(parts.filter(Boolean).join(" · "))} ${
+      state.stixObjectsView.source === "opencti"
+        ? `<button type="button" class="btn btn-ghost btn-inline" data-action="stix-use-local">${escapeHtml(t("stix_objects.use_local") || "Use local catalog")}</button>
+           <button type="button" class="btn btn-ghost btn-inline" data-action="stix-go-settings">${escapeHtml(t("stix_objects.go_settings") || "Go to user settings")}</button>`
+        : ""
+    }`;
+  }
   const visibleIds = new Set(entries.map((entry) => entry.stix_id));
   state.stixObjectsView.selected = new Set(
     Array.from(state.stixObjectsView.selected).filter((stixId) => visibleIds.has(stixId)),
@@ -3100,6 +3125,7 @@ function renderStixObjectsTable() {
   const rows = entries.map((entry) => {
     const type = entry.stix_type || entry.stix_id.split("--")[0] || "-";
     const badge = stixTypeBadge(entry.stix_id || "");
+    const source = entry.source || state.stixObjectsView.effectiveSource || "local";
     const tlp = normalizeTlpValue(entry.tlp || "TLP:GREEN");
     const pap = normalizePapValue(entry.pap || "PAP:GREEN");
     const createdAt = entry.created_at || "";
@@ -3111,7 +3137,7 @@ function renderStixObjectsTable() {
         <input type="checkbox" data-action="stix-select-row" data-stix-id="${escapeHtml(entry.stix_id)}" ${checked ? "checked" : ""} aria-label="${escapeHtml(t("rules.bulk.select_all"))}">
       </td>
       <td><span class="stix-type-badge">${escapeHtml(badge)}</span> <span class="muted">${escapeHtml(type)}</span></td>
-      <td>${escapeHtml(entry.name || "-")}</td>
+      <td>${escapeHtml(entry.name || "-")} <span class="status-badge">${escapeHtml(source)}</span></td>
       <td>
         ${trafficBadge(tlp, "tlp")}
         ${trafficBadge(pap, "pap")}
@@ -3146,12 +3172,16 @@ function renderStixObjectsTable() {
 function renderStixObjectDetails(entry) {
   const stixId = String(entry?.stix_id || "");
   const description = String(entry?.description || "").trim() || t("stix_objects.no_description") || "No description";
+  const aliases = Array.isArray(entry?.aliases) ? entry.aliases.filter(Boolean) : [];
+  const externalRefs = Array.isArray(entry?.external_references) ? entry.external_references.filter(Boolean) : [];
   return `
     <div class="stix-detail-compact">
       <div class="stix-detail-id-row">
         <span class="label">${escapeHtml(t("rules.stix_objects.col.id") || "ID")}:</span>
         <code class="stix-detail-id mono">${escapeHtml(stixId)}</code>
       </div>
+      ${aliases.length ? `<div><span class="label">${escapeHtml(t("stix_objects.aliases") || "Aliases")}:</span> ${aliases.map((item) => `<span class="status-badge">${escapeHtml(item)}</span>`).join(" ")}</div>` : ""}
+      ${externalRefs.length ? `<div><span class="label">${escapeHtml(t("stix_objects.external_references") || "External references")}:</span> ${externalRefs.map((item) => `<code>${escapeHtml(item)}</code>`).join(" ")}</div>` : ""}
       <div class="stix-detail-description">
         <span class="label">${escapeHtml(t("rulelab.description") || t("stix_objects.form.description") || "Description")}:</span>
         <div class="markdown-preview stix-detail-markdown">${renderMarkdown(description)}</div>
@@ -3176,6 +3206,7 @@ function updateStixObjectsBulkState() {
   const bulkEditNode = document.getElementById("stix-bulk-edit");
   const exportButton = document.getElementById("stix-export-selected");
   const exportStixButton = document.getElementById("stix-export-selected-stix");
+  const duplicateButton = document.getElementById("stix-duplicate-selected");
   const deleteButton = document.getElementById("stix-delete-selected");
   const bulkToggle = document.getElementById("stix-bulk-toggle");
   const selectAllCheckbox = document.getElementById("stix-select-all-header");
@@ -3187,6 +3218,7 @@ function updateStixObjectsBulkState() {
   }
   if (exportButton) exportButton.disabled = selectedCount === 0;
   if (exportStixButton) exportStixButton.disabled = selectedCount === 0;
+  if (duplicateButton) duplicateButton.disabled = selectedCount === 0;
   if (deleteButton) deleteButton.disabled = selectedCount === 0;
   if (bulkToggle) {
     bulkToggle.disabled = selectedCount === 0;
@@ -3201,8 +3233,22 @@ function updateStixObjectsBulkState() {
 }
 
 async function loadStixObjects() {
-  const response = await api("/api/stix-objects");
+  const requestId = ++state.stixObjectsView.requestId;
+  const query = String(state.stixObjectsView.searchTerm || "").trim();
+  state.stixObjectsView.loading = true;
+  renderStixObjectsTable();
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  params.set("limit", "50");
+  const response = await api(`/api/stix-objects?${params.toString()}`);
+  if (requestId !== state.stixObjectsView.requestId) return;
+  state.stixObjectsView.loading = false;
   state.stixObjects = response.entries || [];
+  state.stixObjectsView.source = response.source || "local";
+  state.stixObjectsView.effectiveSource = response.effective_source || response.source || "local";
+  state.stixObjectsView.fallbackUsed = Boolean(response.fallback_used);
+  state.stixObjectsView.message = response.message || "";
+  state.stixObjectsView.error = response.error || null;
   const existingIds = new Set(state.stixObjects.map((entry) => entry.stix_id));
   state.stixObjectsView.selected = new Set(
     Array.from(state.stixObjectsView.selected).filter((stixId) => existingIds.has(stixId)),
@@ -3214,6 +3260,18 @@ async function loadStixObjects() {
   renderIndicatesObjectOptions();
   renderRuleLabSaveStixOptions();
   renderStixObjectsWorkspace();
+}
+
+function scheduleStixObjectSearch() {
+  clearTimeout(state.stixObjectsView.searchTimer);
+  state.stixObjectsView.searchTimer = setTimeout(() => {
+    loadStixObjects().catch((error) => {
+      state.stixObjectsView.loading = false;
+      state.stixObjectsView.error = { message: error?.message || "OpenCTI request failed" };
+      renderStixObjectsTable();
+      showToast("stix_objects.opencti_error", true, { variant: "error" });
+    });
+  }, state.stixObjectsView.source === "opencti" ? 350 : 120);
 }
 
 function openPayloadCatalogDocs() {
@@ -3304,6 +3362,29 @@ async function exportSelectedStixObjects() {
   showToast("toast.export_ready");
 }
 
+async function duplicateSelectedStixObjects() {
+  if (state.stixObjectsView.selected.size === 0) return;
+  const entries = (state.stixObjects || []).filter((entry) => state.stixObjectsView.selected.has(entry.stix_id));
+  if (!entries.length) return;
+  for (const entry of entries) {
+    const copyType = stixObjectTypeFromId(entry.stix_id || "") || entry.stix_type || "malware";
+    await api("/api/stix-objects", {
+      method: "POST",
+      body: JSON.stringify({
+        stix_id: generateStixId(copyType),
+        name: `${entry.name || "STIX object"} (copy)`,
+        description: String(entry.description || ""),
+        tlp: normalizeTlpValue(entry.tlp || "TLP:AMBER"),
+        pap: normalizePapValue(entry.pap || "PAP:GREEN"),
+        first_seen: String(entry.first_seen || ""),
+        created_at: new Date().toISOString().slice(0, 10),
+      }),
+    });
+  }
+  showToast("toast.saved");
+  await loadStixObjects();
+}
+
 async function openRuleLabSaveDialog() {
   if (!Array.isArray(state.stixObjects) || state.stixObjects.length === 0) {
     await loadStixObjects();
@@ -3371,6 +3452,34 @@ function updateStixObjectSubmitState() {
   submit.disabled = !hasType || !hasName || !hasDescription;
 }
 
+function renderStixSimilarDialog(candidates) {
+  const list = document.getElementById("stix-similar-list");
+  if (!list) return;
+  const compact = (value, limit = 180) => {
+    const text = String(value || "");
+    return text.length > limit ? `${text.slice(0, limit - 1)}...` : text;
+  };
+  const rows = (Array.isArray(candidates) ? candidates : []).map((entry) => `
+    <article class="stix-similar-card">
+      <strong>${escapeHtml(entry.name || "-")}</strong>
+      <div class="muted">${escapeHtml(entry.stix_type || "")} · ${escapeHtml(entry.source || "opencti")}</div>
+      <p>${escapeHtml(compact(entry.description || t("stix_objects.no_description"), 180))}</p>
+      ${(entry.aliases || []).length ? `<div><span class="label">${escapeHtml(t("stix_objects.aliases"))}:</span> ${entry.aliases.map((item) => `<span class="status-badge">${escapeHtml(item)}</span>`).join(" ")}</div>` : ""}
+      ${(entry.external_references || []).length ? `<div><span class="label">${escapeHtml(t("stix_objects.external_references"))}:</span> ${entry.external_references.map((item) => `<code>${escapeHtml(item)}</code>`).join(" ")}</div>` : ""}
+      <small class="muted mono"><code>${escapeHtml(entry.stix_id || "")}</code></small>
+    </article>
+  `);
+  list.innerHTML = rows.join("") || `<p class="muted">${escapeHtml(t("common.no_data"))}</p>`;
+}
+
+function openStixSimilarDialog(candidates, pendingPayload) {
+  state.stixObjectsView.similarCandidates = Array.isArray(candidates) ? candidates : [];
+  state.stixObjectsView.pendingCreatePayload = pendingPayload;
+  renderStixSimilarDialog(state.stixObjectsView.similarCandidates);
+  const dialog = document.getElementById("stix-similar-dialog");
+  if (dialog instanceof HTMLDialogElement) dialog.showModal();
+}
+
 function generateStixId(type) {
   const hex = () => Math.floor(Math.random() * 0x10000).toString(16).padStart(4, "0");
   const uuid = `${hex()}${hex()}-${hex()}-4${hex().slice(1)}-${["8","9","a","b"][Math.floor(Math.random()*4)]}${hex().slice(1)}-${hex()}${hex()}${hex()}`;
@@ -3394,9 +3503,13 @@ function renderIndicatesSearchResults(query) {
     stix_id: o.stix_id,
     object_name: o.name,
     stix_type: o.stix_id.split("--")[0],
+    description: o.description || "",
+    source: o.source || state.stixObjectsView.effectiveSource || "local",
   })).filter((o) =>
     o.object_name.toLowerCase().includes(lower) ||
-    o.stix_id.toLowerCase().includes(lower)
+    o.stix_id.toLowerCase().includes(lower) ||
+    o.stix_type.toLowerCase().includes(lower) ||
+    o.description.toLowerCase().includes(lower)
   ).slice(0, 20);
   if (!filtered.length) {
     resultsDiv.innerHTML = `<div class="indicates-no-results muted">${escapeHtml(t("common.no_results") || "No results")}</div>`;
@@ -3408,6 +3521,8 @@ function renderIndicatesSearchResults(query) {
       data-stix-id="${escapeHtml(o.stix_id)}" data-object-name="${escapeHtml(o.object_name)}">
       ${badge ? `<span class="stix-type-badge">${escapeHtml(badge)}</span>` : ""}
       <span class="indicates-result-name">${escapeHtml(o.object_name)}</span>
+      <small class="muted">${escapeHtml(o.stix_type)} · ${escapeHtml(o.source)}</small>
+      ${o.description ? `<span class="muted">${escapeHtml(o.description.slice(0, 120))}</span>` : ""}
     </button>`;
   }).join("");
 }
@@ -3572,7 +3687,7 @@ function payloadColumnLabel(columnKey) {
     case "name": return t("adversaries.payload.catalog_col.name");
     case "technology": return t("adversaries.payload.catalog_col.type");
     case "runner": return t("adversaries.payload.catalog_col.runners");
-    case "description": return t("rules.col.description");
+    case "description": return t("adversaries.payload.catalog_col.description");
     default: return columnKey;
   }
 }
@@ -5474,6 +5589,7 @@ function savePayloadFromCatalogModal() {
     ? [entry, ...(state.customPayloads.entries || []).filter((item) => item.id !== entry.id)]
     : [entry, ...(state.customPayloads.entries || [])];
   state.adversaryCompose.customPayloads = [...state.customPayloads.entries];
+  state.customPayloads.expandedDetails.add(entry.id);
   persistCustomPayloadCatalog();
   closePayloadCatalogCreateModal();
   resetPayloadCatalogFilters();
@@ -5866,9 +5982,9 @@ function setRuleLabSaveEnabled(enabled) {
   button.disabled = !enabled;
   if (enabled) {
     button.classList.remove("btn-ghost");
-    button.classList.add("btn-success");
+    button.classList.add("btn-primary");
   } else {
-    button.classList.remove("btn-success");
+    button.classList.remove("btn-primary");
     button.classList.add("btn-ghost");
   }
 }
@@ -6379,11 +6495,16 @@ async function persistRuleLab({ silent = false } = {}) {
     state.ruleLab.isDirty = false;
     setRuleLabSaveEnabled(false);
     if (!silent) {
-      showToast("toast.saved");
+      showToast("toast.rule_save_success", true, { variant: "success" });
     }
     await Promise.all([loadRules(state.rules.page || 1), loadOverview()]);
     renderDashboard();
     return true;
+  } catch (_error) {
+    if (!silent) {
+      showToast("toast.rule_save_error", true, { variant: "error" });
+    }
+    return false;
   } finally {
     state.ruleLab.autoSaving = false;
   }
@@ -6594,7 +6715,6 @@ function renderAdversaryWorkspace() {
   const mode = state.adversaries.workspaceMode || "welcome";
   const welcomeCard = document.getElementById("adversaries-welcome-card");
   const catalogShell = document.getElementById("adversaries-catalog-shell");
-  const payloadWelcomeCard = document.getElementById("payloads-welcome-card");
   const payloadCatalogShell = document.getElementById("payloads-catalog-shell");
   const payloadShell = document.getElementById("adversaries-payloads-shell");
   const editorView = document.getElementById("adversary-editor-view");
@@ -6603,24 +6723,18 @@ function renderAdversaryWorkspace() {
   const catalogMain = document.getElementById("adversaries-catalog-main");
   const panel = document.getElementById("panel-adversaries");
   const hasEntries = (state.adversaries.allEntries || []).length > 0;
-  const hasPayloads = (state.customPayloads.entries || []).length > 0;
   const showCatalog = mode === "catalog";
   const showPayloads = mode === "payloads";
   const showEditor = mode === "editor";
   const showEmptyState = showCatalog && state.adversaries.loaded && !hasEntries;
-  const showPayloadWelcome = showPayloads && state.customPayloads.loaded && !hasPayloads;
-  const showPayloadCatalog = showPayloads && hasPayloads;
   if (welcomeCard) {
     welcomeCard.classList.add("hidden");
   }
   if (catalogShell) {
     catalogShell.classList.toggle("hidden", !showCatalog);
   }
-  if (payloadWelcomeCard) {
-    payloadWelcomeCard.classList.toggle("hidden", !showPayloadWelcome);
-  }
   if (payloadCatalogShell) {
-    payloadCatalogShell.classList.toggle("hidden", !showPayloadCatalog);
+    payloadCatalogShell.classList.toggle("hidden", !showPayloads);
   }
   if (payloadShell) {
     payloadShell.classList.toggle("hidden", !showPayloads);
@@ -6628,9 +6742,9 @@ function renderAdversaryWorkspace() {
   if (editorView) {
     editorView.classList.toggle("hidden", !showEditor);
   }
-  if (editorPanel && !showEditor) {
-    editorPanel.classList.add("hidden");
-    editorPanel.classList.remove("active");
+  if (editorPanel) {
+    editorPanel.classList.toggle("hidden", !showEditor);
+    editorPanel.classList.toggle("active", showEditor);
   }
   if (emptyState) {
     emptyState.classList.toggle("hidden", !showEmptyState);
@@ -6639,10 +6753,10 @@ function renderAdversaryWorkspace() {
     catalogMain.classList.toggle("hidden", showEmptyState);
   }
   if (panel) {
-    panel.classList.toggle("workspace-center-mode", showEmptyState || showPayloadWelcome);
+    panel.classList.toggle("workspace-center-mode", showEmptyState);
   }
-  if (showPayloadCatalog) {
-    renderPayloadCatalogFiltersRevealer();
+  if (showPayloads) {
+    syncPayloadCatalogFiltersRevealer();
     renderPayloadCatalogWorkspace();
   }
   renderAdversariesFiltersRevealer();
@@ -6752,13 +6866,14 @@ function openAdversaryAgentHelp() {
 
 function renderStixObjectsWorkspace() {
   const hasEntries = (state.stixObjects || []).length > 0;
-  const mode = state.route === "stix-objects-catalog" || hasEntries ? "catalog" : "welcome";
+  const remoteMode = state.stixObjectsView.source === "opencti" || state.stixObjectsView.effectiveSource === "opencti";
+  const mode = state.route === "stix-objects-catalog" || hasEntries || remoteMode ? "catalog" : "welcome";
   state.stixObjectsView.workspaceMode = mode;
   const welcomeCard = document.getElementById("stix-objects-welcome-card");
   const catalogShell = document.getElementById("stix-objects-catalog-shell");
   const panel = document.getElementById("panel-stix-objects");
-  const showWelcome = mode === "welcome" || !hasEntries;
-  const showCatalog = mode === "catalog" && hasEntries;
+  const showWelcome = !remoteMode && (mode === "welcome" || !hasEntries);
+  const showCatalog = mode === "catalog" && (hasEntries || remoteMode);
   if (welcomeCard) {
     welcomeCard.classList.toggle("hidden", !showWelcome);
   }
@@ -7075,17 +7190,11 @@ function renderLearningPathSummary() {
   const root = document.getElementById("learning-paths-summary");
   if (!root) return;
   const summaries = learningPathSummaries();
-  const allCompleted = state.learning.challenges.filter((entry) => state.completedChallenges.has(entry.id)).length;
-  const allTotal = state.learning.challenges.length;
-  const allActive = !state.learning.pathFilter;
-  root.innerHTML = [
-    { pathId: "", total: allTotal, completed: allCompleted },
-    ...summaries,
-  ]
+  root.innerHTML = summaries
     .map((summary) => {
       const percent = summary.total > 0 ? Math.round((summary.completed / summary.total) * 100) : 0;
-      const active = summary.pathId ? state.learning.pathFilter === summary.pathId : allActive;
-      const title = summary.pathId ? learningPathLabel(summary.pathId) : t("learning.paths.all");
+      const active = state.learning.selectedPath === summary.pathId;
+      const title = learningPathLabel(summary.pathId);
       return `
         <button class="learning-path-chip glass ${active ? "active" : ""}" data-action="learning-path-filter" data-path="${escapeHtml(summary.pathId)}">
           <span class="learning-path-chip-title">${escapeHtml(title)}</span>
@@ -7098,46 +7207,56 @@ function renderLearningPathSummary() {
 }
 
 function renderLearningChallenges() {
-  const entries = filteredLearningChallenges();
-  const grouped = new Map();
-  entries.forEach((entry) => {
-    const pathId = String(entry.path_id || "core").trim() || "core";
-    if (!grouped.has(pathId)) grouped.set(pathId, []);
-    grouped.get(pathId).push(entry);
-  });
-
-  document.getElementById("challenges-grid").innerHTML = entries
-    .length === 0
-    ? `<div class="empty-state muted">${escapeHtml(t("common.no_data"))}</div>`
-    : [...grouped.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([pathId, pathEntries]) => `
-        <section class="learning-path-section">
-          <header class="learning-path-section-head">
-            <h3>${escapeHtml(learningPathLabel(pathId))}</h3>
-            <span class="muted">${pathEntries.length} ${escapeHtml(t("common.entries"))}</span>
-          </header>
-          <div class="learning-exercise-rows">
-            ${pathEntries.map((entry) => {
-              const completed = state.completedChallenges.has(entry.id);
-              const selected = state.selectedChallenge?.id === entry.id;
-              return `
-                <article class="learning-exercise-row glass ${completed ? "completed-card" : ""} ${selected ? "active" : ""}">
-                  <button class="learning-exercise-main" data-action="learning-select" data-id="${escapeHtml(entry.id)}">
-                    <span class="learning-exercise-status ${completed ? "completed" : "pending"}" aria-hidden="true">${completed ? "✓" : ""}</span>
-                    <span class="learning-exercise-copy">
-                      <strong>${escapeHtml(entry.title)}</strong>
-                      <span class="muted">${escapeHtml(entry.goal)}</span>
-                    </span>
-                  </button>
-                  <button class="btn btn-primary" data-action="learning-select" data-id="${escapeHtml(entry.id)}">${escapeHtml(t(completed ? "common.view" : "learning.start"))}</button>
-                </article>
-              `;
-            }).join("")}
-          </div>
-        </section>
-      `)
-    .join("");
+  const root = document.getElementById("challenges-grid");
+  const workspace = document.querySelector("#panel-learning .learning-workspace");
+  if (!root) return;
+  const selectedPath = String(state.learning.selectedPath || "").trim();
+  if (!selectedPath) {
+    if (workspace) workspace.classList.remove("is-path-open");
+    const helper = state.locale === "es"
+      ? "Selecciona una ruta para ver los ejercicios."
+      : "Select a path to see its exercises.";
+    root.innerHTML = `<div class="learning-path-stage-empty muted">${escapeHtml(helper)}</div>`;
+  } else {
+    if (workspace) {
+      workspace.classList.remove("is-path-open");
+      requestAnimationFrame(() => workspace.classList.add("is-path-open"));
+    }
+    const entries = filteredLearningChallenges().filter(
+      (entry) => (String(entry.path_id || "core").trim() || "core") === selectedPath,
+    );
+    const backLabel = state.locale === "es" ? "Volver a rutas" : "Back to paths";
+    const title = learningPathLabel(selectedPath);
+    const countLabel = `${entries.length} ${escapeHtml(t("common.entries"))}`;
+    const rows = entries.length === 0
+      ? `<div class="empty-state muted">${escapeHtml(t("common.no_data"))}</div>`
+      : entries.map((entry) => {
+        const completed = state.completedChallenges.has(entry.id);
+        const selected = state.selectedChallenge?.id === entry.id;
+        return `
+          <article class="learning-exercise-row glass ${completed ? "completed-card" : ""} ${selected ? "active" : ""}">
+            <button class="learning-exercise-main" data-action="learning-select" data-id="${escapeHtml(entry.id)}">
+              <span class="learning-exercise-status ${completed ? "completed" : "pending"}" aria-hidden="true">${completed ? "✓" : ""}</span>
+              <span class="learning-exercise-copy">
+                <strong>${escapeHtml(entry.title)}</strong>
+                <span class="muted">${escapeHtml(entry.goal)}</span>
+              </span>
+            </button>
+            <button class="btn btn-primary" data-action="learning-select" data-id="${escapeHtml(entry.id)}">${escapeHtml(t(completed ? "common.view" : "learning.start"))}</button>
+          </article>
+        `;
+      }).join("");
+    root.innerHTML = `
+      <section class="learning-path-stage">
+        <header class="learning-path-selected-head">
+          <button type="button" class="btn btn-ghost" data-action="learning-path-back">${escapeHtml(backLabel)}</button>
+          <h3>${escapeHtml(title)}</h3>
+          <span class="muted">${countLabel}</span>
+        </header>
+        <div class="learning-exercise-rows">${rows}</div>
+      </section>
+    `;
+  }
 
   const completed = state.learning.challenges.filter((entry) => state.completedChallenges.has(entry.id)).length;
   document.getElementById("learning-progress").textContent = t("learning.progress").replace("{done}", String(completed)).replace("{total}", String(state.learning.challenges.length));
@@ -7150,9 +7269,18 @@ async function loadLearning() {
     state.learning.guides = [];
     state.learning.challenges = (challenges || []).map((entry) => localizeLearningChallenge(entry));
     const challengeIds = new Set(state.learning.challenges.map((entry) => String(entry.id || "")).filter(Boolean));
+    const availablePaths = new Set(
+      state.learning.challenges.map((entry) => String(entry.path_id || "core").trim() || "core"),
+    );
     state.completedChallenges = new Set(
       [...state.completedChallenges].filter((challengeId) => challengeIds.has(challengeId)),
     );
+    if (!availablePaths.has(state.learning.selectedPath)) {
+      state.learning.selectedPath = "";
+    }
+    if (state.learning.selectedPath) {
+      state.learning.pathFilter = state.learning.selectedPath;
+    }
     document.getElementById("learning-search").value = state.learning.search;
     renderLearningPathOptions();
     document.getElementById("learning-only-pending").checked = state.learning.onlyPending;
@@ -7176,6 +7304,7 @@ async function loadLearning() {
     state.learning.guides = [];
     state.learning.challenges = [];
     state.selectedChallenge = null;
+    state.learning.selectedPath = "";
     renderLearningPathOptions();
     renderLearningPathSummary();
     renderLearningChallenges();
@@ -7364,6 +7493,17 @@ function setSettingsTab(tab) {
 
   document.querySelectorAll("[data-settings-panel]").forEach((panel) => {
     panel.classList.toggle("hidden", panel.dataset.settingsPanel !== effective);
+  });
+}
+
+function installSettingsPersonalAccordionBehavior() {
+  document.querySelectorAll(".settings-personal-accordion").forEach((node) => {
+    if (!(node instanceof HTMLDetailsElement) || node.dataset.scrollBound === "true") return;
+    node.dataset.scrollBound = "true";
+    node.addEventListener("toggle", () => {
+      if (!node.open) return;
+      node.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   });
 }
 
@@ -7616,6 +7756,236 @@ async function loadAdminRuntimeSettings() {
   refreshCustomComboboxes(document);
 }
 
+async function loadOpenCtiSettings() {
+  const form = document.getElementById("settings-opencti-form");
+  if (!(form instanceof HTMLFormElement)) return;
+  const response = await api("/api/user/settings/stix-source");
+  const entry = response?.entry || {};
+  state.stixSourceSettings = entry;
+
+  const enabled = document.getElementById("settings-opencti-enabled");
+  const source = document.getElementById("settings-stix-source");
+  const endpoint = document.getElementById("settings-opencti-endpoint");
+  const apiKey = document.getElementById("settings-opencti-api-key");
+  const apiKeyHint = document.getElementById("settings-opencti-api-key-hint");
+  const status = document.getElementById("settings-opencti-status");
+
+  if (enabled instanceof HTMLInputElement) enabled.checked = Boolean(entry.opencti_enabled);
+  if (source instanceof HTMLSelectElement) source.value = entry.stix_catalog_source || "local";
+  if (endpoint instanceof HTMLInputElement) endpoint.value = entry.opencti_endpoint || "";
+  if (apiKey instanceof HTMLInputElement) apiKey.value = "";
+  if (apiKeyHint) {
+    apiKeyHint.textContent = entry.opencti_api_key_set
+      ? t("settings.opencti.api_key_set")
+      : t("settings.opencti.api_key_unset");
+  }
+  if (status) {
+    status.textContent = (entry.effective_source || "local") === "opencti"
+      ? t("settings.opencti.status_opencti")
+      : t("settings.opencti.status_local");
+  }
+  toggleOpenCtiConfigVisibility(source instanceof HTMLSelectElement ? source.value : "local");
+  renderTranslationCurlExample();
+  refreshCustomComboboxes(document);
+}
+
+function toggleOpenCtiConfigVisibility(sourceValue) {
+  const showOpenCtiConfig = String(sourceValue || "local").toLowerCase() === "opencti";
+  const fields = document.getElementById("settings-opencti-config-fields");
+  const testButton = document.getElementById("settings-opencti-test");
+  if (fields) {
+    fields.classList.toggle("hidden", !showOpenCtiConfig);
+  }
+  if (testButton instanceof HTMLButtonElement) {
+    testButton.disabled = !showOpenCtiConfig;
+    testButton.classList.toggle("hidden", !showOpenCtiConfig);
+  }
+}
+
+function settingsProfileSignatureFromForm() {
+  return JSON.stringify({
+    display_name: document.getElementById("settings-display-name")?.value || "",
+    locale: document.getElementById("settings-locale")?.value || "en",
+    theme: document.getElementById("settings-theme")?.value || "dark",
+  });
+}
+
+function updateSettingsProfileDirtyState() {
+  const saveButton = document.getElementById("settings-profile-save");
+  if (!(saveButton instanceof HTMLButtonElement)) return;
+  const currentSignature = settingsProfileSignatureFromForm();
+  state.settings.profileDirty = currentSignature !== String(state.settings.profileSignature || "");
+  saveButton.disabled = !state.settings.profileDirty;
+}
+
+function renderTranslationCurlExample() {
+  const textarea = document.getElementById("settings-opencti-curl-example");
+  if (!(textarea instanceof HTMLTextAreaElement)) return;
+  const endpointInput = document.getElementById("settings-opencti-curl-endpoint");
+  const tokenInput = document.getElementById("settings-opencti-curl-token");
+  const defaultEndpoint = `${String(window.location.origin || "http://localhost:8080")}/api/translate/stix-pattern`;
+  const endpoint = endpointInput instanceof HTMLInputElement && endpointInput.value.trim()
+    ? endpointInput.value.trim()
+    : defaultEndpoint;
+  if (endpointInput instanceof HTMLInputElement && !endpointInput.value.trim()) {
+    endpointInput.value = endpoint;
+  }
+  const token = tokenInput instanceof HTMLInputElement && tokenInput.value.trim()
+    ? tokenInput.value.trim()
+    : "spuc_pat_REPLACE_WITH_YOUR_TOKEN";
+  textarea.value = `curl -sS -X POST "${endpoint}" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d "{\\"type\\":\\"indicator\\",\\"pattern_type\\":\\"stix\\",\\"pattern\\":\\"[process:name = 'cmd.exe']\\",\\"targets\\":[]}"`;
+}
+
+async function saveOpenCtiSettings() {
+  const sourceValue = document.getElementById("settings-stix-source")?.value || "local";
+  const openCtiSelected = sourceValue === "opencti";
+  const openCtiApiKeyInput = document.getElementById("settings-opencti-api-key")?.value || "";
+  const payload = {
+    opencti_enabled: openCtiSelected
+      ? Boolean(document.getElementById("settings-opencti-enabled")?.checked)
+      : false,
+    stix_catalog_source: sourceValue,
+    opencti_endpoint: document.getElementById("settings-opencti-endpoint")?.value || "",
+  };
+  if (openCtiSelected && openCtiApiKeyInput.trim()) {
+    payload.opencti_api_key = openCtiApiKeyInput;
+  }
+  const response = await api("/api/user/settings/stix-source", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  state.stixSourceSettings = response.entry || state.stixSourceSettings;
+  showToast("toast.saved");
+  await loadOpenCtiSettings();
+  await loadStixObjects();
+}
+
+function formatSettingsDate(value) {
+  if (!value) return "-";
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return "-";
+  const locale = state.locale === "es" ? "es-ES" : "en-US";
+  return date.toLocaleString(locale, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function revealLatestApiTokenValue(value) {
+  const wrap = document.getElementById("settings-api-token-secret-wrap");
+  const input = document.getElementById("settings-api-token-secret");
+  const curlToken = document.getElementById("settings-opencti-curl-token");
+  state.latestApiTokenValue = String(value || "");
+  if (input instanceof HTMLInputElement) {
+    input.value = state.latestApiTokenValue;
+  }
+  if (curlToken instanceof HTMLInputElement && state.latestApiTokenValue) {
+    curlToken.value = state.latestApiTokenValue;
+    renderTranslationCurlExample();
+  }
+  wrap?.classList.toggle("hidden", !state.latestApiTokenValue);
+}
+
+function renderUserApiTokens() {
+  const list = document.getElementById("settings-api-tokens-list");
+  if (!list) return;
+  const entries = Array.isArray(state.userApiTokens) ? state.userApiTokens : [];
+  if (!entries.length) {
+    list.innerHTML = `<p class="muted">${escapeHtml(t("settings.api_tokens.empty"))}</p>`;
+    return;
+  }
+
+  list.innerHTML = entries.map((entry) => {
+    const revoked = Boolean(entry.revoked_at);
+    const status = revoked
+      ? statusBadge(t("settings.api_tokens.revoked"), "warning")
+      : statusBadge(t("common.enabled"), "success");
+    return `
+      <article class="admin-oauth-row">
+        <div class="admin-oauth-main">
+          <strong>${escapeHtml(entry.name || "-")}</strong>
+          <div class="admin-oauth-meta">
+            ${status}
+            <span class="muted">${escapeHtml(t("settings.api_tokens.created"))}: ${escapeHtml(formatSettingsDate(entry.created_at))}</span>
+            <span class="muted">${escapeHtml(t("settings.api_tokens.last_used"))}: ${escapeHtml(formatSettingsDate(entry.last_used_at))}</span>
+            <span class="muted">${escapeHtml(t("settings.api_tokens.expires"))}: ${escapeHtml(formatSettingsDate(entry.expires_at))}</span>
+          </div>
+        </div>
+        <div class="admin-oauth-actions">
+          <button class="btn btn-ghost" data-action="settings-token-rotate" data-token-id="${escapeHtml(entry.id || "")}" ${revoked ? "disabled" : ""}>${escapeHtml(t("settings.api_tokens.rotate"))}</button>
+          <button class="btn btn-danger" data-action="settings-token-revoke" data-token-id="${escapeHtml(entry.id || "")}" ${revoked ? "disabled" : ""}>${escapeHtml(t("settings.api_tokens.revoke"))}</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+async function loadUserApiTokens() {
+  const response = await api("/api/user/tokens");
+  state.userApiTokens = response.entries || [];
+  renderUserApiTokens();
+}
+
+async function createUserApiToken() {
+  const nameInput = document.getElementById("settings-api-token-name");
+  const name = nameInput?.value?.trim() || "";
+  if (!name) {
+    showToast("settings.api_tokens.name_required", true, { variant: "error" });
+    return;
+  }
+  const response = await api("/api/user/tokens", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+  if (nameInput instanceof HTMLInputElement) {
+    nameInput.value = "";
+  }
+  revealLatestApiTokenValue(response?.entry?.token_value || "");
+  showToast("toast.saved");
+  await loadUserApiTokens();
+}
+
+async function rotateUserApiToken(tokenId) {
+  if (!tokenId) return;
+  const response = await api(`/api/user/tokens/${encodeURIComponent(tokenId)}/rotate`, {
+    method: "POST",
+  });
+  revealLatestApiTokenValue(response?.entry?.token_value || "");
+  showToast("toast.saved");
+  await loadUserApiTokens();
+}
+
+async function revokeUserApiToken(tokenId) {
+  if (!tokenId) return;
+  await api(`/api/user/tokens/${encodeURIComponent(tokenId)}`, {
+    method: "DELETE",
+  });
+  showToast("toast.saved");
+  await loadUserApiTokens();
+}
+
+async function testOpenCtiSettings() {
+  const status = document.getElementById("settings-opencti-status");
+  if (status) status.textContent = `${t("settings.opencti.testing")}...`;
+  try {
+    const response = await api("/api/user/settings/opencti/test", {
+      method: "POST",
+      body: JSON.stringify({
+        opencti_endpoint: document.getElementById("settings-opencti-endpoint")?.value || "",
+        opencti_api_key: document.getElementById("settings-opencti-api-key")?.value || "",
+      }),
+    });
+    if (status) status.textContent = response.message || t("settings.opencti.test_ok");
+    showToast(response.message || t("settings.opencti.test_ok"), false);
+  } catch (error) {
+    if (status) status.textContent = error?.payload?.message || error.message || t("settings.opencti.test_failed");
+    showToast(error?.payload?.message || t("settings.opencti.test_failed"), false, { variant: "error" });
+  }
+}
+
 function populateSettingsProfileForm() {
   const entry = state.userSettings || state.bootstrap?.user;
   if (!entry) return;
@@ -7666,6 +8036,13 @@ function populateSettingsProfileForm() {
     disabledReason.classList.toggle("hidden", canChangePassword || !reasonKey);
     disabledReason.textContent = reasonKey ? t(reasonKey) : "";
   }
+  state.settings.profileSignature = JSON.stringify({
+    display_name: entry.display_name || entry.username || "",
+    locale: entry.locale || "en",
+    theme: entry.theme || "dark",
+  });
+  state.settings.profileDirty = false;
+  updateSettingsProfileDirtyState();
   refreshCustomComboboxes(document);
 }
 
@@ -7676,6 +8053,9 @@ async function loadSettingsView() {
     state.principal.display_name = state.userSettings?.display_name || state.principal.username;
   }
   populateSettingsProfileForm();
+  installSettingsPersonalAccordionBehavior();
+  await loadOpenCtiSettings();
+  await loadUserApiTokens();
   refreshIdentityPill();
   const adminSections = document.getElementById("settings-admin-sections");
   const usersDisabledNote = document.getElementById("settings-users-disabled-note");
@@ -8337,6 +8717,7 @@ function installEventHandlers() {
   });
   document.getElementById("learning-path").addEventListener("change", (event) => {
     state.learning.pathFilter = event.target.value || "";
+    state.learning.selectedPath = state.learning.pathFilter || "";
     saveLearningProgress();
     renderLearningChallenges();
   });
@@ -8422,25 +8803,36 @@ function installEventHandlers() {
     });
   }
 
-  document.getElementById("settings-profile-form").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const response = await api("/api/settings/profile", {
-      method: "POST",
-      body: JSON.stringify({
-        display_name: document.getElementById("settings-display-name").value,
-        locale: document.getElementById("settings-locale").value,
-        theme: document.getElementById("settings-theme").value,
-      }),
+  const settingsProfileForm = document.getElementById("settings-profile-form");
+  if (settingsProfileForm instanceof HTMLFormElement) {
+    settingsProfileForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!state.settings.profileDirty) return;
+      const response = await api("/api/settings/profile", {
+        method: "POST",
+        body: JSON.stringify({
+          display_name: document.getElementById("settings-display-name").value,
+          locale: document.getElementById("settings-locale").value,
+          theme: document.getElementById("settings-theme").value,
+        }),
+      });
+      state.userSettings = response.entry || state.userSettings;
+      state.principal.display_name = state.userSettings?.display_name || state.principal?.username || "";
+      setLocale(state.userSettings?.locale || state.locale);
+      setTheme(state.userSettings?.theme || state.theme);
+      applyTranslations();
+      populateSettingsProfileForm();
+      refreshIdentityPill();
+      showToast("toast.saved");
+      await reloadLocalizedAppData();
     });
-    state.userSettings = response.entry || state.userSettings;
-    state.principal.display_name = state.userSettings?.display_name || state.principal?.username || "";
-    setLocale(state.userSettings?.locale || state.locale);
-    setTheme(state.userSettings?.theme || state.theme);
-    applyTranslations();
-    populateSettingsProfileForm();
-    refreshIdentityPill();
-    showToast("toast.saved");
-    await reloadLocalizedAppData();
+  }
+  ["settings-display-name", "settings-locale", "settings-theme"].forEach((id) => {
+    const node = document.getElementById(id);
+    if (node instanceof HTMLInputElement || node instanceof HTMLSelectElement) {
+      node.addEventListener("input", updateSettingsProfileDirtyState);
+      node.addEventListener("change", updateSettingsProfileDirtyState);
+    }
   });
 
   document.getElementById("settings-password-form").addEventListener("submit", async (event) => {
@@ -8455,6 +8847,78 @@ function installEventHandlers() {
     showToast("toast.saved");
     event.target.reset();
   });
+
+  const openCtiForm = document.getElementById("settings-opencti-form");
+  installSettingsPersonalAccordionBehavior();
+  if (openCtiForm instanceof HTMLFormElement) {
+    openCtiForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await saveOpenCtiSettings();
+    });
+  }
+  const openCtiTest = document.getElementById("settings-opencti-test");
+  if (openCtiTest instanceof HTMLButtonElement) {
+    openCtiTest.addEventListener("click", () => {
+      testOpenCtiSettings();
+    });
+  }
+  const openCtiSource = document.getElementById("settings-stix-source");
+  if (openCtiSource instanceof HTMLSelectElement) {
+    openCtiSource.addEventListener("change", () => {
+      toggleOpenCtiConfigVisibility(openCtiSource.value);
+    });
+  }
+  const openCtiCurlCopy = document.getElementById("settings-opencti-curl-copy");
+  if (openCtiCurlCopy instanceof HTMLButtonElement) {
+    openCtiCurlCopy.addEventListener("click", async () => {
+      const textarea = document.getElementById("settings-opencti-curl-example");
+      if (!(textarea instanceof HTMLTextAreaElement)) return;
+      await navigator.clipboard.writeText(String(textarea.value || ""));
+      showToast("toast.copied");
+    });
+  }
+  const openCtiCurlEndpoint = document.getElementById("settings-opencti-curl-endpoint");
+  if (openCtiCurlEndpoint instanceof HTMLInputElement) {
+    openCtiCurlEndpoint.addEventListener("input", () => {
+      renderTranslationCurlExample();
+    });
+  }
+  const openCtiCurlToken = document.getElementById("settings-opencti-curl-token");
+  if (openCtiCurlToken instanceof HTMLInputElement) {
+    openCtiCurlToken.addEventListener("input", () => {
+      renderTranslationCurlExample();
+    });
+  }
+
+  const apiTokenForm = document.getElementById("settings-api-token-form");
+  if (apiTokenForm instanceof HTMLFormElement) {
+    apiTokenForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await createUserApiToken();
+    });
+  }
+  const copyLatestToken = document.getElementById("settings-api-token-secret-copy");
+  if (copyLatestToken instanceof HTMLButtonElement) {
+    copyLatestToken.addEventListener("click", async () => {
+      if (!state.latestApiTokenValue) return;
+      await navigator.clipboard.writeText(state.latestApiTokenValue);
+      showToast("toast.copied");
+    });
+  }
+  const apiTokensList = document.getElementById("settings-api-tokens-list");
+  if (apiTokensList) {
+    apiTokensList.addEventListener("click", async (event) => {
+      const button = event.target.closest("button[data-action][data-token-id]");
+      if (!(button instanceof HTMLButtonElement)) return;
+      const tokenId = button.dataset.tokenId || "";
+      const action = button.dataset.action || "";
+      if (action === "settings-token-rotate") {
+        await rotateUserApiToken(tokenId);
+      } else if (action === "settings-token-revoke") {
+        await revokeUserApiToken(tokenId);
+      }
+    });
+  }
 
   const runtimeSettingsForm = document.getElementById("admin-runtime-settings");
   if (runtimeSettingsForm) {
@@ -8511,10 +8975,59 @@ function installEventHandlers() {
       document.getElementById("indicates-dialog").showModal();
     }
   });
+  const stixSimilarCancel = document.getElementById("stix-similar-cancel");
+  if (stixSimilarCancel) {
+    stixSimilarCancel.addEventListener("click", () => {
+      document.getElementById("stix-similar-dialog")?.close();
+      state.stixObjectsView.pendingCreatePayload = null;
+      state.stixObjectsView.similarCandidates = [];
+    });
+  }
+  const stixSimilarUseExisting = document.getElementById("stix-similar-use-existing");
+  if (stixSimilarUseExisting) {
+    stixSimilarUseExisting.addEventListener("click", async () => {
+      const candidate = state.stixObjectsView.similarCandidates[0];
+      document.getElementById("stix-similar-dialog")?.close();
+      if (candidate) {
+        state.stixObjectsView.selected = new Set([candidate.stix_id]);
+        state.stixObjectsView.searchTerm = candidate.name || candidate.stix_id || "";
+        const searchInput = document.getElementById("stix-objects-search");
+        if (searchInput instanceof HTMLInputElement) searchInput.value = state.stixObjectsView.searchTerm;
+        await loadStixObjects();
+      }
+    });
+  }
+  const stixSimilarCreateAnyway = document.getElementById("stix-similar-create-anyway");
+  if (stixSimilarCreateAnyway) {
+    stixSimilarCreateAnyway.addEventListener("click", async () => {
+      const pending = state.stixObjectsView.pendingCreatePayload;
+      if (!pending) return;
+      await api("/api/stix-objects", {
+        method: "POST",
+        body: JSON.stringify({ ...pending, force_create: true }),
+      });
+      document.getElementById("stix-similar-dialog")?.close();
+      state.stixObjectsView.pendingCreatePayload = null;
+      state.stixObjectsView.similarCandidates = [];
+      showToast("toast.saved");
+      await loadStixObjects();
+    });
+  }
   const indicatesSearch = document.getElementById("indicates-search");
   if (indicatesSearch) {
     indicatesSearch.addEventListener("input", () => {
-      renderIndicatesSearchResults(indicatesSearch.value.trim());
+      const query = indicatesSearch.value.trim();
+      if (state.stixObjectsView.source === "opencti" || state.stixObjectsView.effectiveSource === "opencti") {
+        clearTimeout(state.stixObjectsView.searchTimer);
+        state.stixObjectsView.searchTimer = setTimeout(() => {
+          state.stixObjectsView.searchTerm = query;
+          loadStixObjects()
+            .then(() => renderIndicatesSearchResults(query))
+            .catch(() => showToast("stix_objects.opencti_error", true, { variant: "error" }));
+        }, 350);
+      } else {
+        renderIndicatesSearchResults(query);
+      }
     });
   }
   const stixObjectNameInput = document.getElementById("stix-object-name");
@@ -8549,7 +9062,11 @@ function installEventHandlers() {
   if (stixSearchInput instanceof HTMLInputElement) {
     stixSearchInput.addEventListener("input", () => {
       state.stixObjectsView.searchTerm = stixSearchInput.value.trim();
-      renderStixObjectsTable();
+      if (state.stixObjectsView.source === "opencti" || state.stixObjectsView.effectiveSource === "opencti") {
+        scheduleStixObjectSearch();
+      } else {
+        renderStixObjectsTable();
+      }
     });
   }
   document.getElementById("indicates-form").addEventListener("submit", async (event) => {
@@ -8597,10 +9114,20 @@ function installEventHandlers() {
     const pap = document.getElementById("stix-object-pap")?.value || "PAP:GREEN";
     const firstSeen = document.getElementById("stix-object-first-seen")?.value || "";
     const createdAt = document.getElementById("stix-object-created-at")?.value || "";
-    await api("/api/stix-objects", {
-      method: "POST",
-      body: JSON.stringify({ stix_id: stixId, name: objectName, description, tlp, pap, first_seen: firstSeen, created_at: createdAt }),
-    });
+    const createPayload = { stix_id: stixId, name: objectName, description, tlp, pap, first_seen: firstSeen, created_at: createdAt };
+    try {
+      await api("/api/stix-objects", {
+        method: "POST",
+        body: JSON.stringify(createPayload),
+      });
+    } catch (error) {
+      if (error?.status === 409 && error?.payload?.error === "similar_objects_found") {
+        document.getElementById("stix-object-dialog").close();
+        openStixSimilarDialog(error.payload.candidates || [], createPayload);
+        return;
+      }
+      throw error;
+    }
     document.getElementById("stix-object-dialog").close();
     state.stixObjectsView.editingId = "";
     showToast("toast.saved");
@@ -8659,6 +9186,24 @@ function renderPayloadCatalogFiltersRevealer() {
   }
 }
 
+function syncPayloadCatalogFiltersRevealer() {
+  if (typeof renderPayloadCatalogFiltersRevealer === "function") {
+    renderPayloadCatalogFiltersRevealer();
+    return;
+  }
+  const revealer = document.getElementById("payload-catalog-filters-revealer");
+  const toggle = document.getElementById("payload-catalog-filters-toggle");
+  if (revealer) revealer.classList.toggle("open", Boolean(state.customPayloads.filtersOpen));
+  if (toggle) {
+    toggle.classList.toggle("active", Boolean(state.customPayloads.filtersOpen));
+    toggle.setAttribute("aria-expanded", String(Boolean(state.customPayloads.filtersOpen)));
+  }
+}
+
+if (typeof globalThis !== "undefined") {
+  globalThis.renderPayloadCatalogFiltersRevealer = renderPayloadCatalogFiltersRevealer;
+}
+
 function updatePayloadCatalogBulkState(filteredEntries = null) {
   const entries = Array.isArray(filteredEntries)
     ? filteredEntries
@@ -8667,6 +9212,7 @@ function updatePayloadCatalogBulkState(filteredEntries = null) {
   const selectAll = document.getElementById("payload-catalog-select-all");
   const exportSelected = document.getElementById("payload-catalog-export-selected");
   const deleteSelected = document.getElementById("payload-catalog-delete-selected");
+  const duplicateSelected = document.getElementById("payload-catalog-duplicate-selected");
   const countLabel = document.getElementById("payload-catalog-bulk-count");
   const selectedVisible = entries.filter((entry) => state.customPayloads.selected.has(entry.id)).length;
   const allVisibleSelected = entries.length > 0 && selectedVisible === entries.length;
@@ -8681,6 +9227,9 @@ function updatePayloadCatalogBulkState(filteredEntries = null) {
   }
   if (deleteSelected instanceof HTMLButtonElement) {
     deleteSelected.disabled = selectedCount === 0;
+  }
+  if (duplicateSelected instanceof HTMLButtonElement) {
+    duplicateSelected.disabled = selectedCount === 0;
   }
   if (countLabel) {
     countLabel.textContent = selectedCount > 0 ? tf("rules.bulk.selected_count", { count: selectedCount }) : "";
@@ -8699,12 +9248,34 @@ async function deleteSelectedPayloads() {
   const selectedIds = new Set([...state.customPayloads.selected]);
   state.customPayloads.entries = (state.customPayloads.entries || []).filter((entry) => !selectedIds.has(entry.id));
   state.customPayloads.selected.clear();
+  selectedIds.forEach((id) => state.customPayloads.expandedDetails.delete(id));
   state.adversaryCompose.customPayloads = [...state.customPayloads.entries];
   state.adversaryCompose.selectedOrder = state.adversaryCompose.selectedOrder.filter((id) => !selectedIds.has(id));
   persistCustomPayloadCatalog();
   renderAdversaryWorkspace();
   renderPayloadCatalogWorkspace();
   renderAdversaryFlowSteps();
+}
+
+async function duplicateSelectedPayloads() {
+  if (state.customPayloads.selected.size === 0) return;
+  const now = new Date().toISOString();
+  const selectedEntries = (state.customPayloads.entries || []).filter((entry) => state.customPayloads.selected.has(entry.id));
+  if (!selectedEntries.length) return;
+  const clones = selectedEntries.map((entry) => normalizeCustomPayloadEntry({
+    ...entry,
+    id: `payload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: `${entry.name || t("adversaries.payload.untitled")} (copy)`,
+    createdAt: now,
+    updatedAt: now,
+  }));
+  state.customPayloads.entries = [...clones, ...(state.customPayloads.entries || [])];
+  state.adversaryCompose.customPayloads = [...state.customPayloads.entries];
+  persistCustomPayloadCatalog();
+  state.customPayloads.selected = new Set(clones.map((entry) => entry.id));
+  clones.forEach((entry) => state.customPayloads.expandedDetails.add(entry.id));
+  renderPayloadCatalogWorkspace();
+  showToast("toast.saved");
 }
 
 function exportPayloadEntries(entries, fileNamePrefix = "spuc-payloads") {
@@ -8740,7 +9311,6 @@ function renderPayloadCatalogWorkspace() {
   const catalogShell = document.getElementById("payloads-catalog-shell");
   const panel = document.getElementById("panel-adversaries");
   const hasEntries = (state.customPayloads.entries || []).length > 0;
-
   if (welcomeCard) {
     welcomeCard.classList.toggle("hidden", hasEntries);
   }
@@ -8753,49 +9323,65 @@ function renderPayloadCatalogWorkspace() {
     if (panel) panel.classList.add("workspace-center-mode");
     return;
   }
-
   renderPayloadsTable();
   if (panel) panel.classList.remove("workspace-center-mode");
 }
 
-function renderPayloadCards(entries = []) {
-  const cardsRoot = document.getElementById("payload-catalog-cards");
-  if (!cardsRoot) return;
-  if (!entries.length) {
-    cardsRoot.innerHTML = `<div class="rules-cards-empty">${escapeHtml(t("common.no_data"))}</div>`;
-    return;
+function renderPayloadCatalogDetails(entry) {
+  const payloadId = String(entry?.id || "");
+  const description = String(entry?.description || "").trim() || t("common.no_data");
+  const content = String(entry?.content || "").trim() || t("common.no_data");
+  const runners = entry?.compatibleRunners?.length ? entry.compatibleRunners : ["spuc-agent"];
+  const createdAt = String(entry?.createdAt || "");
+  const updatedAt = String(entry?.updatedAt || "");
+  const createdLabel = t("stix_objects.form.created_at");
+  const updatedLabel = t("adversaries.payload.catalog_col.updated");
+  return `
+    <div class="payload-detail-card">
+      <div class="payload-detail-id-row">
+        <span class="label">${escapeHtml(t("common.id") || "ID")}:</span>
+        <code class="payload-detail-id mono">${escapeHtml(payloadId)}</code>
+      </div>
+      <div class="payload-detail-row"><span class="label">${escapeHtml(t("adversaries.payload.catalog_col.runners"))}:</span> ${runners.map((item) => `<span class="status-badge">${escapeHtml(item)}</span>`).join(" ")}</div>
+      ${createdAt ? `<div class="payload-detail-row"><span class="label">${escapeHtml(createdLabel || "Created")}:</span> <span class="muted">${escapeHtml(createdAt)}</span></div>` : ""}
+      ${updatedAt ? `<div class="payload-detail-row"><span class="label">${escapeHtml(updatedLabel || "Updated")}:</span> <span class="muted">${escapeHtml(updatedAt)}</span></div>` : ""}
+      <div class="payload-detail-description">
+        <span class="label">${escapeHtml(t("rulelab.description") || "Description")}:</span>
+        <div class="markdown-preview payload-detail-markdown">${renderMarkdown(description)}</div>
+      </div>
+      <div class="payload-detail-description">
+        <span class="label">${escapeHtml(t("adversaries.payload.content"))}:</span>
+        <textarea class="payload-detail-editor" data-lang="${escapeHtml(String(entry?.technology || "bash"))}" rows="8" readonly>${escapeHtml(content)}</textarea>
+      </div>
+      <div class="payload-table-actions">
+        <button class="btn btn-ghost icon-only" data-action="payload-catalog-edit" data-payload-id="${escapeHtml(payloadId)}" data-i18n-title="payloads.create.edit_title" aria-label="Edit" title="Edit"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
+        <button class="btn btn-success icon-only" data-action="payload-catalog-export" data-payload-id="${escapeHtml(payloadId)}" data-i18n-title="rules.bulk.export_selected" aria-label="Export" title="Export"><i class="fa-solid fa-file-export" aria-hidden="true"></i></button>
+        <button class="btn btn-danger icon-only" data-action="payload-catalog-delete" data-payload-id="${escapeHtml(payloadId)}" data-i18n-title="rules.bulk.delete_selected" aria-label="Delete" title="Delete"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
+      </div>
+    </div>
+  `;
+}
+
+function enhancePayloadDetailEditors() {
+  document.querySelectorAll("#payload-catalog-table textarea.payload-detail-editor").forEach((node) => {
+    if (!(node instanceof HTMLTextAreaElement)) return;
+    const lang = String(node.dataset.lang || "bash");
+    node.dataset.lang = lang;
+    if (!node.closest(".code-editor-wrap")) {
+      initCodeEditor(node);
+    }
+    updateCodeEditorLang(node, lang);
+  });
+}
+
+function togglePayloadCatalogDetails(payloadId) {
+  if (!payloadId) return;
+  if (state.customPayloads.expandedDetails.has(payloadId)) {
+    state.customPayloads.expandedDetails.delete(payloadId);
+  } else {
+    state.customPayloads.expandedDetails.add(payloadId);
   }
-  cardsRoot.innerHTML = entries.map((entry) => {
-    const runners = entry.compatibleRunners?.length ? entry.compatibleRunners : ["spuc-agent"];
-    const runnerBadges = runners.map((runner) => `<span class="runner-badge">${escapeHtml(runner)}</span>`).join("");
-    return `
-      <article class="rule-card payload-card" data-payload-row-id="${escapeHtml(entry.id)}">
-        <header class="rule-card-head">
-          <div class="rule-card-title-wrap">
-            <div class="rule-card-title-line">
-              <h4>${escapeHtml(entry.name || t("adversaries.payload.untitled"))}</h4>
-              <span class="payload-tech-badge">${escapeHtml(String(entry.technology || "-"))}</span>
-            </div>
-            <div class="rule-card-subtitle">
-              <span class="rule-card-id-stack"><span class="rule-card-id">${escapeHtml(entry.id || "")}</span></span>
-            </div>
-          </div>
-        </header>
-        <section class="rule-card-body">
-          <div class="rule-card-pill-group">
-            <span class="rule-card-pill-label">${escapeHtml(t("adversaries.payload.catalog_col.runners"))}</span>
-            <div class="rule-card-tags">${runnerBadges}</div>
-          </div>
-          <p class="muted">${escapeHtml(entry.description || t("common.no_data"))}</p>
-          <div class="payload-table-actions">
-            <button class="btn btn-ghost icon-only" data-action="payload-catalog-edit" data-payload-id="${escapeHtml(entry.id)}" data-i18n-title="payloads.create.edit_title" aria-label="Edit" title="Edit"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
-            <button class="btn btn-success icon-only" data-action="payload-catalog-export" data-payload-id="${escapeHtml(entry.id)}" data-i18n-title="rules.bulk.export_selected" aria-label="Export" title="Export"><i class="fa-solid fa-file-export" aria-hidden="true"></i></button>
-            <button class="btn btn-danger icon-only" data-action="payload-catalog-delete" data-payload-id="${escapeHtml(entry.id)}" data-i18n-title="rules.bulk.delete_selected" aria-label="Delete" title="Delete"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
-          </div>
-        </section>
-      </article>
-    `;
-  }).join("");
+  renderPayloadCatalogWorkspace();
 }
 
 function renderPayloadsTable() {
@@ -8819,54 +9405,40 @@ function renderPayloadsTable() {
     ).toLowerCase();
     return leftValue.localeCompare(rightValue) * (descending ? -1 : 1);
   });
-  const visibleColumns = PAYLOAD_COLUMN_KEYS.filter((column) => state.customPayloads.visibleColumns.has(column));
   const total = allEntries.length;
   const headers = [
-    `<th class="payload-col-select"><input type="checkbox" id="payload-catalog-select-all" data-action="payload-catalog-select-all-toggle" aria-label="${escapeHtml(t("rules.bulk.select_all"))}"></th>`,
-    ...visibleColumns.map((column) => {
-      if (column === "name") {
-        return sortableHeader(payloadColumnLabel(column), "payload-sort-column", "name", currentSort, "name_asc", "name_desc");
-      }
-      if (column === "technology") {
-        return sortableHeader(payloadColumnLabel(column), "payload-sort-column", "technology", currentSort, "tech_asc", "tech_desc");
-      }
-      if (column === "runner") {
-        return sortableHeader(payloadColumnLabel(column), "payload-sort-column", "runner", currentSort, "runner_asc", "runner_desc");
-      }
-      if (column === "description") {
-        return sortableHeader(payloadColumnLabel(column), "payload-sort-column", "description", currentSort, "desc_asc", "desc_desc");
-      }
-      return `<th>${escapeHtml(payloadColumnLabel(column))}</th>`;
-    }),
-    `<th>${escapeHtml(t("common.actions"))}</th>`,
+    `<th><input type="checkbox" id="payload-catalog-select-all" data-action="payload-catalog-select-all-toggle" aria-label="${escapeHtml(t("rules.bulk.select_all"))}"></th>`,
+    sortableHeader(payloadColumnLabel("technology"), "payload-sort-column", "technology", currentSort, "tech_asc", "tech_desc"),
+    sortableHeader(payloadColumnLabel("name"), "payload-sort-column", "name", currentSort, "name_asc", "name_desc"),
+    sortableHeader(payloadColumnLabel("runner"), "payload-sort-column", "runner", currentSort, "runner_asc", "runner_desc"),
+    sortableHeader(payloadColumnLabel("description"), "payload-sort-column", "description", currentSort, "desc_asc", "desc_desc"),
   ];
-  const emptyRow = `<tr class="table-empty-row"><td colspan="${2 + visibleColumns.length}">${escapeHtml(t("common.no_data"))}</td></tr>`;
-  const rows = entries.map((entry, rowIndex) => {
+  const emptyRow = `<tr class="table-empty-row"><td colspan="5">${escapeHtml(t("common.no_data"))}</td></tr>`;
+  const rows = entries.map((entry) => {
     const selected = state.customPayloads.selected.has(entry.id);
     const runners = entry.compatibleRunners?.length ? entry.compatibleRunners : ["spuc-agent"];
-    const runnerBadges = runners.map((runner) => `<span class="runner-badge">${escapeHtml(runner)}</span>`).join("");
-    const cells = [
-      `<td class="payload-row-check"><input type="checkbox" data-action="payload-catalog-select" data-id="${escapeHtml(entry.id)}" ${selected ? "checked" : ""} aria-label="${escapeHtml(tf("rules.bulk.row_select", { name: entry.name || entry.id }))}"></td>`,
-    ];
-    visibleColumns.forEach((column) => {
-      if (column === "name") {
-        cells.push(`<td class="payload-cell-name"><strong>${escapeHtml(entry.name || t("adversaries.payload.untitled"))}</strong></td>`);
-      } else if (column === "technology") {
-        cells.push(`<td><span class="payload-tech-badge">${escapeHtml(String(entry.technology || "-"))}</span></td>`);
-      } else if (column === "runner") {
-        cells.push(`<td><span class="payload-cell-runners">${runnerBadges}</span></td>`);
-      } else if (column === "description") {
-        cells.push(`<td class="payload-table-desc">${escapeHtml(entry.description || "")}</td>`);
-      }
-    });
-    cells.push(`
-      <td class="payload-table-actions">
-        <button class="btn btn-ghost icon-only" data-action="payload-catalog-edit" data-payload-id="${escapeHtml(entry.id)}" data-i18n-title="payloads.create.edit_title" aria-label="Edit" title="Edit"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
-        <button class="btn btn-success icon-only" data-action="payload-catalog-export" data-payload-id="${escapeHtml(entry.id)}" data-i18n-title="rules.bulk.export_selected" aria-label="Export" title="Export"><i class="fa-solid fa-file-export" aria-hidden="true"></i></button>
-        <button class="btn btn-danger icon-only" data-action="payload-catalog-delete" data-payload-id="${escapeHtml(entry.id)}" data-i18n-title="rules.bulk.delete_selected" aria-label="Delete" title="Delete"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
+    const runnerBadges = runners.map((runner) => `<span class="status-badge">${escapeHtml(runner)}</span>`).join(" ");
+    const expanded = state.customPayloads.expandedDetails.has(entry.id);
+    const detailId = `payload-detail-${entry.id.replace(/[^a-zA-Z0-9]/g, "-")}`;
+    const description = String(entry.description || "");
+    const shortDescription = description.length > 120 ? `${description.slice(0, 119)}...` : description;
+    return `<tr class="payload-row" data-payload-row-id="${escapeHtml(entry.id)}" aria-expanded="${expanded ? "true" : "false"}">
+      <td class="payload-row-check"><input type="checkbox" data-action="payload-catalog-select" data-id="${escapeHtml(entry.id)}" ${selected ? "checked" : ""} aria-label="${escapeHtml(tf("rules.bulk.row_select", { name: entry.name || entry.id }))}"></td>
+      <td><span class="stix-type-badge">${escapeHtml(String(entry.technology || "-"))}</span></td>
+      <td>${escapeHtml(entry.name || t("adversaries.payload.untitled"))}</td>
+      <td>${runnerBadges || `<span class="muted">${escapeHtml(t("common.no_data"))}</span>`}</td>
+      <td class="muted">${escapeHtml(shortDescription)}</td>
+    </tr>
+    <tr class="stix-detail-row${expanded ? "" : " hidden"}">
+      <td colspan="5">
+        <details id="${escapeHtml(detailId)}" open>
+          <summary class="payload-detail-summary">${escapeHtml(t("stix_objects.more_info") || "Details")}</summary>
+          <div class="payload-detail-body">
+            ${renderPayloadCatalogDetails(entry)}
+          </div>
+        </details>
       </td>
-    `);
-    return `<tr class="payload-row" data-payload-row-id="${escapeHtml(entry.id)}" data-row-index="${rowIndex}">${cells.join("")}</tr>`;
+    </tr>`;
   });
   root.innerHTML = `
     <thead>
@@ -8874,35 +9446,26 @@ function renderPayloadsTable() {
     </thead>
     <tbody>${rows.join("") || emptyRow}</tbody>
   `;
-  renderPayloadCards(entries);
-  updatePayloadsViewModeUI();
-  const modeLabel = state.customPayloads.viewMode === "cards" ? t("rules.view.cards") : t("rules.view.table");
   const meta = document.getElementById("payload-catalog-meta");
   if (meta) {
-    meta.textContent = `${entries.length}/${total} ${t("common.entries")} · ${modeLabel}`;
+    meta.textContent = `${entries.length} ${t("common.entries")}`;
   }
+  const status = document.getElementById("payload-catalog-status");
+  if (status) {
+    status.classList.toggle("hidden", state.customPayloads.selected.size === 0);
+  }
+  enhancePayloadDetailEditors();
   updatePayloadCatalogBulkState(entries);
 }
 
 function setPayloadsViewMode(mode) {
-  state.customPayloads.viewMode = mode === "cards" ? "cards" : "table";
+  state.customPayloads.viewMode = "table";
   localStorage.setItem("spuc-web-payloads-view-mode", state.customPayloads.viewMode);
-  updatePayloadsViewModeUI();
   renderPayloadCatalogWorkspace();
 }
 
 function updatePayloadsViewModeUI() {
-  const mode = state.customPayloads.viewMode === "cards" ? "cards" : "table";
-  const tableBtn = document.getElementById("payload-view-table");
-  const cardsBtn = document.getElementById("payload-view-cards");
-  const tableWrap = document.getElementById("payload-catalog-table-wrap");
-  const cardsWrap = document.getElementById("payload-catalog-cards");
-  const columnsToggle = document.getElementById("payloads-columns-toggle");
-  if (tableBtn) tableBtn.classList.toggle("active", mode === "table");
-  if (cardsBtn) cardsBtn.classList.toggle("active", mode === "cards");
-  if (tableWrap) tableWrap.classList.toggle("hidden", mode !== "table");
-  if (cardsWrap) cardsWrap.classList.toggle("hidden", mode !== "cards");
-  if (columnsToggle) columnsToggle.disabled = mode !== "table";
+  state.customPayloads.viewMode = "table";
 }
 
 function togglePayloadsSortColumn(column) {
@@ -8945,6 +9508,7 @@ function savePayloadFromCatalogForm() {
   });
   state.customPayloads.entries.unshift(entry);
   state.adversaryCompose.customPayloads = [...state.customPayloads.entries];
+  state.customPayloads.expandedDetails.add(entry.id);
   persistCustomPayloadCatalog();
   renderPayloadCatalogWorkspace();
   showToast("toast.saved");
@@ -9505,10 +10069,13 @@ function createNewAdversaryInEditor() {
     if (selectedText.trim().length > 0) return;
     const payloadId = row.getAttribute("data-payload-row-id") || "";
     if (!payloadId) return;
-    openPayloadCatalogCreateModal(payloadId);
+    togglePayloadCatalogDetails(payloadId);
   });
 
   document.body.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const row = target.closest("#adversaries-table tbody tr[data-adversary-row-id]");
     if (!row) return;
     if (target.closest("button, a, input, select, textarea, label")) return;
     const selectedText = window.getSelection ? String(window.getSelection()) : "";
@@ -9616,7 +10183,7 @@ function createNewAdversaryInEditor() {
         if (menu) menu.classList.toggle("hidden");
       } else if (action === "payload-catalog-filters-toggle") {
         state.customPayloads.filtersOpen = !state.customPayloads.filtersOpen;
-        renderPayloadCatalogFiltersRevealer();
+        syncPayloadCatalogFiltersRevealer();
       } else if (action === "payload-catalog-delete") {
         const payloadId = String(target.dataset.payloadId || "");
         if (!payloadId) return;
@@ -9628,6 +10195,7 @@ function createNewAdversaryInEditor() {
         if (!confirmed) return;
         state.customPayloads.entries = (state.customPayloads.entries || []).filter((entry) => entry.id !== payloadId);
         state.customPayloads.selected.delete(payloadId);
+        state.customPayloads.expandedDetails.delete(payloadId);
         state.adversaryCompose.customPayloads = [...state.customPayloads.entries];
         state.adversaryCompose.selectedOrder = state.adversaryCompose.selectedOrder.filter((id) => id !== payloadId);
         persistCustomPayloadCatalog();
@@ -9636,6 +10204,8 @@ function createNewAdversaryInEditor() {
         renderAdversaryFlowSteps();
       } else if (action === "payload-catalog-delete-selected") {
         await deleteSelectedPayloads();
+      } else if (action === "payload-catalog-duplicate-selected") {
+        await duplicateSelectedPayloads();
       } else if (action === "payload-catalog-export-selected") {
         await exportSelectedPayloads();
       } else if (action === "payload-catalog-export") {
@@ -10106,9 +10676,17 @@ function createNewAdversaryInEditor() {
       } else if (action === "learning-select") {
         mountLearningPractice(target.dataset.id);
       } else if (action === "learning-path-filter") {
-        state.learning.pathFilter = target.dataset.path || "";
+        state.learning.selectedPath = target.dataset.path || "";
+        state.learning.pathFilter = state.learning.selectedPath;
         const select = document.getElementById("learning-path");
         if (select instanceof HTMLSelectElement) select.value = state.learning.pathFilter;
+        saveLearningProgress();
+        renderLearningChallenges();
+      } else if (action === "learning-path-back") {
+        state.learning.selectedPath = "";
+        state.learning.pathFilter = "";
+        const select = document.getElementById("learning-path");
+        if (select instanceof HTMLSelectElement) select.value = "";
         saveLearningProgress();
         renderLearningChallenges();
       } else if (action === "settings-tab") {
@@ -10172,6 +10750,18 @@ function createNewAdversaryInEditor() {
         });
         showToast("toast.saved");
         await loadAdminOauthProviders();
+      } else if (action === "stix-use-local") {
+        await api("/api/user/settings/stix-source", {
+          method: "PUT",
+          body: JSON.stringify({ stix_catalog_source: "local", opencti_enabled: false }),
+        });
+        state.stixObjectsView.source = "local";
+        state.stixObjectsView.effectiveSource = "local";
+        showToast("toast.saved");
+        await Promise.all([loadOpenCtiSettings(), loadStixObjects()]);
+      } else if (action === "stix-go-settings") {
+        setRoute("settings");
+        setSettingsTab("personal");
       } else if (action === "stix-create-open") {
         openStixObjectDialog();
       } else if (action === "stix-edit-object") {
@@ -10260,6 +10850,8 @@ function createNewAdversaryInEditor() {
         showToast("toast.export_ready");
       } else if (action === "stix-export-selected-stix") {
         await exportSelectedStixObjects();
+      } else if (action === "stix-duplicate-selected") {
+        await duplicateSelectedStixObjects();
       } else if (action === "stix-delete") {
         const stixId = target.dataset.stixId || "";
         if (!stixId) return;
@@ -10508,20 +11100,24 @@ function createNewAdversaryInEditor() {
       const entry = state.rules.entries.find((item) => item.id === id);
       if (!entry) return;
       const confidence = Math.max(0, Math.min(100, Number(target.value || "0")));
-      await api("/api/rules/save", {
-        method: "POST",
-        body: JSON.stringify({
-          rule: entry.rule,
-          name: entry.name,
-          description: entry.description || "",
-          confidence,
-          tlp: entry.tlp || "TLP:GREEN",
-          pap: entry.pap || "PAP:GREEN",
-          indicates: entry.indicates || undefined,
-        }),
-      });
-      showToast("toast.saved");
-      await Promise.all([loadRules(state.rules.page), loadOverview()]);
+      try {
+        await api("/api/rules/save", {
+          method: "POST",
+          body: JSON.stringify({
+            rule: entry.rule,
+            name: entry.name,
+            description: entry.description || "",
+            confidence,
+            tlp: entry.tlp || "TLP:GREEN",
+            pap: entry.pap || "PAP:GREEN",
+            indicates: entry.indicates || undefined,
+          }),
+        });
+        showToast("toast.rule_save_success", true, { variant: "success" });
+        await Promise.all([loadRules(state.rules.page), loadOverview()]);
+      } catch (_error) {
+        showToast("toast.rule_save_error", true, { variant: "error" });
+      }
       return;
     }
 
