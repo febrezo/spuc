@@ -71,12 +71,12 @@ jobs:
           elif [ "${{ matrix.target }}" = "x86_64-unknown-linux-musl" ]; then
             export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc
           fi
-          cargo build --release --target "${{ matrix.target }}" -p spuc-cli --bin spuc
+          cargo build --release --target "${{ matrix.target }}" -p spuc-cli --bins
 
       - name: Build release binary (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: cargo build --release --target ${{ matrix.target }} -p spuc-cli --bin spuc
+        run: cargo build --release --target ${{ matrix.target }} -p spuc-cli --bins
 
       - name: Package (Linux/macOS)
         if: runner.os != 'Windows'
@@ -84,10 +84,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="$(sed -nE 's/^version\\s*=\\s*\"([^\"]+)\"/\\1/p' Cargo.toml | head -n1)"
+          VERSION="$(awk -F'\"' '/^version[[:space:]]*=/{print $2; exit}' Cargo.toml)"
           OUT="spuc-v${VERSION}-${{ matrix.target }}"
           mkdir -p "dist/${OUT}"
           cp "target/${{ matrix.target }}/release/spuc" "dist/${OUT}/"
+          cp "target/${{ matrix.target }}/release/spuc-agent" "dist/${OUT}/"
           cp README.md LICENSE.md "dist/${OUT}/"
           tar -C dist -czf "dist/${OUT}.tar.gz" "${OUT}"
           echo "asset=dist/${OUT}.tar.gz" >> "${GITHUB_OUTPUT}"
@@ -102,6 +103,7 @@ jobs:
           $out = "spuc-v$version-${{ matrix.target }}"
           New-Item -ItemType Directory -Force -Path "dist/$out" | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/spuc.exe" "dist/$out/"
+          Copy-Item "target/${{ matrix.target }}/release/spuc-agent.exe" "dist/$out/"
           Copy-Item "README.md","LICENSE.md" "dist/$out/"
           Compress-Archive -Path "dist/$out/*" -DestinationPath "dist/$out.zip" -Force
           "asset=dist/$out.zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
@@ -171,15 +173,47 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo build --release --target "${{ matrix.target }}" -p spuc-cli --bin spuc
+          cargo build --release --target "${{ matrix.target }}" -p spuc-cli --bins
           cargo build --release --target "${{ matrix.target }}" -p spuc-gui
 
       - name: Build desktop binary (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          cargo build --release --target ${{ matrix.target }} -p spuc-cli --bin spuc
+          cargo build --release --target ${{ matrix.target }} -p spuc-cli --bins
           cargo build --release --target ${{ matrix.target }} -p spuc-gui
+
+      - name: Package desktop bundle (Unix)
+        if: runner.os != 'Windows'
+        id: package_desktop_unix
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(awk -F'\"' '/^version[[:space:]]*=/{print $2; exit}' Cargo.toml)"
+          OUT="spuc-desktop-v${VERSION}-${{ matrix.target }}"
+          mkdir -p "dist/${OUT}"
+          cp "target/${{ matrix.target }}/release/spuc" "dist/${OUT}/"
+          cp "target/${{ matrix.target }}/release/spuc-agent" "dist/${OUT}/"
+          cp "target/${{ matrix.target }}/release/spuc-gui" "dist/${OUT}/"
+          cp README.md LICENSE.md "dist/${OUT}/"
+          tar -C dist -czf "dist/${OUT}.tar.gz" "${OUT}"
+          echo "asset=dist/${OUT}.tar.gz" >> "${GITHUB_OUTPUT}"
+
+      - name: Package desktop bundle (Windows)
+        if: runner.os == 'Windows'
+        id: package_desktop_windows
+        shell: pwsh
+        run: |
+          $versionLine = Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"(.*)"' | Select-Object -First 1
+          $version = $versionLine.Matches[0].Groups[1].Value
+          $out = "spuc-desktop-v$version-${{ matrix.target }}"
+          New-Item -ItemType Directory -Force -Path "dist/$out" | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/spuc.exe" "dist/$out/"
+          Copy-Item "target/${{ matrix.target }}/release/spuc-agent.exe" "dist/$out/"
+          Copy-Item "target/${{ matrix.target }}/release/spuc-gui.exe" "dist/$out/"
+          Copy-Item "README.md","LICENSE.md" "dist/$out/"
+          Compress-Archive -Path "dist/$out/*" -DestinationPath "dist/$out.zip" -Force
+          "asset=dist/$out.zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload desktop artifacts (Linux / macOS)
         if: runner.os != 'Windows'
@@ -189,6 +223,13 @@ jobs:
           path: |
             target/${{ matrix.target }}/release/spuc-gui
             target/${{ matrix.target }}/release/spuc
+            target/${{ matrix.target }}/release/spuc-agent
+      - name: Upload desktop bundle (Linux / macOS)
+        if: runner.os != 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-bundle-${{ matrix.name }}
+          path: ${{ steps.package_desktop_unix.outputs.asset }}
 
       - name: Upload desktop artifacts (Windows)
         if: runner.os == 'Windows'
@@ -198,6 +239,13 @@ jobs:
           path: |
             target/${{ matrix.target }}/release/spuc-gui.exe
             target/${{ matrix.target }}/release/spuc.exe
+            target/${{ matrix.target }}/release/spuc-agent.exe
+      - name: Upload desktop bundle (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-bundle-${{ matrix.name }}
+          path: ${{ steps.package_desktop_windows.outputs.asset }}
 
   publish:
     name: Publish GitHub Release

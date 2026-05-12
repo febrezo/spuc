@@ -133,6 +133,13 @@ Last updated: 2026-03-15
 - First execution performs discovery and stores cache; subsequent runs reuse cache to avoid repeated startup latency.
 - Manual refresh is explicit through `spuc sigma update-config`.
 
+## Release Packaging
+
+- GitHub release archives for Unix targets derive the version from the root `Cargo.toml` and must be emitted as `spuc-v<version>-<target>.tar.gz`.
+- Windows release archives follow the same versioned naming pattern with `.zip` suffix.
+- CLI bundles include both `spuc` and `spuc-agent` binaries.
+- Desktop bundles include `spuc`, `spuc-agent`, and `spuc-gui` binaries.
+
 ## Known Limitations
 
 - No intrusion-set execution engine yet.
