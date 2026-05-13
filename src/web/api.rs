@@ -246,11 +246,47 @@ struct TranslateStixPatternRequest {
     rule_confidence: Option<u8>,
 }
 
+#[derive(Debug, Deserialize)]
+struct TranslateStixBundleRequest {
+    indicator: serde_json::Value,
+    #[serde(default)]
+    targets: Vec<String>,
+    #[serde(default)]
+    sigma_targets: Vec<String>,
+    #[serde(default)]
+    rule_confidence: Option<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TranslatePatternSummaryRequest {
+    pattern: String,
+    target: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    rule_confidence: Option<u8>,
+}
+
 #[derive(Debug, Serialize)]
 struct TranslateStixPatternResponse {
     status: &'static str,
     comments: Vec<String>,
     results: Vec<TranslateStixPatternResult>,
+}
+
+#[derive(Debug, Serialize)]
+struct TranslatePatternSummaryResponse {
+    status: &'static str,
+    comments: Vec<String>,
+    result: Option<TranslatePatternSummaryResult>,
+}
+
+#[derive(Debug, Serialize)]
+struct TranslatePatternSummaryResult {
+    description: String,
+    pattern: String,
+    confidence: u8,
+    target: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -701,6 +737,22 @@ impl WebState {
         store.entries.push(new_entry.clone());
         persist_user_api_tokens(&self.user_api_tokens_path, &store)?;
         Ok((api_token_view(new_entry), token_value))
+    }
+
+    fn delete_user_api_token(&self, principal: &Principal, token_id: &str) -> Result<bool> {
+        let mut store = self
+            .user_api_tokens
+            .lock()
+            .expect("API tokens mutex poisoned");
+        let before = store.entries.len();
+        store
+            .entries
+            .retain(|entry| !(entry.user_id == principal.user_id && entry.id == token_id));
+        let deleted = store.entries.len() != before;
+        if deleted {
+            persist_user_api_tokens(&self.user_api_tokens_path, &store)?;
+        }
+        Ok(deleted)
     }
 
     fn resolve_principal_from_api_token(&self, token: &str) -> Option<Principal> {
@@ -2318,6 +2370,12 @@ pub(crate) fn route(request: HttpRequest, state: &WebState) -> Result<HttpRespon
     if request.method == "POST" && request.path == "/api/translate/stix-pattern" {
         return translate_stix_pattern_with_token(&request, state);
     }
+    if request.method == "POST" && request.path == "/api/translate/stix-bundle" {
+        return translate_stix_bundle_with_token(&request, state);
+    }
+    if request.method == "POST" && request.path == "/api/translate/stix-pattern-summary" {
+        return translate_stix_pattern_summary_with_token(&request, state);
+    }
 
     let Some(principal) = principal else {
         return HttpResponse::json(
@@ -2386,6 +2444,9 @@ pub(crate) fn route(request: HttpRequest, state: &WebState) -> Result<HttpRespon
         ("POST", ["api", "user", "tokens"]) => user_create_token(&principal, &request, state),
         ("DELETE", ["api", "user", "tokens", token_id]) => {
             user_revoke_token(&principal, token_id, state)
+        }
+        ("DELETE", ["api", "user", "tokens", token_id, "purge"]) => {
+            user_delete_token(&principal, token_id, state)
         }
         ("POST", ["api", "user", "tokens", token_id, "rotate"]) => {
             user_rotate_token(&principal, token_id, state)
@@ -2864,19 +2925,25 @@ fn user_rotate_token(
     }
 }
 
+fn user_delete_token(
+    principal: &Principal,
+    token_id: &str,
+    state: &WebState,
+) -> Result<HttpResponse> {
+    match state.delete_user_api_token(principal, token_id) {
+        Ok(true) => HttpResponse::json(200, &serde_json::json!({ "ok": true })),
+        Ok(false) => HttpResponse::json(404, &serde_json::json!({ "error": "token_not_found" })),
+        Err(error) => Err(error),
+    }
+}
+
 fn translate_stix_pattern_with_token(
     request: &HttpRequest,
     state: &WebState,
 ) -> Result<HttpResponse> {
-    let Some(token) = request.bearer_token() else {
-        return HttpResponse::json(401, &serde_json::json!({ "error": "missing_api_token" }));
-    };
-    let Some(_principal) = state.resolve_principal_from_api_token(token.as_str()) else {
-        return HttpResponse::json(
-            401,
-            &serde_json::json!({ "error": "invalid_or_revoked_api_token" }),
-        );
-    };
+    if let Err(response) = ensure_api_token_auth(request, state) {
+        return Ok(response);
+    }
 
     let payload: TranslateStixPatternRequest = match request.json() {
         Ok(payload) => payload,
@@ -2997,6 +3064,321 @@ fn translate_stix_pattern_with_token(
             results,
         },
     )
+}
+
+fn translate_stix_bundle_with_token(
+    request: &HttpRequest,
+    state: &WebState,
+) -> Result<HttpResponse> {
+    if let Err(response) = ensure_api_token_auth(request, state) {
+        return Ok(response);
+    }
+    let payload: TranslateStixBundleRequest = match request.json() {
+        Ok(payload) => payload,
+        Err(error) => {
+            return HttpResponse::json(
+                400,
+                &serde_json::json!({
+                    "error": "invalid_request_payload",
+                    "message": error.to_string()
+                }),
+            )
+        }
+    };
+    let indicator =
+        match normalize_input_indicator_for_bundle(&payload.indicator, payload.rule_confidence) {
+            Ok(indicator) => indicator,
+            Err(error) => return HttpResponse::json(400, &serde_json::json!({ "error": error })),
+        };
+    let translations = evaluate_stix_translations(
+        indicator.pattern.as_str(),
+        payload.targets,
+        payload.sigma_targets,
+        Some(indicator.confidence),
+        indicator.description.as_deref(),
+    )?;
+    if translations.is_empty() {
+        return HttpResponse::json(
+            200,
+            &serde_json::json!({ "status": "error", "comments": ["No translation results for the provided STIX pattern"], "objects": [] }),
+        );
+    }
+    let bundle = build_stix_translation_bundle(indicator, translations);
+    HttpResponse::json(200, &bundle)
+}
+
+fn translate_stix_pattern_summary_with_token(
+    request: &HttpRequest,
+    state: &WebState,
+) -> Result<HttpResponse> {
+    if let Err(response) = ensure_api_token_auth(request, state) {
+        return Ok(response);
+    }
+    let payload: TranslatePatternSummaryRequest = match request.json() {
+        Ok(payload) => payload,
+        Err(error) => {
+            return HttpResponse::json(
+                400,
+                &serde_json::json!({
+                    "error": "invalid_request_payload",
+                    "message": error.to_string()
+                }),
+            )
+        }
+    };
+    if payload.pattern.trim().is_empty() {
+        return HttpResponse::json(
+            400,
+            &TranslatePatternSummaryResponse {
+                status: "error",
+                comments: vec!["pattern is required".to_string()],
+                result: None,
+            },
+        );
+    }
+    if payload.target.trim().is_empty() {
+        return HttpResponse::json(
+            400,
+            &TranslatePatternSummaryResponse {
+                status: "error",
+                comments: vec!["target is required".to_string()],
+                result: None,
+            },
+        );
+    }
+    let rows = evaluate_stix_translations(
+        payload.pattern.as_str(),
+        vec![payload.target.clone()],
+        vec![],
+        payload.rule_confidence,
+        payload.description.as_deref(),
+    )?;
+    let Some(row) = rows.into_iter().next() else {
+        return HttpResponse::json(
+            200,
+            &TranslatePatternSummaryResponse {
+                status: "error",
+                comments: vec!["No translation results for the provided STIX pattern".to_string()],
+                result: None,
+            },
+        );
+    };
+    HttpResponse::json(
+        200,
+        &TranslatePatternSummaryResponse {
+            status: "success",
+            comments: row.notes,
+            result: Some(TranslatePatternSummaryResult {
+                description: row.summary,
+                pattern: row.output.unwrap_or_default(),
+                confidence: row.conversion_confidence,
+                target: row.target,
+            }),
+        },
+    )
+}
+
+fn ensure_api_token_auth(
+    request: &HttpRequest,
+    state: &WebState,
+) -> std::result::Result<(), HttpResponse> {
+    let Some(token) = request.bearer_token() else {
+        return Err(
+            HttpResponse::json(401, &serde_json::json!({ "error": "missing_api_token" }))
+                .expect("json response"),
+        );
+    };
+    if state
+        .resolve_principal_from_api_token(token.as_str())
+        .is_none()
+    {
+        return Err(HttpResponse::json(
+            401,
+            &serde_json::json!({ "error": "invalid_or_revoked_api_token" }),
+        )
+        .expect("json response"));
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct InputIndicator {
+    id: String,
+    name: String,
+    description: Option<String>,
+    pattern_type: String,
+    pattern: String,
+    confidence: u8,
+}
+
+fn normalize_input_indicator_for_bundle(
+    indicator: &serde_json::Value,
+    fallback_confidence: Option<u8>,
+) -> std::result::Result<InputIndicator, &'static str> {
+    let object_type = indicator
+        .get("type")
+        .and_then(|value| value.as_str())
+        .unwrap_or("indicator");
+    if !object_type.eq_ignore_ascii_case("indicator") {
+        return Err("only_indicator_object_supported");
+    }
+    let pattern_type = indicator
+        .get("pattern_type")
+        .and_then(|value| value.as_str())
+        .unwrap_or("stix")
+        .to_string();
+    if !pattern_type.eq_ignore_ascii_case("stix") {
+        return Err("pattern_type_must_be_stix");
+    }
+    let pattern = indicator
+        .get("pattern")
+        .and_then(|value| value.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if pattern.is_empty() {
+        return Err("pattern_required");
+    }
+    let id = indicator
+        .get("id")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| new_stix_id("indicator"));
+    let name = indicator
+        .get("name")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "Source indicator".to_string());
+    let description = indicator
+        .get("description")
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let confidence = fallback_confidence
+        .or_else(|| {
+            indicator
+                .get("confidence")
+                .and_then(|value| value.as_u64())
+                .map(|value| value as u8)
+        })
+        .unwrap_or(70)
+        .min(100);
+    Ok(InputIndicator {
+        id,
+        name,
+        description,
+        pattern_type: "stix".to_string(),
+        pattern,
+        confidence,
+    })
+}
+
+fn evaluate_stix_translations(
+    pattern: &str,
+    targets: Vec<String>,
+    sigma_targets: Vec<String>,
+    rule_confidence: Option<u8>,
+    description: Option<&str>,
+) -> Result<Vec<crate::app::services::translation::TranslationEvaluation>> {
+    let targets = if targets.is_empty() {
+        available_detection_target_labels()
+    } else {
+        targets
+    };
+    let rows = evaluate_rule(TranslationRequest {
+        rule: pattern,
+        targets: &targets,
+        description,
+        sigma_targets: &sigma_targets,
+        mode: ConversionMode::Strict,
+        rule_confidence,
+    })?;
+    Ok(rows
+        .into_iter()
+        .filter(|row| !row.runtime_status.eq_ignore_ascii_case("unsupported"))
+        .filter(|row| {
+            row.output
+                .as_deref()
+                .map(str::trim)
+                .is_some_and(|output| !output.is_empty())
+        })
+        .collect())
+}
+
+fn build_stix_translation_bundle(
+    source: InputIndicator,
+    rows: Vec<crate::app::services::translation::TranslationEvaluation>,
+) -> serde_json::Value {
+    let now = Utc::now().to_rfc3339();
+    let mut objects = Vec::new();
+    objects.push(json!({
+        "type": "indicator",
+        "spec_version": "2.1",
+        "id": source.id.clone(),
+        "created": now,
+        "modified": now,
+        "name": source.name,
+        "pattern_type": source.pattern_type,
+        "pattern": source.pattern,
+        "description": source.description.clone().unwrap_or_default(),
+        "valid_from": now,
+        "confidence": source.confidence,
+    }));
+    for row in rows {
+        let output = row.output.unwrap_or_default();
+        let target = row.target.clone();
+        let derived_indicator_id = new_stix_id("indicator");
+        let source_description = source
+            .description
+            .clone()
+            .unwrap_or_else(|| row.summary.clone());
+        let derived_description = format_derived_indicator_description(&source_description);
+        objects.push(json!({
+            "type": "indicator",
+            "spec_version": "2.1",
+            "id": derived_indicator_id,
+            "created": now,
+            "modified": now,
+            "name": format!("{} [{}]", source.name, target),
+            "pattern_type": if target.starts_with("sigma") { "sigma" } else { target.as_str() },
+            "pattern": output,
+            "description": derived_description,
+            "valid_from": now,
+            "confidence": row.conversion_confidence,
+            "labels": ["spuc", "auto-generated", target.as_str()],
+            "x_spuc_translation_comments": row.notes,
+        }));
+        objects.push(json!({
+            "type": "relationship",
+            "spec_version": "2.1",
+            "id": new_stix_id("relationship"),
+            "created": now,
+            "modified": now,
+            "relationship_type": "derived-from",
+            "source_ref": derived_indicator_id,
+            "target_ref": source.id.clone(),
+            "confidence": row.conversion_confidence,
+        }));
+    }
+    json!({
+        "type": "bundle",
+        "id": new_stix_id("bundle"),
+        "spec_version": "2.1",
+        "objects": objects,
+    })
+}
+
+fn format_derived_indicator_description(source_description: &str) -> String {
+    const GENERATED_NOTE: &str =
+        "STIX Indicator automatically generated from the original STIX Pattern.";
+    let trimmed = source_description.trim_end();
+    if trimmed.is_empty() {
+        GENERATED_NOTE.to_string()
+    } else {
+        format!("{trimmed}\n\n{GENERATED_NOTE}")
+    }
 }
 
 fn admin_list_users(principal: &Principal, state: &WebState) -> Result<HttpResponse> {
@@ -7496,6 +7878,31 @@ mod tests {
     }
 
     #[test]
+    fn user_can_delete_revoked_token_record() {
+        with_test_config_dir("api_tokens_delete_revoked", || {
+            let state = WebState::new("admin", "secret-pass", false, false).expect("state");
+            let principal = state
+                .authenticate_local("admin", "secret-pass")
+                .expect("principal");
+
+            let (created, _) = state
+                .create_user_api_token(&principal, "Old token", None)
+                .expect("token create");
+            state
+                .revoke_user_api_token(&principal, created.id.as_str())
+                .expect("token revoke");
+
+            let deleted = state
+                .delete_user_api_token(&principal, created.id.as_str())
+                .expect("token delete");
+            assert!(deleted);
+
+            let entries = state.list_user_api_tokens(&principal);
+            assert!(entries.iter().all(|entry| entry.id != created.id));
+        });
+    }
+
+    #[test]
     fn translate_endpoint_requires_and_honors_api_tokens() {
         with_test_config_dir("translate_token_auth", || {
             let state = WebState::new("admin", "secret-pass", false, false).expect("state");
@@ -7673,14 +8080,126 @@ mod tests {
                     );
                     headers
                 },
-                body: br#"{ \"type\": \"indicator\", \"pattern_type\": \"stix\" }"#
-                    .to_vec(),
+                body: br#"{ \"type\": \"indicator\", \"pattern_type\": \"stix\" }"#.to_vec(),
             };
             let malformed_resp = route(malformed, &state).expect("malformed payload response");
             assert_eq!(malformed_resp.status, 400);
             let malformed_body: serde_json::Value =
                 serde_json::from_slice(&malformed_resp.body).expect("json");
             assert_eq!(malformed_body["error"], "invalid_request_payload");
+        });
+    }
+
+    #[test]
+    fn translate_stix_bundle_endpoint_returns_indicators_and_derived_from_relationships() {
+        with_test_config_dir("translate_bundle_endpoint", || {
+            let state = WebState::new("admin", "secret-pass", false, false).expect("state");
+            let principal = state
+                .authenticate_local("admin", "secret-pass")
+                .expect("principal");
+            let (_entry, token_value) = state
+                .create_user_api_token(&principal, "Translate bundle token", None)
+                .expect("token create");
+            let mut headers = HashMap::new();
+            headers.insert(
+                "authorization".to_string(),
+                format!("Bearer {}", token_value),
+            );
+            let request = HttpRequest {
+                method: "POST".to_string(),
+                path: "/api/translate/stix-bundle".to_string(),
+                query: HashMap::new(),
+                headers,
+                body: serde_json::json!({
+                    "indicator": {
+                        "type": "indicator",
+                        "id": "indicator--11111111-1111-4111-8111-111111111111",
+                        "name": "Original indicator",
+                        "description": "Base description",
+                        "pattern_type": "stix",
+                        "pattern": "[process:name = 'cmd.exe']",
+                        "confidence": 77
+                    },
+                    "targets": ["sigma"]
+                })
+                .to_string()
+                .into_bytes(),
+            };
+            let response = route(request, &state).expect("bundle response");
+            assert_eq!(response.status, 200);
+            let body: serde_json::Value = serde_json::from_slice(&response.body).expect("json");
+            assert_eq!(body["type"], "bundle");
+            let objects = body["objects"].as_array().expect("objects array");
+            assert!(objects.iter().any(|obj| obj["type"] == "indicator"
+                && obj["id"] == "indicator--11111111-1111-4111-8111-111111111111"));
+            let derived_indicators: Vec<&serde_json::Value> = objects
+                .iter()
+                .filter(|obj| {
+                    obj["type"] == "indicator"
+                        && obj["id"] != "indicator--11111111-1111-4111-8111-111111111111"
+                })
+                .collect();
+            assert!(!derived_indicators.is_empty());
+            assert!(derived_indicators.iter().all(|obj| {
+                let description = obj["description"].as_str().unwrap_or_default();
+                description.contains(
+                    "\n\nSTIX Indicator automatically generated from the original STIX Pattern.",
+                )
+            }));
+            let relationships: Vec<&serde_json::Value> = objects
+                .iter()
+                .filter(|obj| {
+                    obj["type"] == "relationship" && obj["relationship_type"] == "derived-from"
+                })
+                .collect();
+            assert!(!relationships.is_empty());
+            assert!(relationships
+                .iter()
+                .all(|rel| rel["confidence"].as_u64().is_some()));
+            let ids: Vec<String> = derived_indicators
+                .iter()
+                .filter_map(|obj| obj["id"].as_str().map(|value| value.to_string()))
+                .collect();
+            let unique: std::collections::HashSet<String> = ids.iter().cloned().collect();
+            assert_eq!(ids.len(), unique.len());
+        });
+    }
+
+    #[test]
+    fn translate_stix_pattern_summary_endpoint_returns_description_and_confidence() {
+        with_test_config_dir("translate_summary_endpoint", || {
+            let state = WebState::new("admin", "secret-pass", false, false).expect("state");
+            let principal = state
+                .authenticate_local("admin", "secret-pass")
+                .expect("principal");
+            let (_entry, token_value) = state
+                .create_user_api_token(&principal, "Translate summary token", None)
+                .expect("token create");
+            let mut headers = HashMap::new();
+            headers.insert(
+                "authorization".to_string(),
+                format!("Bearer {}", token_value),
+            );
+            let request = HttpRequest {
+                method: "POST".to_string(),
+                path: "/api/translate/stix-pattern-summary".to_string(),
+                query: HashMap::new(),
+                headers,
+                body: serde_json::json!({
+                    "pattern": "[process:name = 'cmd.exe']",
+                    "target": "sigma",
+                    "description": "Example source description"
+                })
+                .to_string()
+                .into_bytes(),
+            };
+            let response = route(request, &state).expect("summary response");
+            assert_eq!(response.status, 200);
+            let body: serde_json::Value = serde_json::from_slice(&response.body).expect("json");
+            assert_eq!(body["status"], "success");
+            assert!(body["result"]["description"].is_string());
+            assert!(body["result"]["pattern"].is_string());
+            assert!(body["result"]["confidence"].as_u64().is_some());
         });
     }
 }

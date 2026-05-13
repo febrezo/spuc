@@ -950,6 +950,12 @@ body.theme-light .app-floating-footer {
   justify-content: flex-start;
 }
 
+#panel-settings.panel.active {
+  align-items: flex-start;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
 .welcome-card {
   padding: 24px;
   display: grid;
@@ -3504,15 +3510,38 @@ tr:hover td {
   display: grid;
   gap: 12px;
   align-items: start;
+  align-content: start;
+  min-height: 0;
 }
 
 .settings-tab-panel {
   display: grid;
   gap: 12px;
+  align-content: start;
+  min-height: 0;
+}
+
+#settings-api-translation-accordion {
+  order: 2;
+}
+
+#settings-storage-opencti-accordion {
+  order: 3;
+}
+
+.settings-layout {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
 }
 
 .settings-tabs-shell {
   padding: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .settings-tabs {
@@ -3666,6 +3695,26 @@ tr:hover td {
 
 .settings-actions-right {
   justify-content: flex-end;
+}
+
+.settings-code-sample {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-code-sample-tabs {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-code-sample-tabs .btn.active {
+  border-color: rgba(77, 141, 255, 0.6);
+  background: rgba(77, 141, 255, 0.24);
+}
+
+.settings-code-example {
+  min-height: 190px;
 }
 
 .settings-user-main {
@@ -6139,7 +6188,7 @@ dialog:not([open]) .detail-close-btn {
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 760px) {
   .app-layout {
     grid-template-columns: 1fr;
     padding: 12px;

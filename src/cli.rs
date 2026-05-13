@@ -158,6 +158,8 @@ pub enum Commands {
     /// Localized web interface for catalog browsing, tutorials and adversary planning
     #[command(name = "web", display_order = 7)]
     Web {
+        #[arg(long = "host", default_value = "127.0.0.1")]
+        host: String,
         #[arg(short = 'p', long = "port", default_value_t = 8090)]
         port: u16,
         /// Administrator username used for local login bootstrap
@@ -410,6 +412,34 @@ mod tests {
         match cli.command {
             Some(Commands::Sigma { .. }) => {}
             _ => panic!("expected sigma command"),
+        }
+    }
+
+    #[test]
+    fn web_accepts_explicit_bind_host() {
+        let cli = Cli::try_parse_from([
+            "spuc",
+            "web",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "8090",
+            "--no-open",
+        ])
+        .expect("parse web host");
+
+        match cli.command {
+            Some(Commands::Web {
+                host,
+                port,
+                no_open,
+                ..
+            }) => {
+                assert_eq!(host, "0.0.0.0");
+                assert_eq!(port, 8090);
+                assert!(no_open);
+            }
+            _ => panic!("expected web command"),
         }
     }
 }

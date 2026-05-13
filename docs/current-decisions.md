@@ -150,10 +150,11 @@ Last updated: 2026-03-15
 ## Web Interface
 
 - Running `spuc` with no command launches local no-login web mode on `http://127.0.0.1:8090/`.
-- `spuc web` runs a localhost-only HTTP interface, opens the system browser by default, supports `--no-open` for embedded/sidecar use, and exposes `GET /healthz` for readiness checks.
+- `spuc web` binds to `127.0.0.1` by default, accepts `--host` for explicit bind changes such as Docker/Compose, opens the system browser by default, supports `--no-open` for embedded/sidecar use, and exposes `GET /healthz` for readiness checks.
 - `spuc-gui` wraps the web UI in a native window titled `SPUC: A behavioural IOC mapping lab` or the Spanish equivalent, starts `spuc web --no-login --no-open` on an available localhost port, marks the embedded URL with `spuc-mode=gui`, shows a local loading screen until `/healthz` is ready, passes its detected system locale to the embedded web UI, and manages sidecar lifecycle.
 - `spuc-gui` keeps local SPUC navigation in the webview and opens external links in the system browser.
 - If the GUI cannot start the `spuc` sidecar, it exits before opening the window and reports how to build or point `SPUC_SERVER_BIN` at the CLI binary.
+- Root `docker-compose.yml` is the canonical container entry for the repository and runs `spuc web --host 0.0.0.0 --port 8090 --no-open` with persisted `/data` state.
 - The web interface is localized in English and Spanish only.
 - Authentication supports local username/password users persisted in `web_users.json`.
 - Google/GitHub sign-in uses authorization-code callback flow with environment bootstrap plus explicit admin authorization flags per provider.

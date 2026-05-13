@@ -7763,14 +7763,12 @@ async function loadOpenCtiSettings() {
   const entry = response?.entry || {};
   state.stixSourceSettings = entry;
 
-  const enabled = document.getElementById("settings-opencti-enabled");
   const source = document.getElementById("settings-stix-source");
   const endpoint = document.getElementById("settings-opencti-endpoint");
   const apiKey = document.getElementById("settings-opencti-api-key");
   const apiKeyHint = document.getElementById("settings-opencti-api-key-hint");
   const status = document.getElementById("settings-opencti-status");
 
-  if (enabled instanceof HTMLInputElement) enabled.checked = Boolean(entry.opencti_enabled);
   if (source instanceof HTMLSelectElement) source.value = entry.stix_catalog_source || "local";
   if (endpoint instanceof HTMLInputElement) endpoint.value = entry.opencti_endpoint || "";
   if (apiKey instanceof HTMLInputElement) apiKey.value = "";
@@ -7819,21 +7817,122 @@ function updateSettingsProfileDirtyState() {
 }
 
 function renderTranslationCurlExample() {
-  const textarea = document.getElementById("settings-opencti-curl-example");
-  if (!(textarea instanceof HTMLTextAreaElement)) return;
   const endpointInput = document.getElementById("settings-opencti-curl-endpoint");
   const tokenInput = document.getElementById("settings-opencti-curl-token");
-  const defaultEndpoint = `${String(window.location.origin || "http://localhost:8080")}/api/translate/stix-pattern`;
+  const baseOrigin = String(window.location.origin || "http://localhost:8080");
+  const defaultEndpoint = `${baseOrigin}/api/translate/stix-pattern`;
   const endpoint = endpointInput instanceof HTMLInputElement && endpointInput.value.trim()
     ? endpointInput.value.trim()
     : defaultEndpoint;
   if (endpointInput instanceof HTMLInputElement && !endpointInput.value.trim()) {
     endpointInput.value = endpoint;
   }
+  const endpointBase = endpoint.replace(/\/api\/translate\/stix-pattern$/u, "");
   const token = tokenInput instanceof HTMLInputElement && tokenInput.value.trim()
     ? tokenInput.value.trim()
     : "spuc_pat_REPLACE_WITH_YOUR_TOKEN";
-  textarea.value = `curl -sS -X POST "${endpoint}" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d "{\\"type\\":\\"indicator\\",\\"pattern_type\\":\\"stix\\",\\"pattern\\":\\"[process:name = 'cmd.exe']\\",\\"targets\\":[]}"`;
+  const bundleCurl = document.getElementById("settings-opencti-bundle-curl-example");
+  const bundlePython = document.getElementById("settings-opencti-bundle-python-example");
+  const bundleJavascript = document.getElementById("settings-opencti-bundle-javascript-example");
+  const summaryCurl = document.getElementById("settings-opencti-summary-curl-example");
+  const summaryPython = document.getElementById("settings-opencti-summary-python-example");
+  const summaryJavascript = document.getElementById("settings-opencti-summary-javascript-example");
+  if (bundleCurl instanceof HTMLTextAreaElement) {
+    bundleCurl.value = `curl -sS \\
+  -X POST "${endpointBase}/api/translate/stix-bundle" \\
+  -H "Authorization: Bearer ${token}" \\
+  -H "Content-Type: application/json" \\
+  -d "{\n+    \\\"indicator\\\": {\n+      \\\"type\\\": \\\"indicator\\\",\n+      \\\"id\\\": \\\"indicator--11111111-1111-4111-8111-111111111111\\\",\n+      \\\"name\\\": \\\"Example indicator\\\",\n+      \\\"description\\\": \\\"Original STIX description\\\",\n+      \\\"pattern_type\\\": \\\"stix\\\",\n+      \\\"pattern\\\": \\\"[process:name = 'cmd.exe']\\\",\n+      \\\"confidence\\\": 80\n+    },\n+    \\\"targets\\\": [\\\"sigma\\\", \\\"kql\\\"]\n+  }"`;
+  }
+  if (bundlePython instanceof HTMLTextAreaElement) {
+    bundlePython.value = `import requests\n\nurl = "${endpointBase}/api/translate/stix-bundle"\nheaders = {"Authorization": "Bearer ${token}", "Content-Type": "application/json"}\npayload = {\n  "indicator": {\n    "type": "indicator",\n    "id": "indicator--11111111-1111-4111-8111-111111111111",\n    "name": "Example indicator",\n    "description": "Original STIX description",\n    "pattern_type": "stix",\n    "pattern": "[process:name = 'cmd.exe']",\n    "confidence": 80\n  },\n  "targets": ["sigma", "kql"]\n}\nresp = requests.post(url, headers=headers, json=payload, timeout=30)\nprint(resp.status_code)\nprint(resp.json())`;
+  }
+  if (bundleJavascript instanceof HTMLTextAreaElement) {
+    bundleJavascript.value = `const endpoint = "${endpointBase}/api/translate/stix-bundle";\nconst token = "${token}";\n\nconst payload = {\n  indicator: {\n    type: "indicator",\n    id: "indicator--11111111-1111-4111-8111-111111111111",\n    name: "Example indicator",\n    description: "Original STIX description",\n    pattern_type: "stix",\n    pattern: "[process:name = 'cmd.exe']",\n    confidence: 80,\n  },\n  targets: ["sigma", "kql"],\n};\n\nconst response = await fetch(endpoint, {\n  method: "POST",\n  headers: {\n    Authorization: \`Bearer ${token}\`,\n    "Content-Type": "application/json",\n  },\n  body: JSON.stringify(payload),\n});\n\nconsole.log(response.status);\nconsole.log(await response.json());`;
+  }
+  if (summaryCurl instanceof HTMLTextAreaElement) {
+    summaryCurl.value = `curl -sS \\
+  -X POST "${endpointBase}/api/translate/stix-pattern-summary" \\
+  -H "Authorization: Bearer ${token}" \\
+  -H "Content-Type: application/json" \\
+  -d "{\n+    \\\"pattern\\\": \\\"[process:name = 'cmd.exe']\\\",\n+    \\\"target\\\": \\\"sigma\\\",\n+    \\\"description\\\": \\\"Analyst note\\\"\n+  }"`;
+  }
+  if (summaryPython instanceof HTMLTextAreaElement) {
+    summaryPython.value = `import requests\n\nurl = "${endpointBase}/api/translate/stix-pattern-summary"\nheaders = {"Authorization": "Bearer ${token}", "Content-Type": "application/json"}\npayload = {\n  "pattern": "[process:name = 'cmd.exe']",\n  "target": "sigma",\n  "description": "Analyst note"\n}\nresp = requests.post(url, headers=headers, json=payload, timeout=30)\nprint(resp.status_code)\nprint(resp.json())`;
+  }
+  if (summaryJavascript instanceof HTMLTextAreaElement) {
+    summaryJavascript.value = `const endpoint = "${endpointBase}/api/translate/stix-pattern-summary";\nconst token = "${token}";\n\nconst payload = {\n  pattern: "[process:name = 'cmd.exe']",\n  target: "sigma",\n  description: "Analyst note",\n};\n\nconst response = await fetch(endpoint, {\n  method: "POST",\n  headers: {\n    Authorization: \`Bearer ${token}\`,\n    "Content-Type": "application/json",\n  },\n  body: JSON.stringify(payload),\n});\n\nconsole.log(response.status);\nconsole.log(await response.json());`;
+  }
+  [
+    bundleCurl,
+    bundlePython,
+    bundleJavascript,
+    summaryCurl,
+    summaryPython,
+    summaryJavascript,
+  ].forEach((textarea) => {
+    const wrap = textarea?.closest?.(".code-editor-wrap");
+    if (wrap && typeof wrap._sync === "function") {
+      wrap._sync();
+    }
+  });
+}
+
+function setSettingsCodeTab(sampleId, lang) {
+  const sample = String(sampleId || "");
+  const targetLang = String(lang || "bash").toLowerCase();
+  document.querySelectorAll(`[data-action='settings-code-tab'][data-sample='${sample}']`).forEach((button) => {
+    const active = String(button.dataset.lang || "").toLowerCase() === targetLang;
+    button.classList.toggle("active", active);
+  });
+  document.querySelectorAll(`textarea.settings-code-example[data-sample='${sample}']`).forEach((textarea) => {
+    const visible = String(textarea.dataset.lang || "").toLowerCase() === targetLang;
+    const wrap = textarea.closest(".code-editor-wrap");
+    (wrap || textarea).classList.toggle("hidden", !visible);
+    if (visible && wrap && typeof wrap._sync === "function") {
+      wrap._sync();
+    }
+  });
+}
+
+function initializeSettingsCodeSamples() {
+  document.querySelectorAll("textarea.settings-code-example").forEach((textarea) => {
+    if (!(textarea instanceof HTMLTextAreaElement)) return;
+    if (!textarea.closest(".code-editor-wrap")) {
+      initCodeEditor(textarea);
+    }
+    updateCodeEditorLang(textarea, textarea.dataset.lang || "plaintext");
+  });
+
+  const samples = new Set(
+    Array.from(document.querySelectorAll("textarea.settings-code-example"))
+      .map((textarea) => textarea.dataset.sample || "")
+      .filter(Boolean),
+  );
+  samples.forEach((sample) => {
+    const active = document.querySelector(
+      `[data-action='settings-code-tab'][data-sample='${sample}'].active`,
+    );
+    const fallback = document.querySelector(
+      `[data-action='settings-code-tab'][data-sample='${sample}']`,
+    );
+    const lang = active?.dataset.lang || fallback?.dataset.lang || "bash";
+    setSettingsCodeTab(sample, lang);
+  });
+}
+
+async function copySettingsCodeSample(sampleId) {
+  const sample = String(sampleId || "");
+  const active = document.querySelector(
+    `[data-action='settings-code-tab'][data-sample='${sample}'].active`,
+  );
+  const lang = active?.dataset.lang || "bash";
+  const textarea = document.querySelector(
+    `textarea.settings-code-example[data-sample='${sample}'][data-lang='${lang}']`,
+  );
+  if (!(textarea instanceof HTMLTextAreaElement)) return;
+  await navigator.clipboard.writeText(String(textarea.value || ""));
+  showToast("toast.copied");
 }
 
 async function saveOpenCtiSettings() {
@@ -7841,9 +7940,7 @@ async function saveOpenCtiSettings() {
   const openCtiSelected = sourceValue === "opencti";
   const openCtiApiKeyInput = document.getElementById("settings-opencti-api-key")?.value || "";
   const payload = {
-    opencti_enabled: openCtiSelected
-      ? Boolean(document.getElementById("settings-opencti-enabled")?.checked)
-      : false,
+    opencti_enabled: openCtiSelected,
     stix_catalog_source: sourceValue,
     opencti_endpoint: document.getElementById("settings-opencti-endpoint")?.value || "",
   };
@@ -7916,7 +8013,7 @@ function renderUserApiTokens() {
         </div>
         <div class="admin-oauth-actions">
           <button class="btn btn-ghost" data-action="settings-token-rotate" data-token-id="${escapeHtml(entry.id || "")}" ${revoked ? "disabled" : ""}>${escapeHtml(t("settings.api_tokens.rotate"))}</button>
-          <button class="btn btn-danger" data-action="settings-token-revoke" data-token-id="${escapeHtml(entry.id || "")}" ${revoked ? "disabled" : ""}>${escapeHtml(t("settings.api_tokens.revoke"))}</button>
+          <button class="btn btn-danger" data-action="${revoked ? "settings-token-delete" : "settings-token-revoke"}" data-token-id="${escapeHtml(entry.id || "")}">${escapeHtml(revoked ? t("admin.delete") : t("settings.api_tokens.revoke"))}</button>
         </div>
       </article>
     `;
@@ -7961,6 +8058,15 @@ async function rotateUserApiToken(tokenId) {
 async function revokeUserApiToken(tokenId) {
   if (!tokenId) return;
   await api(`/api/user/tokens/${encodeURIComponent(tokenId)}`, {
+    method: "DELETE",
+  });
+  showToast("toast.saved");
+  await loadUserApiTokens();
+}
+
+async function deleteUserApiToken(tokenId) {
+  if (!tokenId) return;
+  await api(`/api/user/tokens/${encodeURIComponent(tokenId)}/purge`, {
     method: "DELETE",
   });
   showToast("toast.saved");
@@ -8055,6 +8161,7 @@ async function loadSettingsView() {
   populateSettingsProfileForm();
   installSettingsPersonalAccordionBehavior();
   await loadOpenCtiSettings();
+  initializeSettingsCodeSamples();
   await loadUserApiTokens();
   refreshIdentityPill();
   const adminSections = document.getElementById("settings-admin-sections");
@@ -8868,15 +8975,18 @@ function installEventHandlers() {
       toggleOpenCtiConfigVisibility(openCtiSource.value);
     });
   }
-  const openCtiCurlCopy = document.getElementById("settings-opencti-curl-copy");
-  if (openCtiCurlCopy instanceof HTMLButtonElement) {
-    openCtiCurlCopy.addEventListener("click", async () => {
-      const textarea = document.getElementById("settings-opencti-curl-example");
-      if (!(textarea instanceof HTMLTextAreaElement)) return;
-      await navigator.clipboard.writeText(String(textarea.value || ""));
-      showToast("toast.copied");
+  document.querySelectorAll("[data-action='settings-code-tab']").forEach((button) => {
+    if (!(button instanceof HTMLButtonElement)) return;
+    button.addEventListener("click", () => {
+      setSettingsCodeTab(button.dataset.sample, button.dataset.lang || "bash");
     });
-  }
+  });
+  document.querySelectorAll("[data-action='settings-code-copy']").forEach((button) => {
+    if (!(button instanceof HTMLButtonElement)) return;
+    button.addEventListener("click", async () => {
+      await copySettingsCodeSample(button.dataset.sample);
+    });
+  });
   const openCtiCurlEndpoint = document.getElementById("settings-opencti-curl-endpoint");
   if (openCtiCurlEndpoint instanceof HTMLInputElement) {
     openCtiCurlEndpoint.addEventListener("input", () => {
@@ -8916,6 +9026,8 @@ function installEventHandlers() {
         await rotateUserApiToken(tokenId);
       } else if (action === "settings-token-revoke") {
         await revokeUserApiToken(tokenId);
+      } else if (action === "settings-token-delete") {
+        await deleteUserApiToken(tokenId);
       }
     });
   }

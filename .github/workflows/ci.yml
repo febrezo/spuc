@@ -22,17 +22,17 @@ jobs:
       - name: Cargo fmt (check)
         run: cargo fmt --check
 
-      - name: Cargo check
+      - name: Cargo check (workspace default members)
         run: cargo check -q
 
-      - name: Build server binaries for integration tests
-        run: cargo build -q -p spuc-cli --bins
+      - name: Build CLI binaries for integration tests
+        run: cargo build -q -p spuc-cli --bin spuc --bin spuc-agent
 
       - name: Cargo test
         run: cargo test -q
 
-      - name: Build release binaries
-        run: cargo build --release -q -p spuc-cli --bins
+      - name: Build release CLI binaries
+        run: cargo build --release -q -p spuc-cli --bin spuc --bin spuc-agent
 
   desktop-linux:
     runs-on: ubuntu-latest
@@ -64,9 +64,9 @@ jobs:
       - name: Cargo test (spuc-gui)
         run: cargo test -q -p spuc-gui
 
-      - name: Build release desktop binaries
+      - name: Build release desktop and CLI binaries
         run: |
-          cargo build --release -q -p spuc-cli --bins
+          cargo build --release -q -p spuc-cli --bin spuc --bin spuc-agent
           cargo build --release -q -p spuc-gui
 
       - name: Verify release bundle contents

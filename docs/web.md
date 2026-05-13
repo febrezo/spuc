@@ -6,14 +6,15 @@ Last updated: 2026-03-15
 
 ```bash
 spuc
-spuc web --port 8090 --admin-user admin --admin-password "change-me"
+spuc web --host 127.0.0.1 --port 8090 --admin-user admin --admin-password "change-me"
+spuc web --host 0.0.0.0 --port 8090 --admin-user admin --admin-password "change-me" --no-open
 spuc web --port 8090 --no-login
 spuc web --port 8090 --no-login --no-open
 ```
 
 `spuc` without subcommands starts standalone mode:
 - it falls back to local web mode on `http://127.0.0.1:8090/` with `--no-login`.
-- `spuc web` binds to `127.0.0.1` and exposes `GET /healthz` for sidecar readiness checks.
+- `spuc web` binds to `127.0.0.1` by default; use `--host 0.0.0.0` when running inside Docker or another container runtime. It also exposes `GET /healthz` for sidecar readiness checks.
 - `spuc web` opens the system browser by default; use `--no-open` when another shell, desktop wrapper, or test harness will load the URL.
 - `spuc-gui` starts `spuc web --no-login --no-open` on an available localhost port, marks the embedded web URL with `spuc-mode=gui`, shows a centered SPUC loading screen while the sidecar becomes ready, and then shows it in a native Tauri window titled `SPUC: A behavioural IOC mapping lab` or the Spanish equivalent.
 - Standard GitHub release archives for desktop-capable targets include `spuc-gui` together with the required `spuc` sidecar and `spuc-agent` in the same versioned asset.
@@ -29,6 +30,27 @@ spuc web --port 8090 --no-login --no-open
 
 If `--admin-password` is omitted, SPUC generates a random 25-character administrator password and prints it in startup logs.
 When `--admin-password` is provided explicitly, SPUC keeps that credential synchronized for the configured admin user at startup.
+
+## Docker Compose
+
+The repository root includes `docker-compose.yml` for local containerized deployment:
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Compose starts:
+
+- `spuc web --host 0.0.0.0 --port 8090 --no-open`
+- persistent file-backed state on `/data` through the `spuc_data` named volume
+- optional OAuth bootstrap via `SPUC_WEB_GOOGLE_*` and `SPUC_WEB_GITHUB_*`
+- optional remote Sigma JSON-RPC integration via `SIGMA_RPC_URL` and `SPUC_SIGMA_RPC_TOKEN`
+
+Published host address and port are controlled with:
+
+- `SPUC_BIND_ADDRESS`
+- `SPUC_HOST_PORT`
 
 ## Authentication modes
 
@@ -233,7 +255,7 @@ Web-only state in browser storage (not in `<config_root>`):
 
 ## Notes
 
-- The server binds to `127.0.0.1` only.
+- The server binds to `127.0.0.1` by default in local mode; container deployments should set `--host 0.0.0.0`.
 - Download links are generated per session by the local HTTP service.
 - Sidebar menu is grouped by logical sections and supports mobile collapse/expand mode.
 - The web UI is a lightweight built-in HTTP server and does not require frontend tooling.

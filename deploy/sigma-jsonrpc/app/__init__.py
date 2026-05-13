@@ -1,1 +1,0 @@
-# sigma-jsonrpc service package

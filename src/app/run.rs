@@ -85,12 +85,14 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
         ))?,
         Commands::Jsonrpc { port, token } => commands::jsonrpc::run(*port, token.clone())?,
         Commands::Web {
+            host,
             port,
             admin_user,
             admin_password,
             no_login,
             no_open,
         } => commands::web::run(
+            host,
             *port,
             admin_user,
             admin_password.as_deref(),
@@ -113,7 +115,7 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
 }
 
 fn run_standalone_web_mode() -> Result<()> {
-    commands::web::run(STANDALONE_WEB_PORT, "admin", None, true, true)
+    commands::web::run("127.0.0.1", STANDALONE_WEB_PORT, "admin", None, true, true)
 }
 
 pub(crate) fn resolve_output_blocks(

@@ -9,6 +9,8 @@ SPUC stores web and catalog configuration under the config root:
 
 Current file-backed settings include web users, per-user preferences, per-user OpenCTI settings, token metadata and local STIX/catalog data. If OpenCTI is not configured for a user, SPUC uses the local catalog.
 
+In the provided Docker/Compose deployment, this same config root is set to `/data` and persisted through the `spuc_data` volume.
+
 ## OpenCTI Source
 
 Per-user OpenCTI settings are stored in `user_opencti_settings.json`. The API key is never returned by API responses after save; only `opencti_api_key_set` is exposed. On Unix, the settings file is written owner-readable/writable only.

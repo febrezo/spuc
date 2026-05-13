@@ -861,10 +861,6 @@
                       </select>
                     </label>
                     <div id="settings-opencti-config-fields" class="stack hidden">
-                      <label class="admin-enabled-toggle settings-opencti-enabled-toggle">
-                        <span data-i18n="settings.opencti.enabled">Enable OpenCTI for my account</span>
-                        <input id="settings-opencti-enabled" type="checkbox">
-                      </label>
                       <label>
                         <span data-i18n="settings.opencti.endpoint">OpenCTI GraphQL endpoint</span>
                         <input id="settings-opencti-endpoint" placeholder="https://opencti.example.com/graphql">
@@ -928,8 +924,8 @@
 
                 <article class="settings-card settings-personal-accordion-panel">
                   <section class="stack">
-                    <h4 data-i18n="settings.opencti.curl_title">Translation API curl example</h4>
-                    <p class="muted" data-i18n="settings.opencti.curl_subtitle">Configure token and endpoint, then copy and run the example command.</p>
+                    <h4 data-i18n="settings.opencti.curl_title">Translation API examples</h4>
+                    <p class="muted" data-i18n="settings.opencti.curl_subtitle">Configure token and endpoint, then copy and run the example commands.</p>
                     <label>
                       <span data-i18n="settings.opencti.curl_token">Bearer token</span>
                       <input id="settings-opencti-curl-token" type="password" data-i18n-placeholder="settings.opencti.curl_token_placeholder" placeholder="spuc_pat_...">
@@ -938,10 +934,36 @@
                       <span data-i18n="settings.opencti.curl_endpoint">Translation endpoint</span>
                       <input id="settings-opencti-curl-endpoint" type="text" data-i18n-placeholder="settings.opencti.curl_endpoint_placeholder" placeholder="http://localhost:8080/api/translate/stix-pattern">
                     </label>
-                    <textarea id="settings-opencti-curl-example" class="mono" rows="5" readonly></textarea>
-                    <div class="dialog-actions settings-actions-right">
-                      <button type="button" id="settings-opencti-curl-copy" class="btn btn-ghost" data-i18n="settings.opencti.curl_copy">Copy curl example</button>
-                    </div>
+
+                    <h5 data-i18n="settings.opencti.example.bundle_title">1) STIX indicator -> STIX bundle</h5>
+                    <section class="settings-code-sample" data-sample="bundle">
+                      <div class="settings-code-sample-tabs" role="tablist" aria-label="Bundle API examples">
+                        <button type="button" class="btn btn-ghost active" data-action="settings-code-tab" data-sample="bundle" data-lang="bash">cURL</button>
+                        <button type="button" class="btn btn-ghost" data-action="settings-code-tab" data-sample="bundle" data-lang="python">Python</button>
+                        <button type="button" class="btn btn-ghost" data-action="settings-code-tab" data-sample="bundle" data-lang="javascript">JavaScript</button>
+                      </div>
+                      <textarea id="settings-opencti-bundle-curl-example" class="mono settings-code-example" data-sample="bundle" data-lang="bash" rows="11" readonly></textarea>
+                      <textarea id="settings-opencti-bundle-python-example" class="mono settings-code-example hidden" data-sample="bundle" data-lang="python" rows="14" readonly></textarea>
+                      <textarea id="settings-opencti-bundle-javascript-example" class="mono settings-code-example hidden" data-sample="bundle" data-lang="javascript" rows="16" readonly></textarea>
+                      <div class="dialog-actions settings-actions-right">
+                        <button type="button" class="btn btn-ghost" data-action="settings-code-copy" data-sample="bundle" data-i18n="common.copy">Copy</button>
+                      </div>
+                    </section>
+
+                    <h5 data-i18n="settings.opencti.example.summary_title">2) STIX pattern string -> confidence summary</h5>
+                    <section class="settings-code-sample" data-sample="summary">
+                      <div class="settings-code-sample-tabs" role="tablist" aria-label="Summary API examples">
+                        <button type="button" class="btn btn-ghost active" data-action="settings-code-tab" data-sample="summary" data-lang="bash">cURL</button>
+                        <button type="button" class="btn btn-ghost" data-action="settings-code-tab" data-sample="summary" data-lang="python">Python</button>
+                        <button type="button" class="btn btn-ghost" data-action="settings-code-tab" data-sample="summary" data-lang="javascript">JavaScript</button>
+                      </div>
+                      <textarea id="settings-opencti-summary-curl-example" class="mono settings-code-example" data-sample="summary" data-lang="bash" rows="10" readonly></textarea>
+                      <textarea id="settings-opencti-summary-python-example" class="mono settings-code-example hidden" data-sample="summary" data-lang="python" rows="12" readonly></textarea>
+                      <textarea id="settings-opencti-summary-javascript-example" class="mono settings-code-example hidden" data-sample="summary" data-lang="javascript" rows="14" readonly></textarea>
+                      <div class="dialog-actions settings-actions-right">
+                        <button type="button" class="btn btn-ghost" data-action="settings-code-copy" data-sample="summary" data-i18n="common.copy">Copy</button>
+                      </div>
+                    </section>
                   </section>
                 </article>
               </div>

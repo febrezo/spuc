@@ -1,71 +1,42 @@
-# Full SPUC stack
-#
-# Required environment variables (set in .env or export):
-#
-#   GITHUB_CLIENT_ID        OAuth App client ID for GitHub
-#   GITHUB_CLIENT_SECRET    OAuth App client secret for GitHub
-#   GOOGLE_CLIENT_ID        OAuth client ID for Google
-#   GOOGLE_CLIENT_SECRET    OAuth client secret for Google
-#   SPUC_SECRET_KEY         Secret used to sign session tokens (min 32 chars)
-#   SPUC_ALLOWED_ORIGINS    Comma-separated allowed CORS origins (optional)
-#
-# Optional:
-#   LOG_LEVEL               Log level for sigma-jsonrpc (default: INFO)
-
 services:
   spuc:
-    image: ghcr.io/felixbrezo/spuc:latest
-    # Uncomment to build locally:
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: spuc:local
     container_name: spuc
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8080:8080"
+      - "${SPUC_BIND_ADDRESS:-127.0.0.1}:${SPUC_HOST_PORT:-8090}:8090"
     environment:
-      SPUC_PORT: "8080"
-      SIGMA_RPC_URL: "http://sigma-jsonrpc:8080/jsonrpc"
-      GITHUB_CLIENT_ID: "${GITHUB_CLIENT_ID:?GITHUB_CLIENT_ID is required}"
-      GITHUB_CLIENT_SECRET: "${GITHUB_CLIENT_SECRET:?GITHUB_CLIENT_SECRET is required}"
-      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
-      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
-      SPUC_SECRET_KEY: "${SPUC_SECRET_KEY:?SPUC_SECRET_KEY is required}"
-      SPUC_ALLOWED_ORIGINS: "${SPUC_ALLOWED_ORIGINS:-}"
-    depends_on:
-      sigma-jsonrpc:
-        condition: service_healthy
-    command: ["web", "--port", "8080"]
-
-  sigma-jsonrpc:
-    build:
-      context: ./deploy/sigma-jsonrpc
-      dockerfile: Dockerfile
-    container_name: sigma-jsonrpc
-    restart: unless-stopped
-    expose:
-      - "8080"
-    environment:
-      PORT: "8080"
-      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      SPUC_CONFIG_DIR: /data
+      SPUC_WEB_GOOGLE_CLIENT_ID: "${SPUC_WEB_GOOGLE_CLIENT_ID:-}"
+      SPUC_WEB_GOOGLE_CLIENT_SECRET: "${SPUC_WEB_GOOGLE_CLIENT_SECRET:-}"
+      SPUC_WEB_GOOGLE_REDIRECT_URI: "${SPUC_WEB_GOOGLE_REDIRECT_URI:-}"
+      SPUC_WEB_GITHUB_CLIENT_ID: "${SPUC_WEB_GITHUB_CLIENT_ID:-}"
+      SPUC_WEB_GITHUB_CLIENT_SECRET: "${SPUC_WEB_GITHUB_CLIENT_SECRET:-}"
+      SPUC_WEB_GITHUB_REDIRECT_URI: "${SPUC_WEB_GITHUB_REDIRECT_URI:-}"
+      SIGMA_RPC_URL: "${SIGMA_RPC_URL:-}"
+      SPUC_SIGMA_RPC_TOKEN: "${SPUC_SIGMA_RPC_TOKEN:-}"
+    volumes:
+      - spuc_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8090/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 20s
-
-  ollama:
-    image: ollama/ollama:latest
-    container_name: spuc-ollama
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:11435:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-      - ./deploy/ollama:/models:ro
-    environment:
-      OLLAMA_HOST: 0.0.0.0:11434
+    command:
+      - web
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8090"
+      - --admin-user
+      - "${SPUC_ADMIN_USER:-admin}"
+      - --admin-password
+      - "${SPUC_ADMIN_PASSWORD:?SPUC_ADMIN_PASSWORD is required}"
+      - --no-open
 
 volumes:
-  ollama_data:
+  spuc_data:

@@ -206,8 +206,11 @@ mod tests {
         assert!(APP_JS.contains("function renderTranslationCurlExample() {"));
         assert!(APP_JS.contains("function installSettingsPersonalAccordionBehavior() {"));
         assert!(APP_JS.contains("settings-opencti-config-fields"));
-        assert!(APP_JS.contains("settings-opencti-curl-example"));
-        assert!(APP_JS.contains("settings-opencti-curl-copy"));
+        assert!(APP_JS.contains("settings-opencti-bundle-curl-example"));
+        assert!(APP_JS.contains("settings-code-tab"));
+        assert!(APP_JS.contains("settings-code-copy"));
+        assert!(APP_JS.contains("settings-opencti-summary-curl-example"));
+        assert!(APP_JS.contains("settings-opencti-summary-python-example"));
         assert!(APP_JS.contains("settings-opencti-curl-endpoint"));
         assert!(APP_JS.contains("settings-opencti-curl-token"));
         assert!(APP_JS.contains("/api/user/tokens"));
@@ -215,13 +218,20 @@ mod tests {
         assert!(APP_JS.contains("settings-token-revoke"));
         assert!(APP_JS.contains("settings-api-token-secret-copy"));
         assert!(TRANSLATIONS_JSON
-            .contains("\"settings.opencti.curl_title\": \"Translation API curl example\""));
+            .contains("\"settings.opencti.curl_title\": \"Translation API examples\""));
         assert!(TRANSLATIONS_JSON
-            .contains("\"settings.opencti.curl_title\": \"Ejemplo curl de la API de traducción\""));
-        assert!(TRANSLATIONS_JSON.contains("\"settings.api_tokens.title\": \"Personal API tokens\""));
-        assert!(TRANSLATIONS_JSON.contains("\"settings.api_tokens.title\": \"Tokens API personales\""));
-        assert!(TRANSLATIONS_JSON.contains("\"settings.personal.storage_group_title\": \"Document management\""));
-        assert!(TRANSLATIONS_JSON.contains("\"settings.personal.api_group_title\": \"Tokens API personales y API de traducción\""));
+            .contains("\"settings.opencti.curl_title\": \"Ejemplos de API de traducción\""));
+        assert!(
+            TRANSLATIONS_JSON.contains("\"settings.api_tokens.title\": \"Personal API tokens\"")
+        );
+        assert!(
+            TRANSLATIONS_JSON.contains("\"settings.api_tokens.title\": \"Tokens API personales\"")
+        );
+        assert!(TRANSLATIONS_JSON
+            .contains("\"settings.personal.storage_group_title\": \"Document management\""));
+        assert!(TRANSLATIONS_JSON.contains(
+            "\"settings.personal.api_group_title\": \"Tokens API personales y API de traducción\""
+        ));
     }
 
     #[test]
@@ -270,9 +280,8 @@ mod tests {
         assert!(APP_JS.contains(
             "const row = target.closest(\"#adversaries-table tbody tr[data-adversary-row-id]\")"
         ));
-        assert!(APP_JS.contains(
-            "const card = target.closest(\".adversary-card[data-adversary-card-id]\")"
-        ));
+        assert!(APP_JS
+            .contains("const card = target.closest(\".adversary-card[data-adversary-card-id]\")"));
         assert!(APP_JS.contains("await openAdversaryDetail(adversaryId);"));
     }
 
@@ -299,8 +308,9 @@ mod tests {
         assert!(INDEX_HTML.contains("id=\"settings-storage-opencti-accordion\""));
         assert!(INDEX_HTML.contains("id=\"settings-api-translation-accordion\""));
         assert!(INDEX_HTML.contains("id=\"settings-opencti-config-fields\""));
-        assert!(INDEX_HTML.contains("id=\"settings-opencti-curl-example\""));
-        assert!(INDEX_HTML.contains("id=\"settings-opencti-curl-copy\""));
+        assert!(INDEX_HTML.contains("id=\"settings-opencti-bundle-curl-example\""));
+        assert!(INDEX_HTML.contains("id=\"settings-opencti-summary-curl-example\""));
+        assert!(INDEX_HTML.contains("data-action=\"settings-code-copy\""));
         assert!(INDEX_HTML.contains("id=\"settings-opencti-curl-endpoint\""));
         assert!(INDEX_HTML.contains("id=\"settings-opencti-curl-token\""));
         assert!(INDEX_HTML.contains("id=\"settings-api-token-form\""));
@@ -417,7 +427,9 @@ mod tests {
     fn index_html_keeps_rulelab_save_button_visible() {
         assert!(INDEX_HTML.contains("class=\"rulelab-head-actions\""));
         assert!(INDEX_HTML.contains("id=\"rulelab-export-bundle\""));
-        assert!(INDEX_HTML.contains("id=\"rulelab-save\" class=\"btn btn-ghost rulelab-save-button\""));
+        assert!(
+            INDEX_HTML.contains("id=\"rulelab-save\" class=\"btn btn-ghost rulelab-save-button\"")
+        );
         assert!(INDEX_HTML.contains("id=\"rulelab-save\" class=\"btn btn-ghost rulelab-save-button\" data-i18n=\"rulelab.save\""));
         assert!(INDEX_HTML.contains("id=\"rulelab-save\" class=\"btn btn-ghost rulelab-save-button\" data-i18n=\"rulelab.save\" aria-label=\"Save Rule\" title=\"Save Rule\" disabled"));
         assert!(APP_CSS.contains(".rulelab-head-actions {"));

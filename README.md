@@ -193,9 +193,10 @@ cargo test -p spuc-core
 cargo test -p spuc-cli
 ```
 
-## Docker + sigma
+## Docker + Compose
 
-The provided `Dockerfile` installs SPUC plus `sigma` and example backend plugins:
+The repository includes a production-oriented `Dockerfile` plus a root `docker-compose.yml`.
+The image builds `spuc` and `spuc-agent`, persists SPUC state in `/data`, and installs `sigma` with example backend plugins:
 
 - `pysigma-backend-splunk`
 - `pysigma-backend-elasticsearch` (ES|QL support)
@@ -205,17 +206,41 @@ The provided `Dockerfile` installs SPUC plus `sigma` and example backend plugins
 SPUC probes `sigma` once on first run, persists runtime results to config cache and then reuses that cache on subsequent starts.
 Use `spuc sigma update-config` to force a fresh runtime discovery and overwrite cached Sigma configuration.
 
+Quick start:
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Deployment guide:
+
+- [Deployment guide](docs/deployment.md): Docker/Compose deployment flow, persistence model, and explanation of every `.env` variable.
+
+Default compose behavior:
+
+- publishes `127.0.0.1:8090` on the host
+- runs `spuc web --host 0.0.0.0 --port 8090 --no-open`
+- stores web users, catalog, intrusion sets and runtime cache in the named volume `spuc_data`
+- supports optional OAuth bootstrap through `SPUC_WEB_GOOGLE_*` and `SPUC_WEB_GITHUB_*`
+- supports optional remote Sigma JSON-RPC via `SIGMA_RPC_URL` and `SPUC_SIGMA_RPC_TOKEN`
+
+The bootstrap admin credentials come from `.env`:
+
+- `SPUC_ADMIN_USER`
+- `SPUC_ADMIN_PASSWORD`
+
 ## Web Interface
 
 - `spuc` is provided by crate `spuc-cli` and runs the current CLI, including `spuc web`.
-- `spuc web` binds to `127.0.0.1` only, supports `--no-login`, opens the system browser by default, supports `--no-open` for sidecar/embedded use, and exposes `GET /healthz`.
+- `spuc web` binds to `127.0.0.1` by default, supports `--host` for explicit bind changes such as containers, supports `--no-login`, opens the system browser by default, supports `--no-open` for sidecar/embedded use, and exposes `GET /healthz`.
 - `spuc-gui` is a separate Tauri app titled `SPUC: A behavioural IOC mapping lab` that starts `spuc web --no-login --no-open` as a sidecar on an available localhost port, shows a local SPUC loading screen while the sidecar becomes ready, and then loads the local URL in a native window.
 - Standard GitHub release archives for desktop-capable targets now ship `spuc`, `spuc-agent`, and `spuc-gui` together in the same versioned asset.
 - `spuc-gui` uses `SPUC_LOCALE`, `LC_ALL`, `LC_MESSAGES`, or `LANG` to choose the native window title language at startup and pass the default locale to the embedded web UI; browser mode uses browser language when no saved language preference exists.
 - In `spuc-gui`, external links (`https://...`, `mailto:`) open in the system browser while local SPUC routes stay inside the GUI window.
 - If `spuc-gui` cannot start the `spuc` sidecar, it exits with a clear error. Build `spuc` first with `cargo build -p spuc-cli --bin spuc`, keep both binaries together, put `spuc` in `PATH`, or set `SPUC_SERVER_BIN=/path/to/spuc`.
 - Linux desktop prerequisites: install WebKitGTK, JavaScriptCoreGTK, GTK and GLib development packages. On Fedora: `sudo dnf install glib2-devel gtk3-devel webkit2gtk4.1-devel javascriptcoregtk4.1-devel libappindicator-gtk3-devel librsvg2-devel libxdo-devel pkgconf-pkg-config`. On Ubuntu/WSL: install `libwebkit2gtk-4.1-dev`, `libjavascriptcoregtk-4.1-dev`, `libgtk-3-dev`, `libglib2.0-dev`, `libappindicator3-dev`, `librsvg2-dev`, `libxdo-dev`, and `pkg-config`.
-- `spuc web --port 8090 --admin-user admin --admin-password <password>` starts the localized web UI on localhost.
+- `spuc web --host 127.0.0.1 --port 8090 --admin-user admin --admin-password <password>` starts the localized web UI on localhost.
 - `spuc web --no-login` hides credential-based login and uses a deliberate two-phase local start: the UI first shows a branded SPUC presentation gate with an explicit `Enter SPUC` / `Entrar en SPUC` action, then opens the app shell as local administrator and hides logout while keeping `Settings` available for local administration.
 - If `--admin-password` is omitted, SPUC generates a 25-character password and prints it in startup logs.
 - Authentication supports local user/password accounts persisted in `<config_root>/web_users.json`.

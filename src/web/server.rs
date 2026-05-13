@@ -9,20 +9,21 @@ use crate::ui::ansi::{BLUE, RED, RESET, YELLOW};
 use crate::web::api::{generate_secret, route, HttpRequest, HttpResponse, WebState};
 
 pub(crate) fn run(
+    host: &str,
     port: u16,
     admin_user: &str,
     admin_password: Option<&str>,
     no_login: bool,
     open_browser: bool,
 ) -> Result<()> {
-    let listener = TcpListener::bind(("127.0.0.1", port))?;
+    let listener = TcpListener::bind((host, port))?;
     let generated = admin_password.is_none();
     let password = admin_password
         .map(str::to_string)
         .unwrap_or_else(|| generate_secret(25));
 
     let state = Arc::new(WebState::new(admin_user, &password, generated, no_login)?);
-    let url = format!("http://127.0.0.1:{port}/");
+    let url = display_url(host, port);
 
     log_info(&format!("Web interface listening on {url}"));
 
@@ -45,6 +46,11 @@ pub(crate) fn run(
     }
 
     start(listener, state)
+}
+
+fn display_url(host: &str, port: u16) -> String {
+    let display_host = if host == "0.0.0.0" { "127.0.0.1" } else { host };
+    format!("http://{display_host}:{port}/")
 }
 
 pub(crate) fn start(listener: TcpListener, state: Arc<WebState>) -> Result<()> {
@@ -468,5 +474,15 @@ mod tests {
         assert_eq!(percent_decode("spuc+web"), "spuc web");
         assert_eq!(percent_decode("regla%20uno"), "regla uno");
         assert_eq!(percent_decode("%C3%A1rbol"), "árbol");
+    }
+
+    #[test]
+    fn display_url_prefers_localhost_for_wildcard_bind() {
+        assert_eq!(display_url("0.0.0.0", 8090), "http://127.0.0.1:8090/");
+        assert_eq!(display_url("127.0.0.1", 8090), "http://127.0.0.1:8090/");
+        assert_eq!(
+            display_url("192.168.1.10", 8090),
+            "http://192.168.1.10:8090/"
+        );
     }
 }

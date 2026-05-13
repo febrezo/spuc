@@ -1,6 +1,6 @@
 # API
 
-Last updated: 2026-05-12
+Last updated: 2026-05-13
 
 ## Personal API Tokens
 
@@ -77,6 +77,12 @@ Response (token_value shown one time only):
 
 DELETE /api/user/tokens/{token_id}
 
+### Delete old token record
+
+DELETE /api/user/tokens/{token_id}/purge
+
+Use this endpoint to permanently remove an old token entry from the list (for example, previously revoked tokens).
+
 ### Rotate token
 
 POST /api/user/tokens/{token_id}/rotate
@@ -88,6 +94,8 @@ Rotation revokes the current token and issues a replacement with a new clear tok
 Endpoint:
 
 - POST /api/translate/stix-pattern
+- POST /api/translate/stix-bundle
+- POST /api/translate/stix-pattern-summary
 - Authorization: Bearer <token>
 - Content-Type: application/json
 
@@ -145,6 +153,103 @@ Notes:
 - Missing/invalid/revoked token returns 401.
 - Translation logic reuses the existing internal translation service.
 - Each result includes a `stix` object with translation confidence, description, and comments.
+
+### STIX indicator to STIX bundle
+
+This endpoint returns a fully-formed STIX bundle containing:
+
+- The original source `indicator` (pattern type `stix`).
+- One translated `indicator` per successful target conversion.
+- One `relationship` of type `derived-from` from each translated indicator to the source indicator.
+- Relationship confidence mapped to the real translation confidence.
+
+Endpoint:
+
+- POST /api/translate/stix-bundle
+
+Input example:
+
+```json
+{
+  "indicator": {
+    "type": "indicator",
+    "id": "indicator--11111111-1111-4111-8111-111111111111",
+    "name": "Example indicator",
+    "description": "Original STIX description",
+    "pattern_type": "stix",
+    "pattern": "[process:name = 'cmd.exe']",
+    "confidence": 80
+  },
+  "targets": ["sigma", "kql"]
+}
+```
+
+Success response example:
+
+```json
+{
+  "type": "bundle",
+  "spec_version": "2.1",
+  "id": "bundle--...",
+  "objects": [
+    {
+      "type": "indicator",
+      "id": "indicator--11111111-1111-4111-8111-111111111111",
+      "pattern_type": "stix",
+      "pattern": "[process:name = 'cmd.exe']",
+      "description": "Original STIX description"
+    },
+    {
+      "type": "indicator",
+      "id": "indicator--...",
+      "pattern_type": "sigma",
+      "pattern": "title: ...",
+      "description": "Original STIX description\n\nSTIX Indicator automatically generated from the original STIX Pattern.",
+      "confidence": 95
+    },
+    {
+      "type": "relationship",
+      "relationship_type": "derived-from",
+      "source_ref": "indicator--...",
+      "target_ref": "indicator--11111111-1111-4111-8111-111111111111",
+      "confidence": 95
+    }
+  ]
+}
+```
+
+### STIX pattern summary (string input)
+
+This endpoint accepts only a STIX pattern string and a target, and returns concise metadata.
+
+Endpoint:
+
+- POST /api/translate/stix-pattern-summary
+
+Input example:
+
+```json
+{
+  "pattern": "[process:name = 'cmd.exe']",
+  "target": "sigma",
+  "description": "Analyst note"
+}
+```
+
+Success response example:
+
+```json
+{
+  "status": "success",
+  "comments": [],
+  "result": {
+    "description": "Exact conversion with preserved semantics",
+    "pattern": "title: '[SPUC Generated Sigma Rule] Analyst note'\nlogsource:\n  category: process_creation\ndetection:\n  selection:\n    process.name: cmd.exe\n  condition: selection\n",
+    "confidence": 95,
+    "target": "sigma"
+  }
+}
+```
 
 Curl example:
 
