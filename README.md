@@ -213,6 +213,17 @@ cp .env.example .env
 docker compose up --build
 ```
 
+Run directly from GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/febrezo/spuc:latest
+docker run --rm -p 8090:8090 \
+  -e SPUC_CONFIG_DIR=/data \
+  -v spuc_data:/data \
+  ghcr.io/febrezo/spuc:latest \
+  web --host 0.0.0.0 --port 8090 --admin-user admin --admin-password '<strong-password>' --no-open
+```
+
 Deployment guide:
 
 - [Deployment guide](docs/deployment.md): Docker/Compose deployment flow, persistence model, and explanation of every `.env` variable.
@@ -266,6 +277,15 @@ curl -X POST 'http://127.0.0.1:8080/rpc' \
   --data-raw "{\"rule\":\"[ipv4-addr:value = '1.1.1.1']\",\"to\":[\"sigma\"]}"
 ```
 
+## MCP Integration
+
+SPUC can be exposed to AI systems through a small MCP adapter that calls `spuc jsonrpc`.
+See [`docs/mcp.md`](docs/mcp.md) for:
+
+- practical architecture options (stdio adapter and HTTP bridge)
+- a minimal MCP tool contract
+- deployment notes for local and containerized setups
+
 ## Source Layout
 
 ```mermaid
@@ -301,13 +321,17 @@ flowchart TB
 - Catalog docs: [`docs/catalog.md`](docs/catalog.md).
 - Intrusion set docs: [`docs/intrusion-sets.md`](docs/intrusion-sets.md).
 - JSON-RPC docs: [`docs/jsonrpc.md`](docs/jsonrpc.md).
+- CI/CD governance: [`docs/ci-cd.md`](docs/ci-cd.md).
+- MCP integration: [`docs/mcp.md`](docs/mcp.md).
 
 ## CI/CD Pipeline
 
 This repository is prepared for automated builds in GitHub Actions:
 
 - `.github/workflows/ci.yml`
-  - runs `cargo fmt --check`, `cargo check -q`, and `cargo test -q` on push/PR.
+  - enforces `cargo fmt --check`, strict clippy (`-D warnings`) and tests for default Rust members, docs build, package/publish dry-run checks, Docker smoke checks, JSON-RPC integration tests, desktop Linux build/tests, and dependency security audit.
+- `.github/workflows/dependency-review.yml`
+  - blocks PRs that introduce vulnerable or policy-violating dependency changes.
 - `.github/workflows/release.yml`
   - builds `spuc` server binaries for Linux, macOS, and Windows.
   - builds `spuc-gui` binaries for the desktop-capable release targets and bundles them into the standard versioned archive with `spuc` and `spuc-agent`.
@@ -315,7 +339,7 @@ This repository is prepared for automated builds in GitHub Actions:
   - includes ARM targets for Raspberry Pi (`aarch64-unknown-linux-gnu` and `armv7-unknown-linux-gnueabihf`) plus `x86_64-unknown-linux-musl`.
   - packages artifacts with the current app version in filename (`spuc-v<version>-<target>.tar.gz` / `.zip`).
   - uploads build artifacts on each run.
-  - publishes GitHub Release assets automatically when pushing a tag like `v0.1.1`.
+  - publishes GitHub Release assets and multi-arch GHCR container images automatically when pushing a tag like `v0.1.1`.
 
 ## Development Commands
 

@@ -12,7 +12,7 @@ pub fn emit(ir: &IrExpr, description: Option<&str>) -> Result<EmitResult> {
         let joined = format!("[{}]", ips.join(","));
         let sid_dst = sid_for("suricata_any_dst", &joined);
         let sid_src = sid_for("suricata_any_src", &joined);
-        let out = vec![
+        let out = [
             format!(
                 "alert ip any any -> {joined} any (msg:\"{}\"; sid:{sid_dst}; rev:1;)",
                 suricata_msg("SPUC generated Suricata rule - dst match", description)
@@ -94,7 +94,7 @@ pub fn emit(ir: &IrExpr, description: Option<&str>) -> Result<EmitResult> {
 
 fn lower_expr(expr: &IrExpr, description: Option<&str>) -> Result<Vec<String>> {
     match expr {
-        IrExpr::Predicate(p) => Ok(vec![emit_rule(&[p.clone()], description)?]),
+        IrExpr::Predicate(p) => Ok(vec![emit_rule(std::slice::from_ref(p), description)?]),
         IrExpr::All(exprs) => {
             let predicates = collect_predicates(exprs)?;
             Ok(vec![emit_rule(&predicates, description)?])
@@ -149,8 +149,8 @@ fn emit_rule(predicates: &[IrPredicate], description: Option<&str>) -> Result<St
         if !matches!(
             (predicate.target.as_str(), predicate.field.as_str()),
             ("artifact", "payload_bin")
-        ) && !(predicate.op == IrOp::Eq
-            || (predicate.op == IrOp::IsSubset && is_ip_predicate(predicate)))
+        ) && (predicate.op != IrOp::Eq
+            && (predicate.op != IrOp::IsSubset || !is_ip_predicate(predicate)))
         {
             bail!(
                 "Suricata does NOT support operator {} yet",

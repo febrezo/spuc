@@ -5,19 +5,25 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn spuc_agent_bin() -> String {
-    let bin = std::env::var("CARGO_BIN_EXE_spuc-agent")
-        .or_else(|_| std::env::var("CARGO_BIN_EXE_spuc_agent"))
-        .unwrap_or_else(|_| "target/debug/spuc-agent".to_string());
-    if !Path::new(&bin).exists() {
-        let status = Command::new("cargo")
-            .args(["build", "-q", "-p", "spuc-cli", "--bin", "spuc-agent"])
-            .status()
-            .expect("failed to build spuc-agent binary for tests");
-        assert!(
-            status.success(),
-            "failed to build spuc-agent binary for tests"
-        );
+    if let Ok(bin) = std::env::var("CARGO_BIN_EXE_spuc-agent") {
+        return bin;
     }
+    if let Ok(bin) = std::env::var("CARGO_BIN_EXE_spuc_agent") {
+        return bin;
+    }
+    let bin = "target/debug/spuc-agent".to_string();
+    let status = Command::new("cargo")
+        .args(["build", "-q", "-p", "spuc-cli", "--bin", "spuc-agent"])
+        .status()
+        .expect("failed to build spuc-agent binary for tests");
+    assert!(
+        status.success(),
+        "failed to build spuc-agent binary for tests"
+    );
+    assert!(
+        Path::new(&bin).exists(),
+        "spuc-agent binary missing after build"
+    );
     bin
 }
 

@@ -255,11 +255,11 @@ fn load_or_init_users_from_path(
             schema_version: USERS_SCHEMA_VERSION.to_string(),
             users: vec![admin],
         };
-        save_users(&path, &store)?;
+        save_users(path, &store)?;
         return Ok(store);
     }
 
-    let raw = fs::read_to_string(&path)?;
+    let raw = fs::read_to_string(path)?;
     let mut store: UserStore = serde_json::from_str(&raw)?;
     let mut changed = false;
     if store.schema_version.trim().is_empty() {
@@ -307,7 +307,7 @@ fn load_or_init_users_from_path(
     }
 
     if changed {
-        save_users(&path, &store)?;
+        save_users(path, &store)?;
     }
 
     Ok(store)

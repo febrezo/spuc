@@ -1028,10 +1028,10 @@ fn run_tui_translate_like_command(input: &str, emulate: bool) -> Result<()> {
         let mut rightmost: Option<(usize, &str)> = None;
         for marker in markers {
             if let Some(idx) = source.rfind(marker) {
-                match rightmost {
-                    Some((prev, _)) if prev > idx => {}
-                    _ => rightmost = Some((idx, marker)),
+                if matches!(rightmost, Some((prev, _)) if prev > idx) {
+                    continue;
                 }
+                rightmost = Some((idx, marker));
             }
         }
         let Some((idx, marker)) = rightmost else {
@@ -1040,24 +1040,18 @@ fn run_tui_translate_like_command(input: &str, emulate: bool) -> Result<()> {
         let value = source[idx + marker.len()..].trim();
         match marker {
             " desc=" => description = Some(value.to_string()),
-            " out=" => {
-                if !value.is_empty() {
-                    output = Some(PathBuf::from(value));
+            " out=" if !value.is_empty() => output = Some(PathBuf::from(value)),
+            " conf=" if !value.is_empty() => {
+                let parsed = value
+                    .parse::<u8>()
+                    .map_err(|_| anyhow!("Option {} must be numeric (0..100)", bold_cmd("conf")))?;
+                if parsed > 100 {
+                    return Err(anyhow!(
+                        "Option {} must be in range 0..100",
+                        bold_cmd("conf")
+                    ));
                 }
-            }
-            " conf=" => {
-                if !value.is_empty() {
-                    let parsed = value.parse::<u8>().map_err(|_| {
-                        anyhow!("Option {} must be numeric (0..100)", bold_cmd("conf"))
-                    })?;
-                    if parsed > 100 {
-                        return Err(anyhow!(
-                            "Option {} must be in range 0..100",
-                            bold_cmd("conf")
-                        ));
-                    }
-                    rule_confidence = Some(parsed);
-                }
+                rule_confidence = Some(parsed);
             }
             " mode=" => {
                 mode = match value.to_ascii_lowercase().as_str() {

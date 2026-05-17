@@ -8,6 +8,7 @@ pub(crate) fn run(options: TranslateOptions<'_>) -> Result<()> {
     crate::commands::common::translate_rules(options)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn options<'a>(
     targets: &'a [String],
     rules: &'a [String],

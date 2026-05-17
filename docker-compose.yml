@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: spuc:local
+    image: ${SPUC_IMAGE:-ghcr.io/febrezo/spuc:latest}
     container_name: spuc
     restart: unless-stopped
     ports:

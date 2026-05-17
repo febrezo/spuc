@@ -8,6 +8,7 @@ pub(crate) fn run(options: EmulateOptions<'_>) -> Result<()> {
     crate::commands::common::emulate_rules(options)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn options<'a>(
     targets: &'a [AbilityTarget],
     rules: &'a [String],

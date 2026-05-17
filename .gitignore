@@ -3,5 +3,6 @@ crates/spuc-desktop/gen/
 crates/spuc-gui/gen/
 ./logs
 ./out
+*.log
 *pyc
 .env

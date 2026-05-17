@@ -3,5 +3,7 @@
 /.vscode
 /logs
 /out
+/payloads
+*.log
 *.pyc
 .env

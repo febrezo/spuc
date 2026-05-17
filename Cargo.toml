@@ -1,8 +1,11 @@
 [package]
 name = "spuc-core"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 autobins = false
+description = "Defensive STIX pattern workflow core for SPUC."
+license-file = "LICENSE.md"
+repository = "https://github.com/febrezo/spuc"
 
 [workspace]
 members = [

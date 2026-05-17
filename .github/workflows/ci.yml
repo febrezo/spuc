@@ -1,16 +1,25 @@
 name: CI
 
 on:
+  pull_request:
   push:
     branches:
       - "**"
-  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  checks:
+  rust-quality:
+    name: Rust Quality Gates
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -22,19 +31,36 @@ jobs:
       - name: Cargo fmt (check)
         run: cargo fmt --check
 
-      - name: Cargo check (workspace default members)
-        run: cargo check -q
-
-      - name: Build CLI binaries for integration tests
-        run: cargo build -q -p spuc-cli --bin spuc --bin spuc-agent
+      - name: Cargo clippy (default members)
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Cargo test
-        run: cargo test -q
+        run: cargo test
 
-      - name: Build release CLI binaries
-        run: cargo build --release -q -p spuc-cli --bin spuc --bin spuc-agent
+      - name: Cargo doc (no deps)
+        run: cargo doc --no-deps
+
+      - name: Cargo package (spuc-core)
+        run: cargo package -p spuc-core --allow-dirty
+
+      - name: Cargo publish dry-run (spuc-core)
+        run: cargo publish -p spuc-core --dry-run --allow-dirty
+
+  integration-jsonrpc:
+    name: Integration Tests (JSON-RPC)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run JSON-RPC integration tests
+        run: cargo test --test jsonrpc_cli
 
   desktop-linux:
+    name: Desktop Linux Build and Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -82,3 +108,48 @@ jobs:
           test -x "${OUT}/spuc"
           test -x "${OUT}/spuc-agent"
           test -x "${OUT}/spuc-gui"
+
+  docker-smoke:
+    name: Docker Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Build image
+        run: docker build -t spuc:ci .
+
+      - name: Start container and wait for health
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --rm --name spuc-ci -p 18090:8090 spuc:ci web --host 0.0.0.0 --port 8090 --admin-user admin --admin-password ci-pass-123 --no-open
+          for i in {1..40}; do
+            if curl -fsS http://127.0.0.1:18090/healthz >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs spuc-ci
+          echo "Container failed health check" >&2
+          exit 1
+
+      - name: Print container logs on failure
+        if: failure()
+        run: docker logs spuc-ci || true
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Audit dependencies
+        run: cargo audit

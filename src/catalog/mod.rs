@@ -21,6 +21,13 @@ use spuc::emulation::catalog::{AbilityCatalog, TranslationActivity};
 use spuc::emulation::export::{self as emu_export};
 use spuc::emulation::output::{self as emu_output, OutputBlock, OutputSection};
 
+type LoadedCatalogData = (
+    AbilityCatalog,
+    Vec<emu_ability::Ability>,
+    Vec<CatalogRuleEntry>,
+    Vec<CatalogAdversaryEntry>,
+);
+
 #[derive(Debug, Clone)]
 pub(crate) struct CatalogRuleEntry {
     pub(crate) rule_id: String,
@@ -53,12 +60,7 @@ pub(crate) struct CatalogAdversaryEntry {
     pub(crate) ability_refs: Vec<String>,
 }
 
-pub(crate) fn load_catalog_data() -> Result<(
-    AbilityCatalog,
-    Vec<emu_ability::Ability>,
-    Vec<CatalogRuleEntry>,
-    Vec<CatalogAdversaryEntry>,
-)> {
+pub(crate) fn load_catalog_data() -> Result<LoadedCatalogData> {
     let catalog = AbilityCatalog::from_default_root()?;
     let abilities = catalog.list()?;
     let rules = build_catalog_rule_entries(&catalog, &abilities)?;
@@ -922,7 +924,7 @@ mod tests {
 
     #[test]
     fn collapse_target_status_prioritizes_exact() {
-        let rows = vec![
+        let rows = [
             activity("unsupported", "2026-01-01T00:00:00Z"),
             activity("exact", "2026-01-01T00:00:01Z"),
         ];
@@ -932,7 +934,7 @@ mod tests {
 
     #[test]
     fn collapse_target_status_marks_lossy_bucket() {
-        let rows = vec![
+        let rows = [
             activity("schema-dependent", "2026-01-01T00:00:00Z"),
             activity("backend-dependent", "2026-01-01T00:00:01Z"),
         ];

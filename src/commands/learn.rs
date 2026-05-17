@@ -542,9 +542,9 @@ pub(crate) fn handle_learn_input(session: &mut LearnSession, input: &str) -> Res
     Ok(false)
 }
 
-fn next_pending_challenge<'a>(
+fn next_pending_challenge(
     session: &LearnSession,
-    path_id: &'a str,
+    path_id: &str,
 ) -> Option<&'static LearnChallenge> {
     let path = LEARN_PATHS.iter().find(|path| path.id == path_id)?;
     path.challenge_ids.iter().find_map(|id| {

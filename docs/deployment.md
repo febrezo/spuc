@@ -1,6 +1,6 @@
 # Deployment
 
-Last updated: 2026-05-14
+Last updated: 2026-05-16
 
 ## Purpose
 
@@ -11,6 +11,25 @@ This guide describes how to deploy SPUC with the repository-provided Docker asse
 - `.env.example`
 
 It focuses on the built-in web interface, persistent local state, optional OAuth bootstrap, and optional remote Sigma JSON-RPC connectivity.
+
+## Pull from GHCR
+
+Tagged releases publish a multi-arch image to GitHub Container Registry.
+
+```bash
+docker pull ghcr.io/febrezo/spuc:latest
+docker run --rm -p 8090:8090 \
+  -e SPUC_CONFIG_DIR=/data \
+  -v spuc_data:/data \
+  ghcr.io/febrezo/spuc:latest \
+  web --host 0.0.0.0 --port 8090 --admin-user admin --admin-password '<strong-password>' --no-open
+```
+
+The published image:
+
+- runs as non-root user `spuc`
+- exposes `GET /healthz` through image-level health checks
+- ships `spuc`, `spuc-agent`, and local Sigma backends used by SPUC
 
 ## Quick Start
 
@@ -49,6 +68,12 @@ This deployment:
 - keeps catalog, user, runtime and intrusion-set files across restarts through the `spuc_data` volume
 - includes local `sigma` plus several backend plugins inside the image
 
+By default, `docker-compose.yml` uses this image reference:
+
+```text
+ghcr.io/febrezo/spuc:latest
+```
+
 ## Variables
 
 ### Network publishing
@@ -56,6 +81,10 @@ This deployment:
 - `SPUC_BIND_ADDRESS`
   Purpose: host interface used by Docker when publishing port `8090`.
   Typical value: `127.0.0.1` for local-only access, `0.0.0.0` to expose on all host interfaces.
+
+- `SPUC_IMAGE`
+  Purpose: image reference used by `docker-compose.yml`.
+  Typical value: `ghcr.io/febrezo/spuc:latest`.
 
 - `SPUC_HOST_PORT`
   Purpose: host port mapped to container port `8090`.

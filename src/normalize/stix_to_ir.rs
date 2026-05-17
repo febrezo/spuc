@@ -216,17 +216,17 @@ fn canonicalize_stix_path(object_type: &str, field: &str) -> (String, String) {
 }
 
 fn validate_value_type(object_type: &str, field: &str, value: &Value) -> Result<()> {
-    let needs_timestamp = match (object_type, field) {
+    let needs_timestamp = matches!(
+        (object_type, field),
         ("file", "ctime")
-        | ("file", "mtime")
-        | ("file", "atime")
-        | ("directory", "ctime")
-        | ("directory", "mtime")
-        | ("directory", "atime")
-        | ("windows-registry-key", "modified_time") => true,
-        ("process", "created_time") => true,
-        _ => false,
-    };
+            | ("file", "mtime")
+            | ("file", "atime")
+            | ("directory", "ctime")
+            | ("directory", "mtime")
+            | ("directory", "atime")
+            | ("windows-registry-key", "modified_time")
+            | ("process", "created_time")
+    );
     if needs_timestamp && !matches!(value, Value::Timestamp(_)) {
         bail!(
             "timestamp value required for temporal object path {}:{}",

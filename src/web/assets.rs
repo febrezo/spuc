@@ -651,7 +651,7 @@ mod tests {
         assert!(
             INDEX_HTML.contains("class=\"btn btn-primary btn-import icon-only stix-import-label\"")
         );
-        assert!(!INDEX_HTML.contains("id=\"stix-bulk-toggle\" class=\"btn btn-ghost icon-only\""));
+        assert!(INDEX_HTML.contains("id=\"stix-bulk-toggle\" class=\"btn btn-ghost icon-only\""));
         assert!(
             INDEX_HTML.contains("id=\"stix-export-selected\" class=\"btn btn-success icon-only\"")
         );
@@ -661,6 +661,7 @@ mod tests {
             INDEX_HTML.contains("id=\"stix-delete-selected\" class=\"btn btn-danger icon-only\"")
         );
         assert!(!INDEX_HTML.contains("id=\"stix-columns-toggle\""));
+        assert!(APP_JS.contains("action === \"stix-bulk-toggle\""));
         assert!(!APP_JS.contains("action === \"stix-columns-toggle\""));
         assert!(APP_JS.contains("function stixObjectMatchesSearch("));
         assert!(APP_JS.contains("data-stix-row-id"));

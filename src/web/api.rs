@@ -6810,16 +6810,17 @@ fn render_operational_runner_content(
                     "echo \"${{GREEN}}✓ Completado: {}${{NC}}\"",
                     name.replace(".sh", "")
                 ));
-                lines.push(format!(
-                    "echo \"${{YELLOW}}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${{NC}}\""
-                ));
+                lines.push(
+                    "echo \"${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\""
+                        .to_string(),
+                );
                 lines.push("".to_string());
             }
 
             lines.push("echo \"\"".to_string());
-            lines.push(format!(
-                "echo \"${{GREEN}}[spuc] operational run completed successfully${{NC}}\""
-            ));
+            lines.push(
+                "echo \"${GREEN}[spuc] operational run completed successfully${NC}\"".to_string(),
+            );
             lines.push(format!(
                 "echo \"${{BLUE}}All {} abilities executed${{NC}}\"",
                 artifact_contents.len()
@@ -6838,7 +6839,8 @@ fn render_operational_runner_content(
                 "$NC = '\\033[0m' # No Color".to_string(),
                 "".to_string(),
                 format!("Write-Host \"${{BLUE}}[spuc] operational adversary runner: {manifest_name}${{NC}}\""),
-                format!("Write-Host \"${{YELLOW}}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${{NC}}\""),
+                "Write-Host \"${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\""
+                    .to_string(),
                 "".to_string(),
             ];
 
@@ -6866,14 +6868,18 @@ fn render_operational_runner_content(
                     "Write-Host \"${{GREEN}}✓ Completado: {}${{NC}}\"",
                     name.replace(".ps1", "")
                 ));
-                lines.push(format!("Write-Host \"${{YELLOW}}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${{NC}}\""));
+                lines.push(
+                    "Write-Host \"${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\""
+                        .to_string(),
+                );
                 lines.push("".to_string());
             }
 
             lines.push("".to_string());
-            lines.push(format!(
-                "Write-Host \"${{GREEN}}[spuc] operational run completed successfully${{NC}}\""
-            ));
+            lines.push(
+                "Write-Host \"${GREEN}[spuc] operational run completed successfully${NC}\""
+                    .to_string(),
+            );
             lines.push(format!(
                 "Write-Host \"${{BLUE}}All {} abilities executed${{NC}}\"",
                 artifact_contents.len()

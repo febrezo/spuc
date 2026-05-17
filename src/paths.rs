@@ -29,9 +29,9 @@ pub fn spuc_config_root() -> Option<PathBuf> {
                 return Some(PathBuf::from(xdg).join("spuc"));
             }
         }
-        return env::var("HOME")
+        env::var("HOME")
             .ok()
-            .map(|home| PathBuf::from(home).join(".config/spuc"));
+            .map(|home| PathBuf::from(home).join(".config/spuc"))
     }
 }
 

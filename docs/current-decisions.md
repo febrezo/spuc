@@ -155,6 +155,7 @@ Last updated: 2026-03-15
 - `spuc-gui` keeps local SPUC navigation in the webview and opens external links in the system browser.
 - If the GUI cannot start the `spuc` sidecar, it exits before opening the window and reports how to build or point `SPUC_SERVER_BIN` at the CLI binary.
 - Root `docker-compose.yml` is the canonical container entry for the repository and runs `spuc web --host 0.0.0.0 --port 8090 --no-open` with persisted `/data` state.
+- MCP exposure is adapter-based in current iteration: `spuc jsonrpc` is the backend contract and external MCP adapters bridge MCP tool calls to `/rpc`.
 - The web interface is localized in English and Spanish only.
 - Authentication supports local username/password users persisted in `web_users.json`.
 - Google/GitHub sign-in uses authorization-code callback flow with environment bootstrap plus explicit admin authorization flags per provider.

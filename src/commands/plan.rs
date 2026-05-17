@@ -27,6 +27,13 @@ use spuc::emulation::validate as emu_validate;
 pub(crate) const INTRUSION_SET_DEFAULT_DESCRIPTION: &str = "intrusion set generated with SPUC";
 pub(crate) const ALLOWED_PLATFORMS: [&str; 4] = ["linux", "windows", "macos", "any"];
 
+type LoadedCatalogData = (
+    AbilityCatalog,
+    Vec<emu_ability::Ability>,
+    Vec<CatalogRuleEntry>,
+    Vec<CatalogAdversaryEntry>,
+);
+
 pub(crate) struct CampaignOptions<'a> {
     pub(crate) name: Option<&'a str>,
     pub(crate) description: Option<&'a str>,
@@ -481,12 +488,7 @@ struct CatalogAdversaryEntry {
     ability_refs: Vec<String>,
 }
 
-fn load_catalog_data() -> Result<(
-    AbilityCatalog,
-    Vec<emu_ability::Ability>,
-    Vec<CatalogRuleEntry>,
-    Vec<CatalogAdversaryEntry>,
-)> {
+fn load_catalog_data() -> Result<LoadedCatalogData> {
     let catalog = AbilityCatalog::from_default_root()?;
     let abilities = catalog.list()?;
     let rules = build_catalog_rule_entries(&catalog, &abilities)?;

@@ -147,11 +147,11 @@ fn eql_maxspan_literal(secs: f64) -> String {
     }
 }
 
-fn peel_qualifiers<'a>(mut ir: &'a IrExpr) -> (&'a IrExpr, Vec<IrQualifier>) {
+fn peel_qualifiers(mut ir: &IrExpr) -> (&IrExpr, Vec<IrQualifier>) {
     let mut qualifiers = Vec::new();
     while let IrExpr::Qualified(inner, qs) = ir {
         qualifiers.extend(qs.clone());
-        ir = inner;
+        ir = inner.as_ref();
     }
     (ir, qualifiers)
 }

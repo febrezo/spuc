@@ -28,6 +28,14 @@ use spuc::emulation::output::{self as emu_output, OutputBlock, OutputSection};
 pub(crate) const DUAL_FLOW_ENGINE_VERSION: &str =
     concat!("spuc-", env!("CARGO_PKG_VERSION"), "-dual-v1");
 
+type CoverageInfo = (
+    Vec<String>,
+    Vec<String>,
+    Vec<String>,
+    Vec<String>,
+    Vec<String>,
+);
+
 pub(crate) fn known_detection_target_labels() -> Vec<String> {
     available_detection_target_labels()
 }
@@ -542,6 +550,7 @@ fn compute_rule_hash(rule: &str, parsed: &Result<ir::IrExpr, EmitResult>) -> Str
     format!("{:016x}", hasher.finish())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn sync_hidden_emulation_from_translate(
     catalog: &AbilityCatalog,
     rule: &str,
@@ -2612,10 +2621,10 @@ fn print_coverage(target: Option<OutputTarget>) {
             print!("Enter number: ");
             let _ = std::io::stdout().flush();
             let mut buf = String::new();
-            if let Ok(_) = std::io::stdin().read_line(&mut buf) {
+            if std::io::stdin().read_line(&mut buf).is_ok() {
                 if let Ok(choice) = buf.trim().parse::<usize>() {
                     if choice > 0 && choice <= all.len() {
-                        print_coverage_for(all[choice - 1].clone());
+                        print_coverage_for(all[choice - 1]);
                     }
                 }
             }
@@ -2674,16 +2683,7 @@ fn print_coverage_for(target: OutputTarget) {
 }
 
 #[allow(dead_code)]
-fn coverage_info() -> HashMap<
-    OutputTarget,
-    (
-        Vec<String>,
-        Vec<String>,
-        Vec<String>,
-        Vec<String>,
-        Vec<String>,
-    ),
-> {
+fn coverage_info() -> HashMap<OutputTarget, CoverageInfo> {
     let mut map = HashMap::new();
     map.insert(
         OutputTarget::Sigma,
