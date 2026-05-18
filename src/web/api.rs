@@ -49,6 +49,10 @@ const WEB_USER_OPENCTI_SETTINGS_SCHEMA_VERSION: &str = "1.0";
 const WEB_USER_API_TOKENS_SCHEMA_VERSION: &str = "1.0";
 const ENV_SIGMA_RPC_URL: &str = "SIGMA_RPC_URL";
 const ENV_SIGMA_RPC_TOKEN: &str = "SPUC_SIGMA_RPC_TOKEN";
+const ENV_ADMIN_API_TOKEN: &str = "SPUC_ADMIN_API_TOKEN";
+const ENV_ADMIN_API_TOKEN_NAME: &str = "SPUC_ADMIN_API_TOKEN_NAME";
+const ENV_ADMIN_API_TOKEN_EXPIRES_AT: &str = "SPUC_ADMIN_API_TOKEN_EXPIRES_AT";
+const BOOTSTRAP_ADMIN_API_TOKEN_ID: &str = "tok-bootstrap-admin-env";
 const OPENCTI_GRAPHQL_TIMEOUT_SECONDS: u64 = 8;
 const OPENCTI_DEFAULT_LIMIT: usize = 25;
 const OPENCTI_MAX_LIMIT: usize = 100;
@@ -375,7 +379,7 @@ impl WebState {
         let (user_preferences_path, user_preferences) = load_or_init_user_preferences()?;
         let (user_opencti_settings_path, user_opencti_settings) =
             load_or_init_user_opencti_settings()?;
-        let (user_api_tokens_path, user_api_tokens) = load_or_init_user_api_tokens()?;
+        let (user_api_tokens_path, mut user_api_tokens) = load_or_init_user_api_tokens()?;
         let oauth = OAuthConfig::from_env();
         let (oauth_policy_path, oauth_policy) = load_or_init_oauth_policy(&oauth)?;
         let (runtime_settings_path, runtime_settings) = load_or_init_runtime_settings(no_login)?;
@@ -401,6 +405,11 @@ impl WebState {
                     })
             })
             .ok_or_else(|| anyhow!("cannot bootstrap admin user for web runtime"))?;
+        upsert_bootstrap_admin_api_token(
+            &user_api_tokens_path,
+            &mut user_api_tokens,
+            &bootstrap_admin,
+        )?;
 
         Ok(Self {
             users_path,
@@ -1271,6 +1280,60 @@ fn load_or_init_user_api_tokens() -> Result<(PathBuf, UserApiTokenStore)> {
         .retain(|entry| !entry.id.trim().is_empty() && !entry.user_id.trim().is_empty());
     persist_user_api_tokens(&path, &store)?;
     Ok((path, store))
+}
+
+fn upsert_bootstrap_admin_api_token(
+    path: &Path,
+    store: &mut UserApiTokenStore,
+    admin: &Principal,
+) -> Result<()> {
+    let now = Utc::now().to_rfc3339();
+    let Some(token_value) = env_setting(ENV_ADMIN_API_TOKEN) else {
+        if let Some(entry) = store
+            .entries
+            .iter_mut()
+            .find(|entry| entry.id == BOOTSTRAP_ADMIN_API_TOKEN_ID && entry.revoked_at.is_none())
+        {
+            entry.revoked_at = Some(now);
+            persist_user_api_tokens(path, store)?;
+        }
+        return Ok(());
+    };
+    let name = env_setting(ENV_ADMIN_API_TOKEN_NAME)
+        .unwrap_or_else(|| "Bootstrap admin API token".to_string());
+    let expires_at = env_setting(ENV_ADMIN_API_TOKEN_EXPIRES_AT);
+    let token_hash = hash_api_token(&token_value);
+    if let Some(entry) = store
+        .entries
+        .iter_mut()
+        .find(|entry| entry.id == BOOTSTRAP_ADMIN_API_TOKEN_ID)
+    {
+        entry.user_id = admin.user_id.clone();
+        entry.name = name;
+        entry.token_hash = token_hash;
+        entry.revoked_at = None;
+        entry.expires_at = expires_at;
+    } else {
+        store.entries.push(UserApiTokenEntry {
+            id: BOOTSTRAP_ADMIN_API_TOKEN_ID.to_string(),
+            user_id: admin.user_id.clone(),
+            name,
+            token_hash,
+            created_at: now,
+            revoked_at: None,
+            last_used_at: None,
+            expires_at,
+        });
+    }
+    persist_user_api_tokens(path, store)?;
+    Ok(())
+}
+
+fn env_setting(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn persist_runtime_settings(path: &Path, settings: &AdminRuntimeSettingsStore) -> Result<()> {
@@ -7905,6 +7968,97 @@ mod tests {
 
             let entries = state.list_user_api_tokens(&principal);
             assert!(entries.iter().all(|entry| entry.id != created.id));
+        });
+    }
+
+    #[test]
+    fn env_admin_api_token_bootstraps_admin_api_access() {
+        with_test_config_dir("api_tokens_env_bootstrap", || {
+            unsafe {
+                std::env::set_var(ENV_ADMIN_API_TOKEN, "spuc_pat_env_test_token");
+                std::env::set_var(ENV_ADMIN_API_TOKEN_NAME, "Container connector token");
+            }
+            let state = WebState::new("admin", "secret-pass", false, false).expect("state");
+            let principal = state
+                .resolve_principal_from_api_token("spuc_pat_env_test_token")
+                .expect("env token should resolve");
+            assert_eq!(principal.username, "admin");
+
+            let entries = state.list_user_api_tokens(&principal);
+            let bootstrap = entries
+                .iter()
+                .find(|entry| entry.id == BOOTSTRAP_ADMIN_API_TOKEN_ID)
+                .expect("bootstrap token entry");
+            assert_eq!(bootstrap.name, "Container connector token");
+            assert!(bootstrap.last_used_at.is_some());
+            unsafe {
+                std::env::remove_var(ENV_ADMIN_API_TOKEN);
+                std::env::remove_var(ENV_ADMIN_API_TOKEN_NAME);
+                std::env::remove_var(ENV_ADMIN_API_TOKEN_EXPIRES_AT);
+            }
+        });
+    }
+
+    #[test]
+    fn env_admin_api_token_updates_existing_bootstrap_record() {
+        with_test_config_dir("api_tokens_env_update", || {
+            unsafe {
+                std::env::set_var(ENV_ADMIN_API_TOKEN, "first-token");
+            }
+            let first = WebState::new("admin", "secret-pass", false, false).expect("state");
+            assert!(first
+                .resolve_principal_from_api_token("first-token")
+                .is_some());
+
+            unsafe {
+                std::env::set_var(ENV_ADMIN_API_TOKEN, "second-token");
+                std::env::set_var(ENV_ADMIN_API_TOKEN_NAME, "Rotated env token");
+            }
+            let second = WebState::new("admin", "secret-pass", false, false).expect("state");
+            assert!(second
+                .resolve_principal_from_api_token("first-token")
+                .is_none());
+            let principal = second
+                .resolve_principal_from_api_token("second-token")
+                .expect("rotated token should resolve");
+            let entries = second.list_user_api_tokens(&principal);
+            let bootstrap_entries = entries
+                .iter()
+                .filter(|entry| entry.id == BOOTSTRAP_ADMIN_API_TOKEN_ID)
+                .count();
+            assert_eq!(bootstrap_entries, 1);
+            assert!(entries
+                .iter()
+                .any(|entry| entry.id == BOOTSTRAP_ADMIN_API_TOKEN_ID
+                    && entry.name == "Rotated env token"));
+            unsafe {
+                std::env::remove_var(ENV_ADMIN_API_TOKEN);
+                std::env::remove_var(ENV_ADMIN_API_TOKEN_NAME);
+                std::env::remove_var(ENV_ADMIN_API_TOKEN_EXPIRES_AT);
+            }
+        });
+    }
+
+    #[test]
+    fn missing_env_admin_api_token_revokes_bootstrap_record() {
+        with_test_config_dir("api_tokens_env_revoke", || {
+            unsafe {
+                std::env::set_var(ENV_ADMIN_API_TOKEN, "temporary-token");
+            }
+            let first = WebState::new("admin", "secret-pass", false, false).expect("state");
+            assert!(first
+                .resolve_principal_from_api_token("temporary-token")
+                .is_some());
+
+            unsafe {
+                std::env::remove_var(ENV_ADMIN_API_TOKEN);
+                std::env::remove_var(ENV_ADMIN_API_TOKEN_NAME);
+                std::env::remove_var(ENV_ADMIN_API_TOKEN_EXPIRES_AT);
+            }
+            let second = WebState::new("admin", "secret-pass", false, false).expect("state");
+            assert!(second
+                .resolve_principal_from_api_token("temporary-token")
+                .is_none());
         });
     }
 

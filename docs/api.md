@@ -19,6 +19,9 @@ Storage model (persisted hashed only):
 
 Token values are shown only once at creation/rotation and are never stored in clear text.
 
+Container deployments can also provision one bootstrap administrator token with `SPUC_ADMIN_API_TOKEN`.
+That token is hashed into the same token store, belongs to the configured bootstrap administrator, and is useful for connectors that need API access immediately after container startup.
+
 ### List tokens
 
 GET /api/user/tokens

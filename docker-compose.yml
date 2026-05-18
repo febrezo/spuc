@@ -18,6 +18,9 @@ services:
       SPUC_WEB_GITHUB_REDIRECT_URI: "${SPUC_WEB_GITHUB_REDIRECT_URI:-}"
       SIGMA_RPC_URL: "${SIGMA_RPC_URL:-}"
       SPUC_SIGMA_RPC_TOKEN: "${SPUC_SIGMA_RPC_TOKEN:-}"
+      SPUC_ADMIN_API_TOKEN: "${SPUC_ADMIN_API_TOKEN:-}"
+      SPUC_ADMIN_API_TOKEN_NAME: "${SPUC_ADMIN_API_TOKEN_NAME:-Container bootstrap admin token}"
+      SPUC_ADMIN_API_TOKEN_EXPIRES_AT: "${SPUC_ADMIN_API_TOKEN_EXPIRES_AT:-}"
     volumes:
       - spuc_data:/data
     healthcheck:

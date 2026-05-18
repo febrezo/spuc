@@ -101,6 +101,22 @@ ghcr.io/febrezo/spuc:latest
   Required: yes in the provided compose file.
   Recommendation: use a long random value.
 
+### Bootstrap administrator API token
+
+- `SPUC_ADMIN_API_TOKEN`
+  Purpose: optional fixed personal API token for the bootstrap administrator, intended for containerized connectors and automation.
+  Behavior when empty: no API token is created automatically; any previously environment-managed bootstrap token is revoked, while manually created tokens remain unchanged.
+  Behavior when set: SPUC stores only the token hash in `/data/web_user_api_tokens.json` and grants the token the same principal as `SPUC_ADMIN_USER`.
+  Recommendation: use a long random value with the normal `spuc_pat_` prefix for clarity, store it as an orchestrator secret, and do not expose it in logs.
+
+- `SPUC_ADMIN_API_TOKEN_NAME`
+  Purpose: display name for the environment-provisioned token.
+  Typical value: `Container bootstrap admin token`.
+
+- `SPUC_ADMIN_API_TOKEN_EXPIRES_AT`
+  Purpose: optional RFC3339 expiration timestamp for the environment-provisioned token.
+  Example: `2026-12-31T23:59:59Z`.
+
 ### Google OAuth bootstrap
 
 - `SPUC_WEB_GOOGLE_CLIENT_ID`
@@ -147,6 +163,7 @@ SPUC_CONFIG_DIR=/data
 That means the container persists the same file-backed SPUC state described in configuration docs, including:
 
 - `web_users.json`
+- `web_user_api_tokens.json`
 - `web_oauth_policy.json`
 - `abilities/*.json`
 - `catalog/translation_activities.jsonl`

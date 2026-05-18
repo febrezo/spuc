@@ -1,6 +1,6 @@
 [package]
 name = "spuc-core"
-version = "0.9.1"
+version = "0.9.2"
 edition = "2021"
 autobins = false
 description = "Defensive STIX pattern workflow core for SPUC."

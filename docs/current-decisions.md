@@ -158,6 +158,7 @@ Last updated: 2026-03-15
 - MCP exposure is adapter-based in current iteration: `spuc jsonrpc` is the backend contract and external MCP adapters bridge MCP tool calls to `/rpc`.
 - The web interface is localized in English and Spanish only.
 - Authentication supports local username/password users persisted in `web_users.json`.
+- Container deployments can bootstrap one fixed administrator API token from `SPUC_ADMIN_API_TOKEN`; only the hash is persisted in `web_user_api_tokens.json`, changing the environment value rotates the same bootstrap token record, and removing the variable revokes that environment-managed record.
 - Google/GitHub sign-in uses authorization-code callback flow with environment bootstrap plus explicit admin authorization flags per provider.
 - Frontend JavaScript now uses native ES modules served by the existing web server: `app.js` is a minimal entry wrapper that imports `boot.js`, with incremental extraction modules for `api-client.js`, `store.js`, `action-registry.js`, `ui/*`, and `features/rules/*`.
 - The STIX objects catalog uses a left-aligned text search field, right-aligned icon-only bulk actions, and a compact disclosure that only shows ID plus markdown description; the pencil button reopens the upsert modal for the selected object.

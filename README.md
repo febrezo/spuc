@@ -235,11 +235,14 @@ Default compose behavior:
 - stores web users, catalog, intrusion sets and runtime cache in the named volume `spuc_data`
 - supports optional OAuth bootstrap through `SPUC_WEB_GOOGLE_*` and `SPUC_WEB_GITHUB_*`
 - supports optional remote Sigma JSON-RPC via `SIGMA_RPC_URL` and `SPUC_SIGMA_RPC_TOKEN`
+- supports optional connector bootstrap with `SPUC_ADMIN_API_TOKEN`
 
 The bootstrap admin credentials come from `.env`:
 
 - `SPUC_ADMIN_USER`
 - `SPUC_ADMIN_PASSWORD`
+
+For containerized connectors, set `SPUC_ADMIN_API_TOKEN` to provision a fixed administrator API token at startup. SPUC persists only the token hash in `/data/web_user_api_tokens.json`; rotating the environment value updates the same bootstrap token record on restart, and removing the variable revokes that environment-managed token.
 
 ## Web Interface
 

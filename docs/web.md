@@ -30,6 +30,7 @@ spuc web --port 8090 --no-login --no-open
 
 If `--admin-password` is omitted, SPUC generates a random 25-character administrator password and prints it in startup logs.
 When `--admin-password` is provided explicitly, SPUC keeps that credential synchronized for the configured admin user at startup.
+For connector-first deployments, `SPUC_ADMIN_API_TOKEN` can bootstrap a fixed administrator API token from the environment. SPUC stores only its hash in `web_user_api_tokens.json`; changing the environment value rotates the same bootstrap token record on the next start, and removing the variable revokes that environment-managed record.
 
 ## Docker Compose
 
