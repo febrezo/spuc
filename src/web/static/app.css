@@ -1833,14 +1833,7 @@ body.theme-light .stix-detail-row details {
   justify-content: flex-end;
 }
 
-#adversary-emulable-platforms {
-  max-width: 360px;
-  justify-content: flex-end;
-}
 
-#adversary-ability-picker-dialog .detail-card {
-  max-width: 980px;
-}
 
 .rules-view-mode {
   display: inline-flex;

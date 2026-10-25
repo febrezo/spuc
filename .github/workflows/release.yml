@@ -16,7 +16,37 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  validate-release-ref:
+    name: Verify tag matches Cargo.toml version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v5
+      - name: Require an exact version tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+            echo 'BLOCKED: Release requires a version tag.' >&2
+            exit 1
+          fi
+          VERSION="$(awk -F'"' '/^version[[:space:]]*=/{print $2; exit}' Cargo.toml)"
+          if [[ -z "$VERSION" || "${GITHUB_REF_NAME}" != "v${VERSION}" ]]; then
+            echo "BLOCKED: tag ${GITHUB_REF_NAME} does not match Cargo.toml version v${VERSION}." >&2
+            exit 1
+          fi
+          echo "PASS: version tag v${VERSION}"
+
+  ci-gate:
+    name: Required CI (quality, tests, audit, desktop, Docker, browser)
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   build:
+    needs: [validate-release-ref, ci-gate]
     name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -123,7 +153,6 @@ jobs:
           OUT="spuc-v${VERSION}-${{ matrix.target }}"
           mkdir -p "dist/${OUT}"
           cp "target/${{ matrix.target }}/release/spuc" "dist/${OUT}/"
-          cp "target/${{ matrix.target }}/release/spuc-agent" "dist/${OUT}/"
           if [ "${{ matrix.desktop_supported }}" = "true" ]; then
             cp "target/${{ matrix.target }}/release/spuc-gui" "dist/${OUT}/"
           fi
@@ -141,7 +170,6 @@ jobs:
           $out = "spuc-v$version-${{ matrix.target }}"
           New-Item -ItemType Directory -Force -Path "dist/$out" | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/spuc.exe" "dist/$out/"
-          Copy-Item "target/${{ matrix.target }}/release/spuc-agent.exe" "dist/$out/"
           if ("${{ matrix.desktop_supported }}" -eq "true") {
             Copy-Item "target/${{ matrix.target }}/release/spuc-gui.exe" "dist/$out/"
           }
@@ -165,7 +193,7 @@ jobs:
 
   publish:
     name: Publish GitHub Release
-    needs: [build]
+    needs: [validate-release-ref, ci-gate, build]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
@@ -181,7 +209,7 @@ jobs:
 
   publish-container:
     name: Publish GHCR Container
-    needs: [build]
+    needs: [validate-release-ref, ci-gate, build]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:

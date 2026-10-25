@@ -1,6 +1,7 @@
 use serde::Serialize;
 
 pub mod chronicle;
+pub mod cytomic_orion_sql;
 pub mod eql;
 pub mod kql;
 pub mod openioc;

@@ -1,259 +1,40 @@
 #![allow(dead_code)]
 
-use anyhow::{anyhow, Result};
-use std::collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet, HashMap};
-use std::fs;
-use std::hash::{Hash, Hasher};
-use std::path::{Path, PathBuf};
+pub mod activities;
+pub mod rules;
 
-use crate::cli::{AbilityTarget, AdversaryCommands, BuildOutput, RuleCommands};
-use crate::commands::common::{
-    ability_target_extension, ability_target_label, ability_target_to_export, all_ability_targets,
-    build_ability_from_rule, known_detection_target_labels, render_ability_card,
-};
-use crate::commands::plan::export_saved_adversary;
+use anyhow::{anyhow, Result};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+
+use crate::catalog::activities::{ActivityLog, TranslationActivity};
+use crate::commands::common::known_detection_target_labels;
 use crate::paths;
 use crate::ui::ansi::{BOLD, RESET, YELLOW};
 use crate::ui::print::entry_label;
-use spuc::emulation::ability as emu_ability;
-use spuc::emulation::campaign as emu_campaign;
-use spuc::emulation::catalog::{AbilityCatalog, TranslationActivity};
-use spuc::emulation::export::{self as emu_export};
-use spuc::emulation::output::{self as emu_output, OutputBlock, OutputSection};
 
-type LoadedCatalogData = (
-    AbilityCatalog,
-    Vec<emu_ability::Ability>,
-    Vec<CatalogRuleEntry>,
-    Vec<CatalogAdversaryEntry>,
-);
+type LoadedCatalogData = Vec<CatalogRuleEntry>;
 
 #[derive(Debug, Clone)]
 pub(crate) struct CatalogRuleEntry {
     pub(crate) rule_id: String,
-    pub(crate) ability_id: Option<String>,
     pub(crate) name: String,
     pub(crate) description: Option<String>,
     pub(crate) ttp: Option<String>,
     pub(crate) confidence: u8,
-    pub(crate) emulable: bool,
     pub(crate) rule: String,
     pub(crate) last_seen_utc: String,
     pub(crate) commands: Vec<String>,
     pub(crate) targets: Vec<String>,
     pub(crate) statuses: Vec<String>,
     pub(crate) target_statuses: BTreeMap<String, String>,
-    pub(crate) emulation_statuses: BTreeMap<String, String>,
     pub(crate) activity_count: usize,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct CatalogAdversaryEntry {
-    pub(crate) adversary_id: String,
-    pub(crate) source_intrusion_set_id: String,
-    pub(crate) path: PathBuf,
-    pub(crate) name: String,
-    pub(crate) confidence: u8,
-    pub(crate) steps: usize,
-    pub(crate) platforms: Vec<String>,
-    pub(crate) description: String,
-    pub(crate) ability_refs: Vec<String>,
-}
-
 pub(crate) fn load_catalog_data() -> Result<LoadedCatalogData> {
-    let catalog = AbilityCatalog::from_default_root()?;
-    let abilities = catalog.list()?;
-    let rules = build_catalog_rule_entries(&catalog, &abilities)?;
-    let adversaries = build_catalog_adversary_entries()?;
-    Ok((catalog, abilities, rules, adversaries))
-}
-
-pub(crate) fn run_rule_command(action: &RuleCommands) -> Result<()> {
-    let (catalog, _abilities, rules, _adversaries) = load_catalog_data()?;
-    match action {
-        RuleCommands::List { limit } => {
-            let filtered = filter_rule_entries(&rules, None, Some(*limit));
-            print_rule_search_results(&filtered, rules.len(), "Rules");
-        }
-        RuleCommands::Search { query, limit } => {
-            let filtered = filter_rule_entries(&rules, query.as_deref(), Some(*limit));
-            print_rule_search_results(&filtered, rules.len(), "Rules");
-        }
-        RuleCommands::Show { id } => {
-            let entry = resolve_rule_selector(id, &rules, None)?;
-            show_rule_entry(&entry);
-        }
-        RuleCommands::Export { id, to, output } => {
-            let entry = resolve_rule_selector(id, &rules, None)?;
-            export_rule_entry(&catalog, &entry, to, output.as_deref())?;
-        }
-        RuleCommands::Edit {
-            id,
-            name,
-            description,
-            confidence,
-        } => {
-            let entry = resolve_rule_selector(id, &rules, None)?;
-            edit_rule_entry(
-                &catalog,
-                &entry,
-                name.as_deref(),
-                description.as_deref(),
-                *confidence,
-            )?;
-        }
-        RuleCommands::Delete { id } => {
-            let entry = resolve_rule_selector(id, &rules, None)?;
-            delete_rule_entry(&catalog, &entry, None)?;
-        }
-    }
-    Ok(())
-}
-
-pub(crate) fn run_adversary_command(action: &AdversaryCommands) -> Result<()> {
-    let (_catalog, _abilities, _rules, adversaries) = load_catalog_data()?;
-    match action {
-        AdversaryCommands::List { limit } => {
-            let filtered = filter_adversary_entries(&adversaries, None, Some(*limit));
-            print_adversary_search_results(&filtered, adversaries.len(), "Adversaries");
-        }
-        AdversaryCommands::Search { query, limit } => {
-            let filtered = filter_adversary_entries(&adversaries, query.as_deref(), Some(*limit));
-            print_adversary_search_results(&filtered, adversaries.len(), "Adversaries");
-        }
-        AdversaryCommands::Show { id } => {
-            let entry = resolve_adversary_selector(id, &adversaries, None)?;
-            show_adversary_entry(&entry);
-        }
-        AdversaryCommands::Export {
-            id,
-            to,
-            output,
-            show,
-        } => {
-            let entry = resolve_adversary_selector(id, &adversaries, None)?;
-            export_adversary_entry(&entry, *to, output.as_deref(), show)?;
-        }
-        AdversaryCommands::Edit {
-            id,
-            name,
-            description,
-            confidence,
-        } => {
-            let entry = resolve_adversary_selector(id, &adversaries, None)?;
-            edit_adversary_entry(&entry, name.as_deref(), description.as_deref(), *confidence)?;
-        }
-        AdversaryCommands::Delete { id } => {
-            let entry = resolve_adversary_selector(id, &adversaries, None)?;
-            delete_adversary_entry(&entry, None)?;
-        }
-    }
-    Ok(())
-}
-
-fn build_catalog_rule_entries(
-    catalog: &AbilityCatalog,
-    abilities: &[emu_ability::Ability],
-) -> Result<Vec<CatalogRuleEntry>> {
-    let activities = catalog.list_translation_activities(None, None)?;
-    let mut ability_by_rule: HashMap<String, &emu_ability::Ability> = HashMap::new();
-    for ability in abilities {
-        ability_by_rule
-            .entry(ability.source_pattern.clone())
-            .or_insert(ability);
-    }
-
-    let mut grouped: BTreeMap<String, Vec<TranslationActivity>> = BTreeMap::new();
-    for activity in activities {
-        grouped
-            .entry(activity.rule.clone())
-            .or_default()
-            .push(activity);
-    }
-
-    let mut entries = grouped
-        .into_iter()
-        .map(|(rule, items)| {
-            let ability = ability_by_rule.get(&rule).copied();
-            let confidence = ability
-                .map(|item| item.confidence)
-                .unwrap_or_else(|| items.iter().map(|item| item.impact).max().unwrap_or(0));
-            let stable_token = items
-                .iter()
-                .find_map(|item| {
-                    (!item.rule_hash.trim().is_empty()).then(|| item.rule_hash.clone())
-                })
-                .unwrap_or_else(|| stable_catalog_token(&rule));
-            let mut commands = BTreeSet::new();
-            let mut targets = BTreeSet::new();
-            let mut statuses = BTreeSet::new();
-            let mut activities_by_target: HashMap<String, Vec<&TranslationActivity>> =
-                HashMap::new();
-            let mut last_seen_utc = String::new();
-            for item in &items {
-                commands.insert(item.command.clone());
-                targets.insert(item.target.clone());
-                statuses.insert(item.status.clone());
-                activities_by_target
-                    .entry(item.target.to_ascii_lowercase())
-                    .or_default()
-                    .push(item);
-                if item.timestamp_utc > last_seen_utc {
-                    last_seen_utc = item.timestamp_utc.clone();
-                }
-            }
-
-            let target_statuses = known_detection_target_labels()
-                .into_iter()
-                .map(|target| {
-                    let status = activities_by_target
-                        .get(&target)
-                        .map(|items| collapse_target_status(items))
-                        .unwrap_or_else(|| "unsupported".to_string());
-                    (target, status)
-                })
-                .collect::<BTreeMap<_, _>>();
-
-            let emulation_statuses = [
-                "spuc-agent",
-                "bash",
-                "powershell",
-                "atomic-red-team",
-                "mitre-caldera",
-            ]
-            .iter()
-            .map(|target| {
-                let status = activities_by_target
-                    .get(*target)
-                    .map(|items| collapse_target_status(items))
-                    .unwrap_or_else(|| "unsupported".to_string());
-                ((*target).to_string(), status)
-            })
-            .collect::<BTreeMap<_, _>>();
-
-            CatalogRuleEntry {
-                rule_id: catalog_indicator_id(&stable_token),
-                ability_id: ability.map(|item| item.id.clone()),
-                name: ability
-                    .map(|item| item.name.clone())
-                    .unwrap_or_else(|| format!("Rule {}", short_catalog_token(&stable_token))),
-                description: ability.map(|item| item.description.clone()),
-                ttp: ability.and_then(|item| item.ttp.clone()),
-                confidence,
-                emulable: ability.map(ability_is_emulable).unwrap_or(false),
-                rule,
-                last_seen_utc,
-                commands: commands.into_iter().collect(),
-                targets: targets.into_iter().collect(),
-                statuses: statuses.into_iter().collect(),
-                target_statuses,
-                emulation_statuses,
-                activity_count: items.len(),
-            }
-        })
-        .collect::<Vec<_>>();
-    entries.sort_by(|a, b| a.rule_id.cmp(&b.rule_id));
-    Ok(entries)
+    let config_root =
+        paths::spuc_config_root().ok_or_else(|| anyhow!("cannot resolve config root"))?;
+    rules::ensure_rules_seeded(&config_root)?;
+    build_catalog_rule_entries()
 }
 
 fn collapse_target_status(activities: &[&TranslationActivity]) -> String {
@@ -310,7 +91,6 @@ fn catalog_rule_row(entry: &CatalogRuleEntry) -> Vec<String> {
         entry.rule_id.clone(),
         entry.name.clone(),
         entry.confidence.to_string(),
-        yes_no(entry.emulable),
         entry.rule.clone(),
     ]
 }
@@ -338,420 +118,7 @@ pub(crate) fn print_rule_search_results(
         println!("{YELLOW}No rules found.{RESET}");
         return;
     }
-    print_table(
-        &["#", "RULE_ID", "NAME", "CONFIDENCE", "EMULABLE", "RULE"],
-        &rows,
-    );
-}
-
-fn build_catalog_adversary_entries() -> Result<Vec<CatalogAdversaryEntry>> {
-    let Some(dir) = paths::campaigns_dir() else {
-        return Ok(Vec::new());
-    };
-    if !dir.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut campaigns = Vec::new();
-    for entry in fs::read_dir(&dir)? {
-        let path = entry?.path();
-        let ext = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or_default()
-            .to_ascii_lowercase();
-        if ext != "yaml" && ext != "yml" && ext != "json" {
-            continue;
-        }
-        if let Ok(campaign) = emu_campaign::load_campaign_yaml(&path) {
-            campaigns.push((path, campaign));
-        }
-    }
-    let mut entries = campaigns
-        .into_iter()
-        .map(|(path, campaign)| {
-            let mut platforms = BTreeSet::new();
-            let mut ability_refs = Vec::new();
-            for step in &campaign.steps {
-                platforms.insert(step.platform.clone());
-                ability_refs.push(step.ability_ref.clone());
-            }
-            CatalogAdversaryEntry {
-                adversary_id: catalog_adversary_id(&campaign.intrusion_set_id),
-                source_intrusion_set_id: campaign.intrusion_set_id,
-                path,
-                name: campaign.name,
-                confidence: campaign.confidence,
-                steps: campaign.steps.len(),
-                platforms: platforms.into_iter().collect(),
-                description: campaign.description,
-                ability_refs,
-            }
-        })
-        .collect::<Vec<_>>();
-    entries.sort_by(|a, b| a.adversary_id.cmp(&b.adversary_id));
-    Ok(entries)
-}
-
-pub(crate) fn filter_adversary_entries(
-    entries: &[CatalogAdversaryEntry],
-    search: Option<&str>,
-    limit: Option<usize>,
-) -> Vec<CatalogAdversaryEntry> {
-    let mut filtered = entries
-        .iter()
-        .filter(|entry| row_matches_query(&catalog_adversary_row(entry), search))
-        .cloned()
-        .collect::<Vec<_>>();
-    if let Some(max) = limit {
-        filtered.truncate(max);
-    }
-    filtered
-}
-
-fn catalog_adversary_row(entry: &CatalogAdversaryEntry) -> Vec<String> {
-    vec![
-        entry.adversary_id.clone(),
-        entry.name.clone(),
-        entry.confidence.to_string(),
-        entry.steps.to_string(),
-        entry.platforms.join(", "),
-        entry.description.clone(),
-    ]
-}
-
-pub(crate) fn print_adversary_search_results(
-    entries: &[CatalogAdversaryEntry],
-    total_entries: usize,
-    title: &str,
-) {
-    let rows = entries
-        .iter()
-        .enumerate()
-        .map(|(idx, entry)| {
-            let mut row = vec![(idx + 1).to_string()];
-            row.extend(catalog_adversary_row(entry));
-            row
-        })
-        .collect::<Vec<_>>();
-    println!(
-        "{BOLD}{title} ({}/{}){RESET}\n",
-        rows.len(),
-        entry_label(total_entries)
-    );
-    if rows.is_empty() {
-        println!("{YELLOW}No adversaries found.{RESET}");
-        return;
-    }
-    print_table(
-        &[
-            "#",
-            "ADVERSARY_ID",
-            "NAME",
-            "CONFIDENCE",
-            "STEPS",
-            "PLATFORMS",
-            "DESCRIPTION",
-        ],
-        &rows,
-    );
-}
-
-pub(crate) fn resolve_rule_selector(
-    selector: &str,
-    all_entries: &[CatalogRuleEntry],
-    current_entries: Option<&[CatalogRuleEntry]>,
-) -> Result<CatalogRuleEntry> {
-    if let Ok(index) = selector.parse::<usize>() {
-        if index == 0 {
-            return Err(anyhow!("index starts at 1"));
-        }
-        let source = current_entries.unwrap_or(all_entries);
-        return source
-            .get(index - 1)
-            .cloned()
-            .ok_or_else(|| anyhow!("rule index '{}' is out of range", index));
-    }
-    all_entries
-        .iter()
-        .find(|entry| {
-            entry.rule_id == selector
-                || entry.rule == selector
-                || entry.ability_id.as_deref() == Some(selector)
-        })
-        .cloned()
-        .ok_or_else(|| anyhow!("rule '{}' not found", selector))
-}
-
-pub(crate) fn resolve_adversary_selector(
-    selector: &str,
-    all_entries: &[CatalogAdversaryEntry],
-    current_entries: Option<&[CatalogAdversaryEntry]>,
-) -> Result<CatalogAdversaryEntry> {
-    if let Ok(index) = selector.parse::<usize>() {
-        if index == 0 {
-            return Err(anyhow!("index starts at 1"));
-        }
-        let source = current_entries.unwrap_or(all_entries);
-        return source
-            .get(index - 1)
-            .cloned()
-            .ok_or_else(|| anyhow!("adversary index '{}' is out of range", index));
-    }
-    all_entries
-        .iter()
-        .find(|entry| {
-            entry.adversary_id == selector
-                || entry.source_intrusion_set_id == selector
-                || entry.name == selector
-        })
-        .cloned()
-        .ok_or_else(|| anyhow!("adversary '{}' not found", selector))
-}
-
-pub(crate) fn show_rule_entry(rule: &CatalogRuleEntry) {
-    println!("{YELLOW}{BOLD}Rule Detail{RESET}");
-    println!("{YELLOW}- rule_id: {}{RESET}", rule.rule_id);
-    if let Some(ability_id) = &rule.ability_id {
-        println!("{YELLOW}- ability_id: {}{RESET}", ability_id);
-    }
-    println!("{YELLOW}- name: {}{RESET}", rule.name);
-    println!(
-        "{YELLOW}- description: {}{RESET}",
-        rule.description.as_deref().unwrap_or("-")
-    );
-    println!("{YELLOW}- confidence: {}{RESET}", rule.confidence);
-    println!("{YELLOW}- emulable: {}{RESET}", yes_no(rule.emulable));
-    println!("{YELLOW}- last_seen_utc: {}{RESET}", rule.last_seen_utc);
-    println!("{YELLOW}- activity_count: {}{RESET}", rule.activity_count);
-    println!(
-        "{YELLOW}- commands: {}{RESET}",
-        join_or_dash(&rule.commands)
-    );
-    println!("{YELLOW}- targets: {}{RESET}", join_or_dash(&rule.targets));
-    println!(
-        "{YELLOW}- statuses: {}{RESET}",
-        join_or_dash(&rule.statuses)
-    );
-    println!("{YELLOW}- rule: {}{RESET}", rule.rule);
-}
-
-pub(crate) fn show_adversary_entry(adversary: &CatalogAdversaryEntry) {
-    println!("{YELLOW}{BOLD}Adversary Detail{RESET}");
-    println!("{YELLOW}- adversary_id: {}{RESET}", adversary.adversary_id);
-    println!(
-        "{YELLOW}- source_intrusion_set_id: {}{RESET}",
-        adversary.source_intrusion_set_id
-    );
-    println!("{YELLOW}- name: {}{RESET}", adversary.name);
-    println!("{YELLOW}- confidence: {}{RESET}", adversary.confidence);
-    println!("{YELLOW}- steps: {}{RESET}", adversary.steps);
-    println!(
-        "{YELLOW}- platforms: {}{RESET}",
-        adversary.platforms.join(", ")
-    );
-    println!("{YELLOW}- description: {}{RESET}", adversary.description);
-    println!(
-        "{YELLOW}- ability_refs: {}{RESET}",
-        join_or_dash(&adversary.ability_refs)
-    );
-    println!("{YELLOW}- path: {}{RESET}", adversary.path.display());
-}
-
-pub(crate) fn export_rule_entry(
-    catalog: &AbilityCatalog,
-    rule: &CatalogRuleEntry,
-    targets: &[AbilityTarget],
-    output: Option<&Path>,
-) -> Result<()> {
-    let ability = load_or_rebuild_rule_ability(catalog, rule)?;
-    export_single_ability(&ability, targets, output)
-}
-
-fn export_single_ability(
-    ability: &emu_ability::Ability,
-    targets: &[AbilityTarget],
-    output: Option<&Path>,
-) -> Result<()> {
-    let selected_targets = if targets.is_empty() {
-        all_ability_targets()
-    } else {
-        targets.to_vec()
-    };
-    let summary = render_ability_card(ability);
-    for target in selected_targets {
-        let target_label = ability_target_label(target);
-        let artifact = emu_export::export_ability(ability_target_to_export(target), ability)?;
-        if let Some(dir) = output {
-            fs::create_dir_all(dir)?;
-            let artifact_path = dir.join(format!(
-                "{}-{}.{}",
-                ability.id,
-                target_label.replace('-', "_"),
-                ability_target_extension(target)
-            ));
-            fs::write(&artifact_path, &artifact)?;
-            println!(
-                "{YELLOW}Artifact ({target_label}) saved to {}{RESET}",
-                artifact_path.display()
-            );
-        }
-        let sections = vec![
-            OutputSection {
-                block: OutputBlock::Summary,
-                title: format!("Rule Export Summary ({target_label})"),
-                body: summary.clone(),
-            },
-            OutputSection {
-                block: OutputBlock::Artifact,
-                title: format!("Rule Export Artifact ({target_label})"),
-                body: artifact,
-            },
-        ];
-        println!("{}", emu_output::render_sections(&sections));
-    }
-    Ok(())
-}
-
-fn load_or_rebuild_rule_ability(
-    catalog: &AbilityCatalog,
-    rule: &CatalogRuleEntry,
-) -> Result<emu_ability::Ability> {
-    if let Some(ability_id) = &rule.ability_id {
-        if let Some(ability) = catalog.get_by_id(ability_id)? {
-            return Ok(ability);
-        }
-    }
-    build_ability_from_rule(
-        &rule.rule,
-        None,
-        Some(&rule.name),
-        rule.description.as_deref(),
-        rule.ttp.as_deref(),
-        rule.confidence,
-    )
-}
-
-pub(crate) fn edit_rule_entry(
-    catalog: &AbilityCatalog,
-    rule: &CatalogRuleEntry,
-    name: Option<&str>,
-    description: Option<&str>,
-    confidence: Option<u8>,
-) -> Result<()> {
-    let ability_id = rule.ability_id.as_deref().ok_or_else(|| {
-        anyhow!(
-            "rule '{}' is activity-only and cannot be edited",
-            rule.rule_id
-        )
-    })?;
-    let mut ability = catalog
-        .get_by_id(ability_id)?
-        .ok_or_else(|| anyhow!("ability '{}' not found", ability_id))?;
-    let mut changed = false;
-    if let Some(name) = name {
-        ability.name = name.to_string();
-        changed = true;
-    }
-    if let Some(description) = description {
-        ability.description = description.to_string();
-        changed = true;
-    }
-    if let Some(confidence) = confidence {
-        ability.confidence = confidence;
-        changed = true;
-    }
-    if !changed {
-        return Err(anyhow!(
-            "no editable fields provided. Allowed: --name, --description, --confidence"
-        ));
-    }
-    catalog.save(&ability)?;
-    println!("{YELLOW}Rule updated: {}{RESET}", rule.rule_id);
-    Ok(())
-}
-
-pub(crate) fn edit_adversary_entry(
-    adversary: &CatalogAdversaryEntry,
-    name: Option<&str>,
-    description: Option<&str>,
-    confidence: Option<u8>,
-) -> Result<()> {
-    let mut campaign = emu_campaign::load_campaign_yaml(&adversary.path)?;
-    let mut changed = false;
-    if let Some(name) = name {
-        campaign.name = name.to_string();
-        changed = true;
-    }
-    if let Some(description) = description {
-        campaign.description = description.to_string();
-        changed = true;
-    }
-    if let Some(confidence) = confidence {
-        campaign.confidence = confidence;
-        changed = true;
-    }
-    if !changed {
-        return Err(anyhow!(
-            "no editable fields provided. Allowed: --name, --description, --confidence"
-        ));
-    }
-    emu_campaign::save_campaign_yaml(&campaign, Some(&adversary.path))?;
-    println!(
-        "{YELLOW}Adversary updated: {}{RESET}",
-        adversary.adversary_id
-    );
-    Ok(())
-}
-
-pub(crate) fn export_adversary_entry(
-    adversary: &CatalogAdversaryEntry,
-    executor: AbilityTarget,
-    output: Option<&Path>,
-    show: &[BuildOutput],
-) -> Result<()> {
-    export_saved_adversary(&adversary.path, executor, output, show)
-}
-
-pub(crate) fn delete_rule_entry(
-    catalog: &AbilityCatalog,
-    rule: &CatalogRuleEntry,
-    confirmation: Option<&str>,
-) -> Result<()> {
-    confirm_manual_delete(
-        &format!("rule {}", rule.rule_id),
-        &format!("DELETE {}", rule.rule_id),
-        confirmation,
-    )?;
-    let mut removed = 0usize;
-    if let Some(ability_id) = &rule.ability_id {
-        if catalog.delete_by_id(ability_id)? {
-            removed += 1;
-        }
-    }
-    let activity_rows = catalog.delete_activities_by_rule(&rule.rule)?;
-    println!(
-        "{YELLOW}Rule deleted: {} (abilities removed: {}, activity rows removed: {}){RESET}",
-        rule.rule_id, removed, activity_rows
-    );
-    Ok(())
-}
-
-pub(crate) fn delete_adversary_entry(
-    adversary: &CatalogAdversaryEntry,
-    confirmation: Option<&str>,
-) -> Result<()> {
-    confirm_manual_delete(
-        &format!("adversary {}", adversary.adversary_id),
-        &format!("DELETE {}", adversary.adversary_id),
-        confirmation,
-    )?;
-    fs::remove_file(&adversary.path)?;
-    println!(
-        "{YELLOW}Adversary deleted: {}{RESET}",
-        adversary.adversary_id
-    );
-    Ok(())
+    print_table(&["#", "RULE_ID", "NAME", "CONFIDENCE", "RULE"], &rows);
 }
 
 fn row_matches_query(row: &[String], query: Option<&str>) -> bool {
@@ -761,13 +128,6 @@ fn row_matches_query(row: &[String], query: Option<&str>) -> bool {
     let needle = query.to_ascii_lowercase();
     row.iter()
         .any(|value| value.to_ascii_lowercase().contains(&needle))
-}
-
-fn ability_is_emulable(ability: &emu_ability::Ability) -> bool {
-    ability.validate_structure().is_ok()
-        && all_ability_targets().into_iter().any(|target| {
-            emu_export::export_ability(ability_target_to_export(target), ability).is_ok()
-        })
 }
 
 fn yes_no(value: bool) -> String {
@@ -792,15 +152,22 @@ fn short_catalog_token(input: &str) -> String {
 }
 
 fn catalog_indicator_id(stable_token: &str) -> String {
-    let mut left = DefaultHasher::new();
-    "indicator".hash(&mut left);
-    stable_token.hash(&mut left);
-    let left = left.finish();
-
-    let mut right = DefaultHasher::new();
-    stable_token.hash(&mut right);
-    "spuc-catalog-rule".hash(&mut right);
-    let right = right.finish();
+    const BASIS: u64 = 0xcbf29ce484222325;
+    const PRIME: u64 = 0x100000001b3;
+    let mut left = BASIS;
+    for byte in b"indicator".iter().chain(stable_token.as_bytes().iter()) {
+        left ^= u64::from(*byte);
+        left = left.wrapping_mul(PRIME);
+    }
+    let mut right = BASIS;
+    for byte in stable_token
+        .as_bytes()
+        .iter()
+        .chain(b"spuc-catalog-rule".iter())
+    {
+        right ^= u64::from(*byte);
+        right = right.wrapping_mul(PRIME);
+    }
 
     let mut bytes = [0u8; 16];
     bytes[..8].copy_from_slice(&left.to_be_bytes());
@@ -827,10 +194,6 @@ fn catalog_indicator_id(stable_token: &str) -> String {
         bytes[14],
         bytes[15],
     )
-}
-
-fn catalog_adversary_id(intrusion_set_id: &str) -> String {
-    emu_campaign::catalog_adversary_id(intrusion_set_id)
 }
 
 fn join_or_dash(values: &[String]) -> String {
@@ -902,7 +265,169 @@ fn print_table(headers: &[&str], rows: &[Vec<String>]) {
     }
 }
 
-#[cfg(test)]
+pub(crate) fn build_catalog_rule_entries() -> Result<Vec<CatalogRuleEntry>> {
+    let config_root =
+        paths::spuc_config_root().ok_or_else(|| anyhow!("cannot resolve config root"))?;
+    rules::ensure_rules_seeded(&config_root)?;
+    let persisted = rules::load_persisted_rules(&config_root)?;
+    let activity_log = ActivityLog::from_default_root()?;
+    let activities_all = activity_log.list_translation_activities(None, None)?;
+
+    // Statuses derive from visible translate rows only: hidden legacy cache
+    // rows (old dual-flow emulate/translate rows) are intentionally excluded.
+    let mut grouped: BTreeMap<String, Vec<&TranslationActivity>> = BTreeMap::new();
+    for activity in activities_all
+        .iter()
+        .filter(|item| item.command == "translate" && !item.hidden)
+    {
+        grouped
+            .entry(activity.rule.clone())
+            .or_default()
+            .push(activity);
+    }
+
+    let mut entries = Vec::new();
+    let mut persisted_patterns = std::collections::BTreeSet::new();
+    for rule in &persisted {
+        persisted_patterns.insert(rule.source_pattern.trim().to_string());
+        // Re-encode the persisted metadata so every downstream view keeps
+        // decoding tlp/pap/ttp/observables/indicates from the description.
+        let description = rules::encode_rule_metadata_description(
+            rule.description.as_deref(),
+            Some(&rule.tlp),
+            Some(&rule.pap),
+            rule.ttp.as_deref(),
+            rule.target_platform.as_deref(),
+            Some(&rule.observables),
+            Some(&rule.indicates_list),
+        );
+        let items = grouped
+            .get(rule.source_pattern.trim())
+            .cloned()
+            .unwrap_or_default();
+
+        let mut commands = BTreeSet::new();
+        let mut targets = BTreeSet::new();
+        let mut statuses = BTreeSet::new();
+        let mut activities_by_target: HashMap<String, Vec<&TranslationActivity>> = HashMap::new();
+        let mut last_seen_utc = String::new();
+        for item in &items {
+            commands.insert(item.command.clone());
+            targets.insert(item.target.clone());
+            statuses.insert(item.status.clone());
+            activities_by_target
+                .entry(item.target.to_ascii_lowercase())
+                .or_default()
+                .push(item);
+            if item.timestamp_utc > last_seen_utc {
+                last_seen_utc = item.timestamp_utc.clone();
+            }
+        }
+        let target_statuses = known_detection_target_labels()
+            .into_iter()
+            .map(|target| {
+                let status = activities_by_target
+                    .get(&target)
+                    .map(|items| collapse_target_status(items))
+                    .unwrap_or_else(|| "unsupported".to_string());
+                (target, status)
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        entries.push(CatalogRuleEntry {
+            rule_id: rule.indicator_id.clone(),
+            name: rule.name.clone(),
+            description,
+            ttp: rule.ttp.clone(),
+            confidence: rule.rule_confidence.unwrap_or(70),
+            rule: rule.source_pattern.clone(),
+            last_seen_utc,
+            commands: commands.into_iter().collect(),
+            targets: targets.into_iter().collect(),
+            statuses: statuses.into_iter().collect(),
+            target_statuses,
+            activity_count: items.len(),
+        });
+    }
+
+    for (rule, items) in grouped {
+        if persisted_patterns.contains(rule.trim()) {
+            continue;
+        }
+        let stable_token = items
+            .iter()
+            .find_map(|item| (!item.rule_hash.trim().is_empty()).then(|| item.rule_hash.clone()))
+            .unwrap_or_else(|| stable_catalog_token(&rule));
+        let mut commands = BTreeSet::new();
+        let mut targets = BTreeSet::new();
+        let mut statuses = BTreeSet::new();
+        let mut activities_by_target: HashMap<String, Vec<&TranslationActivity>> = HashMap::new();
+        let mut last_seen_utc = String::new();
+        for item in &items {
+            commands.insert(item.command.clone());
+            targets.insert(item.target.clone());
+            statuses.insert(item.status.clone());
+            activities_by_target
+                .entry(item.target.to_ascii_lowercase())
+                .or_default()
+                .push(item);
+            if item.timestamp_utc > last_seen_utc {
+                last_seen_utc = item.timestamp_utc.clone();
+            }
+        }
+        let target_statuses = known_detection_target_labels()
+            .into_iter()
+            .map(|target| {
+                let status = activities_by_target
+                    .get(&target)
+                    .map(|items| collapse_target_status(items))
+                    .unwrap_or_else(|| "unsupported".to_string());
+                (target, status)
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        entries.push(CatalogRuleEntry {
+            rule_id: catalog_indicator_id(&stable_token),
+            name: format!("Rule {}", short_catalog_token(&stable_token)),
+            description: None,
+            ttp: None,
+            confidence: items.iter().map(|item| item.impact).max().unwrap_or(0),
+            rule,
+            last_seen_utc,
+            commands: commands.into_iter().collect(),
+            targets: targets.into_iter().collect(),
+            statuses: statuses.into_iter().collect(),
+            target_statuses,
+            activity_count: items.len(),
+        });
+    }
+
+    entries.sort_by(|a, b| a.rule_id.cmp(&b.rule_id));
+    Ok(entries)
+}
+
+pub(crate) fn resolve_rule_selector(
+    selector: &str,
+    all_entries: &[CatalogRuleEntry],
+    current_entries: Option<&[CatalogRuleEntry]>,
+) -> Result<CatalogRuleEntry> {
+    if let Ok(index) = selector.parse::<usize>() {
+        if index == 0 {
+            return Err(anyhow!("index starts at 1"));
+        }
+        let source = current_entries.unwrap_or(all_entries);
+        return source
+            .get(index - 1)
+            .cloned()
+            .ok_or_else(|| anyhow!("rule index '{}' is out of range", index));
+    }
+    all_entries
+        .iter()
+        .find(|entry| entry.rule_id == selector || entry.rule == selector)
+        .cloned()
+        .ok_or_else(|| anyhow!("rule '{}' not found", selector))
+}
+
 mod tests {
     use super::*;
 
@@ -960,5 +485,103 @@ mod tests {
         assert_eq!(parts[4].len(), 12);
         assert_eq!(parts[2].as_bytes()[0], b'4');
         assert!(matches!(parts[3].as_bytes()[0], b'8' | b'9' | b'a' | b'b'));
+    }
+
+    #[test]
+    fn rule_rows_merge_persisted_and_activity_derived_patterns() {
+        crate::web::test_support::with_test_config_dir("catalog_rows_merge", || {
+            let root = crate::paths::spuc_config_root().expect("config root");
+            let pattern_a = "[process:name = 'cmd.exe']";
+            let pattern_b = "[file:name = 'evil.exe']";
+
+            let persisted = rules::PersistedRule {
+                indicator_id: rules::mint_rule_indicator_id(pattern_a),
+                source_pattern: pattern_a.to_string(),
+                name: "Persisted rule".to_string(),
+                description: Some("Persisted description".to_string()),
+                tlp: "TLP:AMBER".to_string(),
+                pap: "PAP:GREEN".to_string(),
+                ttp: Some("T1111".to_string()),
+                target_platform: Some("windows".to_string()),
+                observables: vec!["process".to_string()],
+                indicates: None,
+                indicates_list: Vec::new(),
+                rule_confidence: Some(80),
+            };
+            rules::save_persisted_rules(&root, &[persisted]).expect("persist");
+
+            // Activities: hidden legacy rows for A (must be ignored), visible
+            // translate rows for B (must drive a derived row).
+            let catalog_dir = root.join("catalog");
+            std::fs::create_dir_all(&catalog_dir).expect("catalog dir");
+            let mut lines = Vec::new();
+            let hidden_legacy = serde_json::json!({
+                "activity_id": "act-h1",
+                "timestamp_utc": "2024-01-01T00:00:00+00:00",
+                "command": "emulate",
+                "rule": pattern_a,
+                "rule_hash": "hash-a",
+                "engine_version": "legacy",
+                "target": "bash",
+                "status": "exact",
+                "impact": 70,
+                "hidden": true,
+                "output_path": null
+            });
+            lines.push(hidden_legacy.to_string());
+            let visible_b = serde_json::json!({
+                "activity_id": "act-v1",
+                "timestamp_utc": "2024-02-01T00:00:00+00:00",
+                "command": "translate",
+                "rule": pattern_b,
+                "rule_hash": "hash-b",
+                "engine_version": "legacy",
+                "target": "sigma",
+                "status": "exact",
+                "impact": 95,
+                "hidden": false,
+                "output_path": null
+            });
+            lines.push(visible_b.to_string());
+            std::fs::write(
+                catalog_dir.join("translation_activities.jsonl"),
+                lines.join("\n") + "\n",
+            )
+            .expect("write activities");
+
+            let entries = build_catalog_rule_entries().expect("rows");
+            assert_eq!(entries.len(), 2);
+
+            let row_a = entries
+                .iter()
+                .find(|entry| entry.rule.trim() == pattern_a)
+                .expect("persisted row");
+            assert_eq!(row_a.rule_id, rules::mint_rule_indicator_id(pattern_a));
+            assert_eq!(row_a.name, "Persisted rule");
+            let description = row_a.description.clone().expect("row description");
+            let decoded = rules::decode_rule_metadata_description(Some(description));
+            assert_eq!(
+                decoded.description.as_deref(),
+                Some("Persisted description")
+            );
+            assert_eq!(decoded.tlp, "TLP:AMBER");
+            assert_eq!(decoded.observables, vec!["process".to_string()]);
+            // Hidden legacy rows must not drive visible statuses.
+            assert!(row_a.commands.is_empty());
+            assert!(row_a.statuses.is_empty());
+            assert_eq!(row_a.activity_count, 0);
+            assert!(row_a.target_statuses.values().all(|v| v == "unsupported"));
+
+            let row_b = entries
+                .iter()
+                .find(|entry| entry.rule.trim() == pattern_b)
+                .expect("activity-derived row");
+            assert!(row_b.rule_id.starts_with("indicator--"));
+            assert!(row_b.name.starts_with("Rule "));
+            assert!(row_b.description.is_none());
+            assert!(row_b.statuses.contains(&"exact".to_string()));
+            assert!(row_b.targets.contains(&"sigma".to_string()));
+            assert_eq!(row_b.activity_count, 1);
+        });
     }
 }

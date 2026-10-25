@@ -34,12 +34,3 @@ pub fn spuc_config_root() -> Option<PathBuf> {
             .map(|home| PathBuf::from(home).join(".config/spuc"))
     }
 }
-
-#[allow(dead_code)]
-pub fn abilities_dir() -> Option<PathBuf> {
-    spuc_config_root().map(|p| p.join("abilities"))
-}
-
-pub fn campaigns_dir() -> Option<PathBuf> {
-    spuc_config_root().map(|p| p.join("intrusion_sets"))
-}

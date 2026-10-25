@@ -1,8 +1,6 @@
 pub(crate) mod common;
-pub(crate) mod emulate;
 pub(crate) mod jsonrpc;
 pub(crate) mod learn;
-pub(crate) mod plan;
 pub(crate) mod sigma;
 pub(crate) mod sigma_discovery;
 pub(crate) mod sigma_rpc;

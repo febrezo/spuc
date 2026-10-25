@@ -1,6 +1,6 @@
 # SPUC (STIX Pattern Universal Converter)
 
-SPUC is a Rust CLI that parses STIX 2.1 patterns, normalizes them to IR, and emits detection content for EQL, KQL, Sigma, Snort, Suricata, and YARA.
+SPUC is a Rust CLI that parses STIX 2.1 patterns, normalizes them to IR, and emits detection content for Cytomic, EQL, KQL, Sigma, Snort, Suricata, and YARA.
 When `sigma` is available, SPUC also discovers compatible Sigma backends dynamically and exposes them as `sigma-to-<backend>` targets.
 
 ```mermaid
@@ -12,20 +12,13 @@ flowchart LR
 
   E --> F[Verify Command]
   E --> G[Translate Command]
-  E --> H[Emulate Command]
-  E --> I[Plan Command]
 
-  G --> J[EQL/KQL/Sigma/Snort/Suricata/YARA]
+  G --> J[Cytomic/EQL/KQL/Sigma/Snort/Suricata/YARA]
   J --> K[sigma-to-<backend>]
-  H --> L[spuc-agent/bash/powershell/atomic-red-team/mitre-caldera]
-  I --> M[Intrusion Set Artifacts]
 
-  N[Catalog Cache] <--> G
-  N <--> H
-  O[Web/TUI] --> N
+  N[Rules Catalog] <--> G
+  O[Web UI] --> N
   O --> G
-  O --> H
-  O --> I
 
   classDef core fill:#edf4ff,stroke:#3b82f6,stroke-width:2px,color:#1e3a8a
   classDef command fill:#eafaf0,stroke:#16a34a,stroke-width:2px,color:#166534
@@ -34,8 +27,8 @@ flowchart LR
   classDef ui fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
 
   class B,C,D,E core
-  class F,G,H,I command
-  class J,K,L,M outputs
+  class F,G command
+  class J,K outputs
   class N storage
   class O ui
 ```
@@ -46,6 +39,7 @@ flowchart LR
 - Normalization: AST to IR (`IrExpr`, `IrPredicate`) with semantic validation.
 - Emitters:
   - EQL and KQL for endpoint/EDR-style hunting queries.
+  - Cytomic for EDR-compatible Telemetry hunting.
   - Sigma for SIEM-style detections.
   - Snort and Suricata for IDS network signatures.
   - YARA for content/malware-style signatures.
@@ -63,10 +57,6 @@ spuc translate --rule "[network-traffic:src_ref.value = '10.0.0.5'] AND [network
 spuc translate --rule "([process:name = 'cmd.exe'] FOLLOWEDBY [process:name = 'powershell.exe']) WITHIN 300 SECONDS" --to eql
 spuc translate --rule "[ipv4-addr:value ISSUBSET '198.51.100.0/24']" --to sigma --to eql --to kql --rule-confidence 80
 spuc translate --rule "[process:name = 'cmd.exe']" --to sigma --output ./exports --export csv
-spuc emulate --rule "[process:command_line MATCHES '^.*echo.*$']" --to spuc-agent --output ./artifacts
-spuc emulate --rule "[process:command_line MATCHES '^.*echo.*$']" --to spuc-agent --output ./artifacts --export csv
-spuc emulate --rule "[process:command_line MATCHES '^.*echo.*$']" --to atomic-red-team --to mitre-caldera --output ./artifacts
-spuc emulate --rule "[process:command_line MATCHES '^.*echo.*$']" --to spuc-agent --refresh
 spuc sigma status
 spuc sigma list-targets
 spuc sigma update-config
@@ -76,10 +66,8 @@ spuc version
 
 Behavior notes:
 
-- `translate` prints only translation output.
-- `emulate` prints only emulation output.
-- Both commands always run a background dual-flow update for catalog convertibility (translation + emulation matrices), cached by normalized `rule_hash` + engine version.
-- Use `--refresh` to force cache recomputation.
+- `translate` evaluates and records translation activity in the rules catalog.
+- Rule Lab save evaluates the rule across all detection targets and records visible translate activity rows.
 
 ## Easy Linux Setup (Two Modes)
 
@@ -92,7 +80,7 @@ Use this if you just want to run SPUC.
 1. Open the GitHub Releases page of this repository.
 2. Download the newest Linux asset for your architecture.
    - Typical names: `spuc-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz` (or `.zip`).
-   - Desktop-capable targets bundle `spuc-gui` in the same archive as `spuc` and `spuc-agent`.
+   - Desktop-capable targets bundle `spuc-gui` in the same archive as `spuc`.
    - Current CLI-only targets remain `x86_64-unknown-linux-musl` and `armv7-unknown-linux-gnueabihf`.
 3. Extract the archive.
 4. Install binaries into your personal Linux path:
@@ -175,7 +163,6 @@ $ spuc help
 Usage: spuc [COMMAND]
 
 Commands:
-  emulate
   jsonrpc
   translate
   verify
@@ -196,7 +183,7 @@ cargo test -p spuc-cli
 ## Docker + Compose
 
 The repository includes a production-oriented `Dockerfile` plus a root `docker-compose.yml`.
-The image builds `spuc` and `spuc-agent`, persists SPUC state in `/data`, and installs `sigma` with example backend plugins:
+The image builds `spuc`, persists SPUC state in `/data`, and installs `sigma` with example backend plugins:
 
 - `pysigma-backend-splunk`
 - `pysigma-backend-elasticsearch` (ES|QL support)
@@ -232,7 +219,7 @@ Default compose behavior:
 
 - publishes `127.0.0.1:8090` on the host
 - runs `spuc web --host 0.0.0.0 --port 8090 --no-open`
-- stores web users, catalog, intrusion sets and runtime cache in the named volume `spuc_data`
+- stores web users, catalog and runtime cache in the named volume `spuc_data`
 - supports optional OAuth bootstrap through `SPUC_WEB_GOOGLE_*` and `SPUC_WEB_GITHUB_*`
 - supports optional remote Sigma JSON-RPC via `SIGMA_RPC_URL` and `SPUC_SIGMA_RPC_TOKEN`
 - supports optional connector bootstrap with `SPUC_ADMIN_API_TOKEN`
@@ -249,7 +236,7 @@ For containerized connectors, set `SPUC_ADMIN_API_TOKEN` to provision a fixed ad
 - `spuc` is provided by crate `spuc-cli` and runs the current CLI, including `spuc web`.
 - `spuc web` binds to `127.0.0.1` by default, supports `--host` for explicit bind changes such as containers, supports `--no-login`, opens the system browser by default, supports `--no-open` for sidecar/embedded use, and exposes `GET /healthz`.
 - `spuc-gui` is a separate Tauri app titled `SPUC: A behavioural IOC mapping lab` that starts `spuc web --no-login --no-open` as a sidecar on an available localhost port, shows a local SPUC loading screen while the sidecar becomes ready, and then loads the local URL in a native window.
-- Standard GitHub release archives for desktop-capable targets now ship `spuc`, `spuc-agent`, and `spuc-gui` together in the same versioned asset.
+- Standard GitHub release archives for desktop-capable targets now ship `spuc` and `spuc-gui` together in the same versioned asset.
 - `spuc-gui` uses `SPUC_LOCALE`, `LC_ALL`, `LC_MESSAGES`, or `LANG` to choose the native window title language at startup and pass the default locale to the embedded web UI; browser mode uses browser language when no saved language preference exists.
 - In `spuc-gui`, external links (`https://...`, `mailto:`) open in the system browser while local SPUC routes stay inside the GUI window.
 - If `spuc-gui` cannot start the `spuc` sidecar, it exits with a clear error. Build `spuc` first with `cargo build -p spuc-cli --bin spuc`, keep both binaries together, put `spuc` in `PATH`, or set `SPUC_SERVER_BIN=/path/to/spuc`.
@@ -295,7 +282,7 @@ See [`docs/mcp.md`](docs/mcp.md) for:
 flowchart TB
   R[src]
   R --> C1[core: parser/ast/ir/normalize/emitters]
-  R --> C2[domain: catalog + emulation domain]
+  R --> C2[domain: catalog domain]
   R --> C3[app: runtime services and orchestration]
   R --> C4[commands: CLI adapters]
   R --> C5[web: HTTP + localized UI]
@@ -308,24 +295,27 @@ flowchart TB
 ```
 
 - repository root package `spuc-core`: reusable core library package (`lib` name `spuc`, entrypoint at `src/lib.rs`)
-- `crates/spuc-cli/`: `spuc` and `spuc-agent` binaries
+- `crates/spuc-cli/`: the `spuc` binary
 - `crates/spuc-gui/`: Tauri desktop app (`spuc-gui`) that manages `spuc web` sidecar lifecycle
 - `src/core/`: technical core namespace (`ast`, `ir`, `parser`, `normalize`, `emitters`)
-- `src/domain/`: product-domain namespace (`catalog`, emulation-facing integration points)
+- `src/domain/`: product-domain namespace (`catalog`)
 - `src/app/`: application runner and shared services/cases (`run`, `services/*`)
 - `src/commands/`: CLI command adapters (delegate to shared app/domain logic)
-- `src/tui/`: interactive console logic
+- `src/tui/`: removed (legacy console helpers deleted)
 - `src/ui/`: shared terminal styling and rendering helpers
 - `src/web/`: localized web UI, lightweight HTTP server and web API adapters
 
-## Abilities
+## Catalog
 
-- See dedicated docs in [`docs/abilities.md`](docs/abilities.md).
 - Catalog docs: [`docs/catalog.md`](docs/catalog.md).
-- Intrusion set docs: [`docs/intrusion-sets.md`](docs/intrusion-sets.md).
 - JSON-RPC docs: [`docs/jsonrpc.md`](docs/jsonrpc.md).
 - CI/CD governance: [`docs/ci-cd.md`](docs/ci-cd.md).
 - MCP integration: [`docs/mcp.md`](docs/mcp.md).
+
+The `spuc emulate` command, the adversary/payload web surface and the
+underlying emulation engine were removed in October 2026 (see
+`docs/current-decisions.md`). SPUC now focuses on translating STIX
+patterns to detection targets and on the rules catalog workflow.
 
 ## CI/CD Pipeline
 
@@ -337,7 +327,7 @@ This repository is prepared for automated builds in GitHub Actions:
   - blocks PRs that introduce vulnerable or policy-violating dependency changes.
 - `.github/workflows/release.yml`
   - builds `spuc` server binaries for Linux, macOS, and Windows.
-  - builds `spuc-gui` binaries for the desktop-capable release targets and bundles them into the standard versioned archive with `spuc` and `spuc-agent`.
+  - builds `spuc-gui` binaries for the desktop-capable release targets and bundles them into the standard versioned archive with `spuc`.
   - keeps `x86_64-unknown-linux-musl` and `armv7-unknown-linux-gnueabihf` as CLI-only assets because those targets are not supported desktop builds.
   - includes ARM targets for Raspberry Pi (`aarch64-unknown-linux-gnu` and `armv7-unknown-linux-gnueabihf`) plus `x86_64-unknown-linux-musl`.
   - packages artifacts with the current app version in filename (`spuc-v<version>-<target>.tar.gz` / `.zip`).
@@ -375,6 +365,7 @@ git push origin v0.1.1
 
 - `eql`
 - `kql`
+- `cytomic-orion-sql`
 - `sigma`
 - `snort`
 - `suricata`
@@ -386,13 +377,13 @@ Use these inspection commands:
 - `spuc sigma status`
 - `spuc sigma list-targets`
 
-## Available Emulation Targets
+## Removed: Emulation Targets (2026-10)
 
-- `spuc-agent`
-- `bash`
-- `powershell`
-- `atomic-red-team`
-- `mitre-caldera`
+The `spuc emulate` command and its emulation targets were removed in
+2026-10. SPUC now focuses on translating STIX patterns to detection
+targets (`spuc translate`) and the rules catalog workflow; a future
+LLM/agent-based approach will revisit guided intrusive-activity analysis
+in a strictly safe, defensive way.
 
 ## Semantic Fidelity Status
 
@@ -448,6 +439,7 @@ Important: coverage matrix = availability; runtime status = real semantic fideli
 | --- | --- | --- | --- | --- |
 | EQL | Supported via `sequence` (baseline restrictions apply) | Advisory only (reported in notes, status downgraded to `partial`) | Supported (`@timestamp` filter) | Supported for `FOLLOWEDBY` via `sequence with maxspan`; advisory only in plain where-clause |
 | KQL | Not supported | Advisory only (reported in notes, status downgraded to `partial`) | Supported (`Timestamp` filter) | Advisory only (reported in notes) |
+| Cytomic | Not supported | Not supported | Not supported | Not supported |
 | Sigma | Not supported | Advisory only (reported in notes, status downgraded to `partial`) | Not supported | Not supported |
 | Snort | Not supported | Not supported | Not supported | Not supported |
 | Suricata | Not supported | Not supported | Not supported | Not supported |
@@ -558,17 +550,11 @@ See [`kb/README.md`](kb/README.md) for details.
 
 ```bash
 # 1) choose a STIX example
-spuc emulate --file examples/process.stix --to spuc-agent --to bash --to atomic-red-team --output ./artifacts
 
 # 2) inspect catalog in web UI
 spuc
 ```
 
-Ready-to-read workflow artifacts:
-
-- `examples/workflow/ability-sample.json`
-- `examples/workflow/intrusion-set-sample.yaml`
-- `examples/workflow/README.md`
 
 ## Engine-Specific Semantics
 
@@ -580,6 +566,11 @@ Ready-to-read workflow artifacts:
   - `artifact:payload_bin` uses STIX binary normalization.
   - YARA equality is modeled as full-payload equality.
   - Snort/Suricata equality is containment-based (`partial`), regex is backend-dependent.
+  - Snort output sanitizes human descriptions for rule-option safety and uses deterministic content-based `sid` values in the local SPUC range.
+- Cytomic:
+  - Emits conservative default `Telemetry` queries with `EventType` filters.
+  - Preserves the original STIX pattern in SQL metadata comments.
+  - `MATCHES` returns `unsupported_regex` unless regex support is explicitly configured in a future Cytomic profile; simple `(?i).*value.*` patterns include a suggested `LOWER(...) LIKE` fallback.
 - User-account:
   - Single-account rules can be supported.
   - Multi-entity conjunctions are rejected in strict mode when single-event semantics cannot be preserved.

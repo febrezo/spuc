@@ -17,7 +17,6 @@ spuc web --port 8090 --no-login --no-open
 - `spuc web` binds to `127.0.0.1` by default; use `--host 0.0.0.0` when running inside Docker or another container runtime. It also exposes `GET /healthz` for sidecar readiness checks.
 - `spuc web` opens the system browser by default; use `--no-open` when another shell, desktop wrapper, or test harness will load the URL.
 - `spuc-gui` starts `spuc web --no-login --no-open` on an available localhost port, marks the embedded web URL with `spuc-mode=gui`, shows a centered SPUC loading screen while the sidecar becomes ready, and then shows it in a native Tauri window titled `SPUC: A behavioural IOC mapping lab` or the Spanish equivalent.
-- Standard GitHub release archives for desktop-capable targets include `spuc-gui` together with the required `spuc` sidecar and `spuc-agent` in the same versioned asset.
 - `spuc-gui` reads `SPUC_LOCALE`, `LC_ALL`, `LC_MESSAGES`, or `LANG` to choose the native window title language at startup and passes that default locale to the embedded web UI. Browser mode uses the browser language when no saved language preference exists, and the page title stays synchronized with the language preference stored in `Settings`.
 - In `spuc-gui`, local SPUC navigation remains inside the webview and external links open in the system browser.
 - If `spuc-gui` cannot start the `spuc` sidecar, startup fails fast with guidance to build `spuc`, place it beside `spuc-gui`/in `PATH`, or set `SPUC_SERVER_BIN`.
@@ -88,10 +87,8 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 `spuc web` is another presentation layer for the same defensive SPUC core and currently includes:
 
 - Dashboard overview with KPIs and chart widgets.
-- Dashboard includes additional telemetry charts for rule status distribution (`exact/lossy/unsupported`), emulation coverage by exporter counting only `exact/lossy` mappings (excluding `unsupported`), convertible-rule counts by group (`SIEM`/`IDS`/`Content`, any non-red target), and most frequent observable types present in cataloged rules.
 - `Conversion quality` and `Convertible rules by group` widgets render as donut/pie-style charts for faster ratio reading.
 - `Most used destinations` is restricted to defensive detection targets and includes dynamic `sigma-to-*` targets when `sigma` is available at startup.
-- Home (`Inicio`) route is available above Overview and provides a centered welcome-view with stacked action rows (icon, title, short description) for Laboratory, Rules Catalog, Adversary Catalog, Learning, and Donate.
 - In no-login mode, the web UI keeps a two-phase start: it first shows a branded SPUC presentation gate with logo and an explicit `Enter SPUC` / `Entrar en SPUC` action; only after that action does the standard app shell open on Home.
 - The gate Start/Enter action uses both delegated action routing and a direct button click binding as a fallback, so entering the app remains available even if later UI handlers fail during boot.
 - Sidebar footer exposes compact `About SPUC` and support actions that open a polished `Acerca de SPUC` dialog with project metadata, version, repository/license/releases/docs links, license/credits, and integrated donation method selection with centered Monero, Bitcoin, and GitHub Sponsors cards.
@@ -115,28 +112,13 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 	- `/assets/logo-bitcoin.png` (Bitcoin logo)
 	- `/assets/logo-monero.png` (Monero logo)
 	- `/assets/logo-github.png` (GitHub Sponsors logo)
-- Left sidebar navigation uses flat primary entries (no nested submenus): Laboratory, Rules, Emulation, and STIX Objects.
 - Laboratory is promoted as a main sidebar item and appears above Rules.
 - Clicking top-level `Rules` now opens the catalog explorer directly (no intermediate chooser view).
-- Clicking top-level `Emulation` now opens the adversaries explorer directly (no intermediate chooser view).
-- The sidebar includes a direct `Payloads` entry to manage reusable payloads in catalog mode (welcome state + table state).
-- When `Rules`, `Payloads`, or `STIX objects` have no catalog entries yet, the route shows a centered localized welcome/empty-state card instead of an empty table shell.
 - `Rules` now keeps that guided empty-state card visible whenever the catalog is empty, avoiding the intermediate empty grid/table flash.
 - In `Rules`, the same guided empty-state is also shown when active search/filters leave zero visible entries (`0/0`) so analysts always get next-step actions instead of a dead-end table.
 - In `STIX objects` empty state, the official reference URL is attached directly to the `standard/estándar oficial` wording in the helper sentence.
 - These centered empty-state cards use the same wider dialog treatment and uniform stacked CTA sizing so primary/secondary actions stay visually consistent even when labels wrap.
-- `Payloads` keeps a centered welcome card when no reusable payloads exist yet, with direct actions to create a payload or open the project documentation; once payloads exist, the route switches to the same table-shell pattern used by the STIX objects catalog, with a left search field, right-side icon actions, selectable rows, and expandable detail rows.
-- Newly created adversaries are persisted as STIX intrusion-set objects and now use `intrusion-set--<uuid>` identifiers in saved manifests and API responses.
-- Adversary `Detail` and `Edit` now open a dedicated central workspace view (no modal/backdrop), with a single header containing back navigation, title/subtitle, and context actions.
-- Emulation workspace includes a dedicated `Custom payloads` view to search, preview, create, remove, and reuse payloads before planning adversaries.
-- The `Payloads` route renders an accordion-table hybrid catalog with row selection, a right-side actions column, inline detail expansion (`ID`, description, and payload content in a scrollable code block), and multi-select filters for payload type and runner.
-- Adversary editor header is simplified to three actions: `Back to list`, `Plan adversary`, and `Export adversary`.
-- Adversary summary fields are directly editable and persist on blur with subtle bottom toast confirmation.
-- Adversary export in editor header only enables compatible runners for the current step chain; if no exporter is compatible, export is disabled with explanatory tooltip.
-- Adversary planning uses a two-zone editable view: an ordered step sequence on the left and a wider right-side panel for selected-step details plus add-behavior controls.
-- The flow controls open modal pickers for catalog abilities and custom payloads, plus a modal form for creating a new payload before adding it to the current plan.
 - The flow header also shows a `Number of steps:` label next to the live count badge, and the ordered step list uses a 2x2 action cluster for move/details/remove controls.
-- The JSON tab was removed from the adversary detail workflow to keep the interface focused on summary, planning, and export readiness.
 - Rules explorer exposes quick icon actions to open `Laboratory` (new rule) and import STIX-pattern rule files.
 - Bulk rule import from file shows live progress (read phase and save phase) with a visible progress bar and counters.
 - Rules search/catalog table loads immediately in the default Rules route.
@@ -145,12 +127,8 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Rules table supports multi-select bulk operations: delete selected, bulk update for TLP/PAP/confidence, `Select all`/`Deselect all`, and shift-range selection.
 - Rules table shows TLP+PAP in a unified `Marking/Clasificación` column.
 - STIX rule column is constrained to 25% of the available rules-table width.
-- Rules table with per-target output/emulation status chips (`exact/lossy/unsupported`) and click-through detail popovers.
 - Rules explorer supports two compact modes (`cards` by default and `table`), selectable from left-side icon controls with tooltips.
-- Rule cards show STIX `indicator--...` IDs across the full header width below TLP/PAP markings, compact observable/STIX-object counters with hover detail, place copy-rule as an inline icon next to STIX content, and keep per-target detection/emulation chips clickable.
-- Rule cards do not show an aggregate compatibility label; exact/lossy/unsupported detail is reserved for the detection/emulation breakdowns.
-- Rule cards label the aggregate conversion state as compatibility, and target chips use compact exporter labels such as `atomic-red`.
-- Clicking a target chip (from cards or table) opens a unified rule modal with dedicated tabs for `Detection rules` and `Emulation rules`, each listing target technologies, status, rule confidence, conversion confidence, output text, and an expandable `How to use this output` guide.
+- Rule cards label the aggregate conversion state as compatibility, and target chips use compact exporter labels such as `Cytomic` and `atomic-red`.
 - In rule detail tabs, each target technology block is rendered as an accordion card with status-colored borders (`exact`/`lossy`/`unsupported`) for quick scanning.
 - Rule detail technology accordions start collapsed by default and keep collapsed headers limited to status, rule confidence and conversion confidence.
 - Rule detail technology descriptions, converter comments, output text, copy actions and usage guidance are shown only after expanding the accordion.
@@ -160,11 +138,9 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Rule detail `Overview` keeps TLP and PAP aligned as a paired marking block, and detail dialogs close from the top-right `X` control instead of a bottom-left cancel action.
 - Rule detail `Overview` lists mentioned observable types and shows related STIX objects as compact relation cards.
 - Rule detail header now shows the rule name with the `indicator--...` ID directly underneath in monospaced style, avoiding duplicate name/ID blocks inside the summary card.
-- Rule detail `Detection rules` and `Emulation rules` tabs include a wider split export control (button + inline target dropdown) at the bottom of each tab to avoid cramped labels.
 - Rules workspace toolbar uses explicit Font Awesome icons for view mode, select all, bulk edit, column chooser, export selected, and delete selected actions.
 - Rules bulk export uses two direct actions (`CSV` in green and `STIX` in yellow) that download immediately without intermediate preview dialogs.
 - STIX Bundle export includes source STIX indicators, derived translated artifacts, `related-to` links to original patterns, and `indicates` links to related STIX entities when configured.
-- Rules and adversaries toolbars include `Duplicate selected` actions to clone similar objects quickly.
 - Rules catalog keeps focused filtering by rule type (SIEM/IDS/Content), confidence, TLP/PAP and observable type.
 - Rules catalog includes observable-type filtering and a dedicated observables column (e.g., `process`, `file`, `artifact`) persisted with rule metadata and reused for dashboard statistics.
 - Rule metadata includes TLP/PAP comboboxes with normative colors and supports multiple `indicates` relations (STIX ID + object name), validated server-side and visualized with non-intrusive badges/listing in catalog and detail flows.
@@ -174,21 +150,10 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - New STIX objects are created from the dedicated STIX Objects workspace (`Create new object`), not from the relation modal.
 - The relation modal includes a `+` shortcut in the top-right corner to open `Create new object` and then return to the same relation flow.
 - Rules table includes an explicit STIX objects column that shows related `indicates` objects (e.g., `malware`) and a `+` action to append new relations.
-- Emulable rules centralize export and detonation guidance directly inside the emulation detail modal (no separate export modal/button in the table column).
-- Emulation detail modal always keeps the export action visible for layout consistency; when no artifact can be produced the button is rendered disabled.
-- Emulation detail modal shows runtime status only in the top-right header badge (not duplicated in the summary grid), matching detection detail behavior.
-- Emulation detonation commands include the exact exported artifact filename so analysts can copy/paste them directly after download.
-- Emulation detail hides detonation/docs/command guidance completely when no executable command applies to the selected export.
-- Emulation detail lists `other available emulations` separately from the currently selected export target.
 - Detection detail command snippets use the same exact exported filename that the modal download action will generate.
 - Clicking a STIX rule row opens a structured detail modal that follows the same presentation style as target-conversion detail views.
-- Markdown-enabled textareas (rule lab metadata and adversary description) provide dual mode: `Edit` and `Preview`, defaulting to `Preview` when opened.
-- Rules/emulation detail popovers default to a human-readable view, include copy/export actions for STIX/output snippets, and expose raw JSON in a dedicated tab.
-- Rule and ability detail modals show conversion status in the top-right header, directly below the detection/emulation type badge.
 - In detection rule detail, conversion status is shown only in the top-right status label and is not duplicated inside the conversion summary grid.
 - Dynamic frontend labels (detail modal sections, rule counters, confirmations, advanced filter labels, and TLP/PAP/confidence tooltips) are localized through the same EN/ES i18n layer.
-- Abilities catalog with platform/classification filters and export actions.
-- Ability/adversary exports include `spuc-agent`, `bash`, `powershell`, `atomic-red-team`, and `mitre-caldera`.
 - Laboratory with inline STIX highlighting (single editor), realtime syntax+compatibility checks shown under the editor, stacked compatibility bars, operator colorization, auto-pair insertion, contextual autocomplete (click/Tab), and inline error panel.
 - Rule laboratory analysis is fully reactive: syntax and compatibility are re-evaluated automatically on each input change (no explicit verify action required).
 - Rule Lab opens in playground-first mode (no metadata form visible by default).
@@ -198,34 +163,14 @@ Even when configured, providers stay disabled until an admin authorizes each pro
 - Rule Lab save and STIX bundle export actions are grouped together as top-right icons with tooltips; save stays disabled until STIX pattern syntax is valid.
 - Empty STIX editor state remains neutral (no error styling/message) until content is provided.
 - Empty laboratory compatibility state stays compact with a single short empty-pattern message.
-- Rule Lab and rule detail modal include `Copy LLM prompt` actions that generate deterministic structured prompts from existing rule metadata (context, observables, indicators, conversion statuses, emulation capability, current STIX pattern, and task).
 - Rule laboratory target list is dynamic: at startup SPUC probes `sigma` once, discovers compatible backend plugins from `sigma plugin list`, and adds them as `sigma-to-<backend>` compatibility rows.
 - In Rule Lab compatibility rows, `Show output` is displayed only for non-`unsupported` entries that include generated output text.
-- Adversaries catalog supports clickable header sorting (name, emulability confidence, TLP, PAP, steps, platforms), consistent row/card click-to-detail behavior, explicit `View details` actions, colored exporter-availability tags per adversary, and the same cards/table plus column-visibility controls used in the rules catalog.
-- Rule and adversary confidence values in catalog and detail views are rendered as horizontal color bars instead of plain numeric labels.
-- Adversary creation/editing opens as a central builder view inside Emulation, with top-level navigation back to the list, progressive Plan and Validate/Export sections, ordered step selection, and a dedicated ability-picker modal.
-- Adversary creation requires selecting a destination platform; ability catalog filtering is auto-locked to that platform by default.
-- The adversary ability picker includes direct creation for dummy abilities (`sleep_seconds` and `execution_label`) so synthetic pacing/label steps can be selected alongside cataloged abilities.
-- The adversary builder can add custom payload steps as catalog-compatible abilities with `custom_payload` action metadata; SPUC stores and exports them as explicit lab-runner artifacts but does not execute payloads from the web UI.
-- Custom payload creation now happens in a dedicated modal form, and adding an existing payload or a freshly created one returns to the same flow view with a saved-toast confirmation.
-- Custom payload runners are modeled as extensible metadata (`bash`, `powershell`, `python`, `javascript`, `rubber-ducky`, `spuc-agent`) so future `spuc-agent` runners can validate/execute them in authorized labs without changing existing adversary manifests.
-- Adversary modal header shows emulable platforms and an export split control (button + target combobox).
-- Adversary export now includes an `Operacional` action that downloads a target-specific executable artifact per emulator to execute the full ordered ability chain.
-- Adversary exportabno longer shows the old safety tutorial toast; the workflow now starts directly in the catalog/editor views
-- The adversaries workspace uses a dismissible non-intrusive safety toast (`How to use adversaries safely`) persisted locally once closed.
-- The adversaries workspace uses auto-applied filters (search, single platform combobox, min emulability) and bulk operations consistent with rules: shift-range selection, select/deselect all, bulk edit for TLP/PAP/emulability confidence, and bulk delete.
-- Adversary bulk deletion uses the in-app confirmation dialog instead of browser-native confirm UI.
-- When no adversaries exist yet, Emulation shows a centered empty-state message with a primary action to create the first adversary.
-- Adversaries explorer includes a dedicated help action that explains how to run an agent test flow in a defensive lab.
-- Adversary bulk metadata updates persist TLP/PAP values with each adversary and expose them in catalog API responses.
 - Learning panel fed by challenge and guidance endpoints.
 - Learning exercises run in an embedded STIX practice editor with realtime challenge validation, compact learning-path progress chips, grouped exercise rows, search + learning-path filters, hint-first UX, and completion counters.
 - Learning toolbar controls use overflow-safe search, path and progress areas so `Solo pendientes`/`Only pending` and completion counts remain readable without overlap.
 - Learning progress is persisted in browser storage per tab/window session (completed exercises and active learning filters), with fallback support for previously stored local data.
 - User Management panel for user creation, role/enabled edits, revocation, deletion, and password change.
-- Destructive actions (bulk deletions and user deletion) use an in-app confirmation modal instead of browser-native confirmation popups, with verb-specific destructive buttons (`Delete rules`, `Delete adversaries`, etc.) grouped together on the right side of the footer.
 - Shared comboboxes (`select`) use a compact project-wide style, and simple single-value selects are progressively enhanced into SPUC-styled dropdowns with a custom trigger and menu; `multiple` selectors stay as listboxes with their own compact treatment so filters do not visually dominate the workspace.
-- Adversary creation starts with a compact modal for minimum metadata, then continues in the main builder view once the analyst confirms the draft; confidence is tuned later from the main overview with a slider.
 
 ## Localization
 
@@ -242,17 +187,13 @@ The web interface reuses the same local files as the rest of SPUC:
 
 - users: `<config_root>/web_users.json`
 - OAuth provider authorization policy: `<config_root>/web_oauth_policy.json`
-- abilities: `<config_root>/abilities/*.json`
-- adversaries: `<config_root>/intrusion_sets/*.yaml`
 - STIX object catalog: `<config_root>/stix-objects.json`
 - translation activity log: `<config_root>/catalog/translation_activities.jsonl`
 
 Web-only state in browser storage (not in `<config_root>`):
 
-- custom payload catalog: `spuc-web-custom-payloads`
 - learning progress and filters (session-scoped per tab/window): `spuc-web-learning-progress`
 - last route (session-scoped per tab/window): `spuc-web-last-route`
-- view preferences (shared browser-wide): `spuc-web-rules-view-mode`, `spuc-web-adversaries-view-mode`
 
 ## Notes
 
@@ -261,3 +202,66 @@ Web-only state in browser storage (not in `<config_root>`):
 - Sidebar menu is grouped by logical sections and supports mobile collapse/expand mode.
 - The web UI is a lightweight built-in HTTP server and does not require frontend tooling.
 - For reproducible QA from an empty catalog baseline, follow `docs/empty-state-testing.md`.
+
+
+- SPUC now focuses on translating STIX patterns to detection targets and
+  on the rules catalog workflow (TLP/PAP, TTP, observables, indicates).
+  LLM/agent-assisted feature.
+
+## Changelog - 2026-10-22: adversary surface removed
+
+- The `spuc emulate` command, the adversary and payload web views, and the
+  underlying engine were removed.
+- SPUC now focuses on translating STIX patterns to detection targets and on
+  the rules catalog workflow (TLP/PAP, TTP, observables, indicates).
+- The web UI no longer exposes adversaries, payloads, abilities, or the
+  emulation detail tab; rule rows carry translation statuses only.
+- Guided adversary analysis may return later as a strictly defensive,
+  LLM/agent-assisted feature.
+
+## October 2026 legacy web cleanup (Stage 5B2a)
+
+SPUC no longer exposes adversary, payload or emulation execution workflows.
+Stage 5B2a removes eight unreferenced, module-private JavaScript functions
+that were part of the retired web interface; it does not change detection rule
+CRUD, the CLI, or persisted data formats. Historical abilities-to-rules seeding
+remains in `src/catalog/rules.rs` for one-way migration of older catalogs.
+Remaining legacy handlers, state, CSS and translation strings require separate
+reference analysis and regression testing before removal. This cleanup is not a
+security certification or a release gate by itself.
+
+## October 2026 legacy web cleanup (Stage 5B2b)
+
+Stage 5B2b removes three additional module-private and unreferenced legacy
+functions: `renderEmulationDetonationGuide`, `adversaryFormSignature`, and
+`mountAdversaryEditorSurface`. This is a narrow follow-up to Stage 5B2a,
+not a complete deletion of retired JS, CSS, or state. The historical
+abilities-to-rules migration remains unchanged. Existing rule CRUD and
+translation paths must continue to pass the browser and Rust regression gates.
+
+## October 2026 legacy event surface cleanup (Stage 5F1)
+
+Stage 5F1 removes the retired delegated click/change action branches for
+adversary/ability/payload/emulation controls and four now-unreachable row/card
+listeners. A Chromium browser test injects stale retired actions and asserts
+that they cause neither legacy API calls nor browser exceptions. It preserves
+rules, STIX objects, Learning, Settings, and the historical abilities-to-rules
+one-way migration in `src/catalog/rules.rs`.
+
+**This is not complete dead-code removal.** Legacy presentation generators,
+helpers, `store.js` state and styles remain for dependency review, and the
+24 prior HTTP endpoint literals have not all been deleted in this stage.
+The automated checks prove browser behavior for tested synthetic scenarios,
+not complete absence of reachable legacy code. Production GitHub Actions
+execution and authorised historical dataset migration remain separate gates.
+
+### Stage 5F2a — retirada de funciones sin llamadores
+
+Se han eliminado 30 declaraciones de funciones locales del módulo `boot.js` para acciones de adversarios, abilities, payloads y emulación retiradas. La comprobación de dependencias se limita a las referencias textuales del módulo y otros archivos web; por sí sola no demuestra ausencia universal de invocación dinámica. Se conservan sin modificaciones los manejadores vigentes, `store.js`, `app.css`, las APIs y la migración histórica de abilities a reglas en `src/catalog/rules.rs`.
+
+La aplicación de esta poda requiere superar previamente compilación, formato, Clippy, tests Rust y Chromium (navegación, CRUD, persistencia e inyección de acciones legacy) sobre una copia aislada. Ninguna validación local sustituye a la ejecución remota de CI ni a una prueba de migración con una copia autorizada de datos históricos.
+
+
+### Seguimiento de poda legacy — Gate 5F2b (2026-10-25)
+
+Eliminadas once funciones JavaScript de adversarios/abilities/payloads sin referencias nominales tras la poda 5F2a, verificadas mediante declaraciones de función de nivel superior y comprobación de tokens. Se mantienen `store.js`, estilos CSS, rutas, pruebas E2E, y el mecanismo `legacy_abilities` de migración histórica. No se infiere que el resto del código legacy sea inalcanzable: quedan pendientes análisis de dependencias y regresiones. La aplicación de este cambio exige pruebas Rust/Clippy/Chromium adversarial en Docker.

@@ -6,3 +6,28 @@ crates/spuc-gui/gen/
 *.log
 *pyc
 .env
+
+
+# SPUC: archivos exclusivamente locales
+/.serena/
+/payloads/
+
+# Credenciales y configuraciones privadas
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+*.kdbx
+credentials.json
+service-account.json
+secrets.json
+
+# Caches y artefactos locales
+/target/
+node_modules/
+__pycache__/
+.pytest_cache/

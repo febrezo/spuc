@@ -17,7 +17,7 @@
     <section class="boot-shell glass">
       <img class="boot-logo" src="/assets/logo-sputnik.png" alt="SPUC logo">
       <h1>SPUC</h1>
-      <p class="muted" data-i18n="about.subtitle">Local-first platform for STIX objects, rules and defensive emulation.</p>
+      <p class="muted" data-i18n="about.subtitle">Local-first platform for STIX objects, rules and defensive translation.</p>
       <p id="boot-message" class="muted boot-message hidden" data-i18n="boot.message"></p>
       <button id="boot-enter-button" type="button" class="btn btn-primary" data-action="local-login" data-i18n="boot.enter">Start SPUC</button>
     </section>
@@ -38,7 +38,7 @@
           <img class="login-logo" src="/assets/logo-sputnik.png" alt="SPUC logo">
           <h1 data-i18n="login.title">SPUC</h1>
         </div>
-        <h3 data-i18n="login.subtitle">Detection engineering and adversary emulation workspace.</h3>
+        <h3 data-i18n="login.subtitle">Detection engineering and STIX translation workspace.</h3>
       </header>
 
       <section class="login-card glass">
@@ -103,17 +103,9 @@
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 3h10l4 4v14H5V3zm9 1.5V8h3.5L14 4.5zM8 12h8v1.8H8V12zm0 4h8v1.8H8V16z"/></svg></span>
             <span data-i18n="nav.rules">Rules</span>
           </button>
-          <button class="nav-item" data-route="adversaries-payloads">
-            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 4h10l3 3v13H4V4h3zm0 2v3h10V6H7zm0 5v6h10v-6H7z"/></svg></span>
-            <span data-i18n="nav.payloads">Payloads</span>
-          </button>
           <button class="nav-item" data-route="stix-objects">
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2l8 4.5v9L12 20l-8-4.5v-9L12 2zm0 2.2L6 7l6 3.4L18 7l-6-2.8zm-6 4.8v5.2l5 2.8v-5.2L6 9zm7 8l5-2.8V9l-5 2.8V17z"/></svg></span>
             <span data-i18n="nav.stix_objects">STIX objects</span>
-          </button>
-          <button class="nav-item" data-route="adversaries">
-            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 10a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm7 2a3 3 0 1 1 0-6 3 3 0 0 1 0 6zM3 21v-1.5C3 16.9 5.9 15 9 15s6 1.9 6 4.5V21H3zm11 0v-1.2c0-1.3-.5-2.4-1.3-3.3 2.3.2 4.3 1.8 4.3 3.9V21h-3z"/></svg></span>
-            <span data-i18n="nav.adversaries">Adversaries</span>
           </button>
         </section>
         <section class="nav-section">
@@ -181,13 +173,6 @@
                   <span class="muted" data-i18n="welcome.rules.desc">Search and filter stored rules.</span>
                 </span>
               </button>
-              <button class="welcome-action welcome-action-row" data-action="welcome-nav" data-route="adversaries-catalog">
-                <span class="welcome-icon" aria-hidden="true">🛰️</span>
-                <span class="welcome-copy">
-                  <strong data-i18n="home.action.adversaries">Adversaries</strong>
-                  <span class="muted" data-i18n="welcome.adv.desc">Review adversary compositions and exports.</span>
-                </span>
-              </button>
               <button class="welcome-action welcome-action-row" data-action="welcome-nav" data-route="learning">
                 <span class="welcome-icon" aria-hidden="true">📘</span>
                 <span class="welcome-copy">
@@ -215,20 +200,12 @@
             <div id="status-chart" class="bar-chart"></div>
           </article>
           <article class="chart-card glass">
-            <header><h3 data-i18n="dashboard.chart.platforms">Top emulation platforms</h3></header>
+            <header><h3 data-i18n="dashboard.chart.platforms">Top translation platforms</h3></header>
             <div id="platform-chart" class="bar-chart"></div>
           </article>
           <article class="chart-card glass">
             <header><h3 data-i18n="dashboard.chart.targets">Most used destinations</h3></header>
             <div id="target-chart" class="bar-chart"></div>
-          </article>
-          <article class="chart-card glass">
-            <header><h3 data-i18n="dashboard.chart.emulation_coverage">Emulation coverage by exporter</h3></header>
-            <div id="emulation-coverage-chart" class="bar-chart"></div>
-          </article>
-          <article class="chart-card glass">
-            <header><h3 data-i18n="dashboard.chart.convertible_rules">Convertible rules by group</h3></header>
-            <div id="convertible-rules-chart" class="bar-chart"></div>
           </article>
           <article class="chart-card glass">
             <header><h3 data-i18n="dashboard.chart.observables">Most frequent observables</h3></header>
@@ -536,184 +513,9 @@
         <option value="T1027"></option>
       </datalist>
 
-      <section id="panel-adversaries" class="panel">
-        <article id="adversaries-welcome-card" class="glass rules-welcome-card workspace-chooser-card">
-          <header>
-            <h3 data-i18n="adversaries.welcome.title">Adversaries</h3>
-            <p class="muted" data-i18n="adversaries.welcome.subtitle">Choose if you want to explore existing adversaries or create a new one.</p>
-          </header>
-          <div class="welcome-stack rules-welcome-actions">
-            <button class="welcome-action welcome-action-row" data-action="welcome-nav" data-route="adversaries-create">
-              <span class="welcome-icon" aria-hidden="true">⚙️</span>
-              <span class="welcome-copy">
-                <strong data-i18n="adversaries.welcome.create.title">Create new adversary</strong>
-                <span class="muted" data-i18n="adversaries.welcome.create.desc">Create a new adversary from cataloged abilities.</span>
-              </span>
-            </button>
-            <button class="welcome-action welcome-action-row" data-action="welcome-nav" data-route="adversaries-catalog">
-              <span class="welcome-icon" aria-hidden="true">🧭</span>
-              <span class="welcome-copy">
-                <strong data-i18n="adversaries.welcome.catalog.title">Explore adversaries</strong>
-                <span class="muted" data-i18n="adversaries.welcome.catalog.desc">Search, filter and export existing adversaries.</span>
-              </span>
-            </button>
-            <button class="welcome-action welcome-action-row" data-action="welcome-nav" data-route="adversaries-payloads">
-              <span class="welcome-icon" aria-hidden="true">📦</span>
-              <span class="welcome-copy">
-                <strong data-i18n="adversaries.welcome.payloads.title">Manage payloads</strong>
-                <span class="muted" data-i18n="adversaries.welcome.payloads.desc">View, create and delete reusable payloads for adversary plans.</span>
-              </span>
-            </button>
-          </div>
-        </article>
 
-        <section id="adversaries-catalog-shell" class="stack">
-          <article id="adversaries-empty-state" class="glass adversaries-empty-state hidden">
-            <div class="adversaries-empty-body">
-              <h3 data-i18n="adversaries.empty.title">No adversaries created yet</h3>
-              <p class="muted" data-i18n="adversaries.empty.body">You do not have any adversary plan to emulate yet. Create your first adversary to start testing.</p>
-              <div class="adversaries-empty-actions">
-                <button class="btn btn-primary" data-action="adversaries-empty-create" data-i18n="adversaries.empty.create">Create first adversary</button>
-                <button class="btn btn-ghost" data-action="adversaries-help-open" data-i18n="adversaries.help_agent.button">How to test the agent</button>
-              </div>
-            </div>
-          </article>
-          <article id="adversaries-catalog-main" class="glass table-card">
-            <div class="rules-top-row">
-              <label class="stix-search-wrap rules-search-wrap" for="adversaries-search" aria-label="Search adversaries">
-                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-                <input id="adversaries-search" type="search" data-i18n-placeholder="adversaries.search" placeholder="Search adversaries">
-              </label>
-              <div class="rules-actions-inline">
-                <button id="adversaries-filters-toggle" class="btn btn-ghost icon-only" data-action="adversaries-filters-toggle" data-i18n-title="rules.filters.toggle" aria-label="Filters" title="Filters" aria-expanded="false"><i class="fa-solid fa-sliders" aria-hidden="true"></i></button>
-                <div class="rules-view-mode" role="group" aria-label="Adversary view mode">
-                  <button id="adversaries-view-cards" class="btn btn-ghost icon-only active" data-action="adversaries-view-mode" data-mode="cards" data-i18n-title="rules.view.cards" aria-label="Cards" title="Cards"><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i></button>
-                  <button id="adversaries-view-table" class="btn btn-ghost icon-only" data-action="adversaries-view-mode" data-mode="table" data-i18n-title="rules.view.table" aria-label="Table" title="Table"><i class="fa-solid fa-table-list" aria-hidden="true"></i></button>
-                </div>
-                <button id="adversaries-bulk-toggle" class="btn btn-ghost icon-only" data-action="adversaries-bulk-toggle" data-i18n-title="adversaries.bulk.enable" aria-label="Bulk edit" title="Bulk edit" disabled><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>
-                <div class="column-picker">
-                  <button id="adversaries-columns-toggle" class="btn btn-ghost icon-only" data-action="adversaries-columns-toggle" data-i18n-title="common.show_hide_columns" aria-label="View columns" title="View columns"><i class="fa-solid fa-table-columns" aria-hidden="true"></i></button>
-                  <div id="adversaries-columns-menu" class="column-menu hidden"></div>
-                </div>
-                <button id="adversaries-create-open" class="btn btn-primary icon-only" data-action="adversaries-create-open" data-i18n-title="adversaries.create.submit" title="Create new adversary" aria-label="Create new adversary"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
-                <button id="adversaries-duplicate-selected" class="btn btn-ghost icon-only" data-action="adversaries-duplicate-selected" aria-label="Duplicate selected" title="Duplicate selected" disabled><i class="fa-regular fa-clone" aria-hidden="true"></i></button>
-                <button id="adversaries-delete-selected" class="btn btn-danger icon-only" data-i18n-title="adversaries.bulk.delete_selected" aria-label="Delete selected" title="Delete selected" disabled><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
-              </div>
-            </div>
-            <div id="adversaries-filters-revealer" class="rules-filters-revealer">
-              <div class="rules-filters-revealer-inner toolbar-card glass">
-                <label class="rules-filter-field">
-                  <span data-i18n="adversaries.platform">Platform</span>
-                  <select id="adversaries-platform">
-                    <option value="" data-i18n="common.all_platforms">All platforms</option>
-                  </select>
-                </label>
-                <label class="rules-filter-field">
-                  <span data-i18n="adversaries.min_confidence">Emulability</span>
-                  <input id="adversaries-min-confidence" type="number" min="0" max="100" value="0" data-i18n-placeholder="adversaries.min_confidence" placeholder="Emulability">
-                </label>
-              </div>
-            </div>
-            <div id="adversaries-bulk-edit" class="rules-bulk-edit hidden">
-              <span id="adversaries-bulk-count" class="muted"></span>
-              <select id="adversaries-bulk-tlp" class="level-select tlp-select level-clear">
-                <option value="KEEP" data-i18n="adversaries.bulk.tlp_keep">TLP (No change)</option>
-                <option value="TLP:CLEAR">TLP:CLEAR</option>
-                <option value="TLP:GREEN">TLP:GREEN</option>
-                <option value="TLP:AMBER">TLP:AMBER</option>
-                <option value="TLP:AMBER+STRICT">TLP:AMBER+STRICT</option>
-                <option value="TLP:RED">TLP:RED</option>
-              </select>
-              <select id="adversaries-bulk-pap" class="level-select pap-select level-clear">
-                <option value="KEEP" data-i18n="adversaries.bulk.pap_keep">PAP (No change)</option>
-                <option value="PAP:CLEAR">PAP:CLEAR</option>
-                <option value="PAP:GREEN">PAP:GREEN</option>
-                <option value="PAP:AMBER">PAP:AMBER</option>
-                <option value="PAP:RED">PAP:RED</option>
-              </select>
-              <input id="adversaries-bulk-confidence" type="number" min="0" max="100" data-i18n-placeholder="adversaries.bulk.confidence.placeholder" placeholder="Emulability">
-              <button id="adversaries-bulk-apply" class="btn btn-primary" data-i18n="adversaries.bulk.apply">Apply to selected</button>
-              <button id="adversaries-bulk-cancel" class="btn btn-danger" data-action="adversaries-bulk-cancel" data-i18n="adversaries.bulk.cancel">Abort</button>
-            </div>
-            <div class="table-meta" id="adversaries-meta"></div>
-            <div class="table-wrap" id="adversaries-table-wrap"><table id="adversaries-table"></table></div>
-            <div id="adversaries-cards" class="rules-cards hidden"></div>
-            <div class="pager" id="adversaries-pager"></div>
-          </article>
-        </section>
 
-        <section id="adversary-editor-view" class="stack hidden">
-          <article id="panel-adversary-editor" class="glass detail-card hidden">
-            <header class="detail-head">
-              <div class="detail-head-meta">
-                <h3 id="adversary-editor-heading">Adversary</h3>
-                <p id="adversary-editor-subtitle" class="muted"></p>
-              </div>
-              <div class="detail-head-actions">
-                <button type="button" class="btn btn-ghost" data-action="adversary-back-to-list" data-i18n="common.back">Back</button>
-                <button type="button" id="adversary-editor-secondary" class="btn btn-ghost hidden"></button>
-                <button type="button" id="adversary-editor-primary" class="btn btn-primary"></button>
-              </div>
-            </header>
-            <div id="adversary-editor-mount" class="stack"></div>
-          </article>
-        </section>
 
-        <section id="adversaries-payloads-shell" class="stack hidden">
-          <article id="payloads-welcome-card" class="glass adversaries-empty-state hidden">
-            <div class="adversaries-empty-body">
-              <h3 data-i18n="adversaries.payload.empty.title">No payloads available yet</h3>
-              <p class="muted" data-i18n="adversaries.payload.empty.body">Create your first reusable payload to start building controlled lab plans.</p>
-              <div class="adversaries-empty-actions">
-                <button class="btn btn-primary" data-action="payload-catalog-open-create" data-i18n="adversaries.payload.empty.create">Create first payload</button>
-              </div>
-            </div>
-          </article>
-
-          <section id="payloads-catalog-shell" class="stack hidden">
-            <article class="table-card glass payloads-catalog-card">
-              <div class="rules-top-row">
-                <label class="stix-search-wrap rules-search-wrap" for="payload-catalog-search">
-                  <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-                  <input id="payload-catalog-search" type="search" data-i18n-placeholder="adversaries.payload.search" placeholder="Search payloads">
-                </label>
-                <div class="rules-actions-inline">
-                  <button id="payload-catalog-filters-toggle" class="btn btn-ghost icon-only" type="button" data-action="payload-catalog-filters-toggle" data-i18n-title="rules.filters.toggle" title="Filters" aria-label="Filters" aria-expanded="false"><i class="fa-solid fa-sliders" aria-hidden="true"></i></button>
-                  <button id="payload-catalog-create-header" type="button" class="btn btn-primary icon-only" data-action="payload-catalog-open-create" data-i18n-title="adversaries.payload.catalog_create_btn" title="New payload" aria-label="New payload"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
-                  <button id="payload-catalog-duplicate-selected" type="button" class="btn btn-ghost icon-only" data-action="payload-catalog-duplicate-selected" data-i18n-title="rules.bulk.duplicate_selected" title="Duplicate selected" aria-label="Duplicate selected" disabled><i class="fa-regular fa-clone" aria-hidden="true"></i></button>
-                  <button id="payload-catalog-delete-selected" type="button" class="btn btn-danger icon-only" data-action="payload-catalog-delete-selected" data-i18n-title="rules.bulk.delete_selected" title="Delete selected" aria-label="Delete selected" disabled><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
-                </div>
-              </div>
-              <div id="payload-catalog-filters-revealer" class="rules-filters-revealer">
-                <div class="rules-filters-revealer-inner toolbar-card glass">
-                  <label class="rules-filter-field">
-                    <span data-i18n="adversaries.payload.language">Payload type</span>
-                    <select id="payload-catalog-tech" multiple>
-                      <option value="bash">bash</option>
-                      <option value="powershell">powershell</option>
-                      <option value="python">python</option>
-                      <option value="javascript">javascript</option>
-                      <option value="rubber_ducky">rubber_ducky</option>
-                    </select>
-                  </label>
-                  <label class="rules-filter-field">
-                    <span data-i18n="adversaries.payload.runner">Runner</span>
-                    <select id="payload-catalog-runner" multiple>
-                      <option value="spuc-agent">spuc-agent</option>
-                      <option value="bash">bash</option>
-                      <option value="powershell">powershell</option>
-                    </select>
-                  </label>
-                </div>
-              </div>
-              <div class="table-meta" id="payload-catalog-meta"></div>
-              <div id="payload-catalog-status" class="stix-source-status muted">
-                <span id="payload-catalog-bulk-count" class="muted payload-bulk-count-inline"></span>
-              </div>
-              <div class="table-wrap"><table id="payload-catalog-table"></table></div>
-            </article>
-          </section>
-        </section>
 
       </section>
 
@@ -1082,7 +884,7 @@
             <img class="about-logo" src="/assets/logo-sputnik.png" alt="SPUC logo">
             <div>
               <h3 data-i18n="about.title">About SPUC</h3>
-              <p class="muted" data-i18n="about.subtitle">Local-first platform for STIX objects, rules and defensive emulation.</p>
+              <p class="muted" data-i18n="about.subtitle">Local-first platform for STIX objects, rules and defensive translation.</p>
             </div>
           </div>
         <button type="button" class="icon-btn detail-close-btn" data-action="close-support" data-i18n-title="common.close" aria-label="Close" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
@@ -1240,202 +1042,9 @@
     </article>
   </dialog>
 
-  <dialog id="adversary-dialog" class="detail-dialog">
-    <article class="glass detail-card compact-modal adversary-create-modal">
-      <form id="adversary-form" class="stack">
-        <header class="adversary-modal-head">
-          <div class="adversary-modal-title-wrap">
-            <h3 id="adversary-form-title" data-i18n="adversaries.create.title">Create new adversary</h3>
-          </div>
-        </header>
-        <p class="muted" data-i18n="adversaries.create.modal_hint">Configura lo mínimo para abrir el constructor principal con un borrador listo para completar.</p>
-        <div class="adversary-form-grid compact-adversary-create-grid">
-          <label>
-            <span data-i18n="adversaries.create.name">Name</span>
-            <input id="adversary-name" required>
-          </label>
-          <label class="compact-adversary-create-description">
-            <span class="description-label-row">
-              <span data-i18n="adversaries.create.description">Description</span>
-              <span class="markdown-editor-tabs compact-markdown-tabs">
-                <button type="button" class="btn btn-ghost" data-action="markdown-tab" data-editor="adversary-description" data-tab="edit" data-i18n="markdown.edit">Edit</button>
-                <button type="button" class="btn btn-ghost active" data-action="markdown-tab" data-editor="adversary-description" data-tab="preview" data-i18n="markdown.preview">Preview</button>
-              </span>
-            </span>
-            <div class="markdown-editor compact-markdown-editor" data-md-editor="adversary-description">
-              <textarea id="adversary-description" class="markdown-editor-input" rows="4"></textarea>
-              <article id="adversary-description-preview" class="markdown-preview"></article>
-            </div>
-          </label>
-        </div>
-        <div class="dialog-actions modal-actions-split">
-          <div class="modal-actions-left">
-            <button type="button" id="adversary-cancel" class="btn btn-ghost" data-i18n="common.cancel">Cancel</button>
-          </div>
-          <div class="modal-actions-right">
-            <button type="submit" id="adversary-submit" class="btn btn-primary" data-i18n="adversaries.create.submit" disabled>Create adversary</button>
-          </div>
-        </div>
-      </form>
-    </article>
-  </dialog>
 
-  <dialog id="adversary-ability-picker-dialog" class="detail-dialog">
-    <article class="glass detail-card">
-      <header>
-        <h3 data-i18n="adversaries.picker.title">Ability catalog</h3>
-        <button type="button" class="icon-btn detail-close-btn" data-action="adversary-close-ability-picker" data-i18n-title="common.close" aria-label="Close" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
-      </header>
-      <div class="rule-detail-subtabs" id="adversary-picker-tabs">
-        <button type="button" class="btn btn-ghost active" data-action="adversary-picker-tab" data-tab="catalog" data-i18n="adversaries.picker.catalog">Catalog</button>
-        <button type="button" class="btn btn-ghost" data-action="adversary-picker-tab" data-tab="dummy">Dummy</button>
-      </div>
-      <section id="adversary-picker-pane-catalog">
-        <section class="planner-filter-grid">
-          <label>
-            <span data-i18n="adversaries.create.filter_search">Search</span>
-            <input id="adversary-ability-search" type="search" data-i18n-placeholder="abilities.search" placeholder="Search abilities">
-          </label>
-          <label>
-            <span data-i18n="adversaries.create.filter_platform">Platform</span>
-            <select id="adversary-ability-platform">
-              <option value="" data-i18n="common.all_platforms">All platforms</option>
-            </select>
-          </label>
-          <label>
-            <span data-i18n="adversaries.create.filter_utility">Utility type</span>
-            <select id="adversary-ability-utility">
-              <option value="" data-i18n="common.all_utility_types">All utility types</option>
-            </select>
-          </label>
-          <label>
-            <span data-i18n="adversaries.create.filter_destination">Destination</span>
-            <select id="adversary-ability-destination">
-              <option value="" data-i18n="common.all_destinations">All destinations</option>
-            </select>
-          </label>
-          <label>
-            <span data-i18n="adversaries.create.filter_min_confidence">Emulability</span>
-            <input id="adversary-ability-min-confidence" type="number" min="0" max="100" value="0">
-          </label>
-        </section>
-        <div id="adversary-abilities" class="ability-grid"></div>
-      </section>
-      <section id="adversary-picker-pane-dummy" class="hidden">
-        <section class="detail-section">
-          <div class="planner-filter-grid">
-            <label>
-              <span>Dummy sleep (s)</span>
-              <input id="adversary-dummy-sleep" type="number" min="1" step="1" value="5">
-            </label>
-            <div class="dialog-actions dummy-actions-inline">
-              <button type="button" class="btn btn-ghost dummy-action-btn" data-action="adversary-add-dummy-sleep">Anadir dummy sleep</button>
-            </div>
-            <label>
-              <span>Dummy label</span>
-              <input id="adversary-dummy-label" type="text" value="phase_a">
-            </label>
-            <div class="dialog-actions dummy-actions-inline">
-              <button type="button" class="btn btn-ghost dummy-action-btn" data-action="adversary-add-dummy-label">Anadir dummy label</button>
-            </div>
-          </div>
-        </section>
-      </section>
-    </article>
-  </dialog>
 
-  <dialog id="adversary-payload-picker-dialog" class="detail-dialog">
-    <article class="glass detail-card">
-      <header>
-        <h3 data-i18n="adversaries.payload.catalog_title">Payload catalog</h3>
-        <button type="button" class="icon-btn detail-close-btn" data-action="adversary-close-payload-picker" data-i18n-title="common.close" aria-label="Close" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
-      </header>
-      <section class="planner-filter-grid">
-        <label>
-          <span data-i18n="adversaries.create.filter_search">Search</span>
-          <input id="adversary-flow-payload-search" type="search" data-i18n-placeholder="adversaries.payload.search" placeholder="Search payloads...">
-        </label>
-        <label>
-          <span data-i18n="adversaries.payload.language">Payload type</span>
-          <select id="adversary-flow-payload-technology">
-            <option value="all" data-i18n="common.all_types">All technologies</option>
-            <option value="bash">Bash</option>
-            <option value="powershell">PowerShell</option>
-            <option value="python">Python</option>
-            <option value="javascript">JavaScript</option>
-            <option value="rubber_ducky">Rubber Ducky / HID</option>
-          </select>
-        </label>
-      </section>
-      <div id="adversary-flow-payloads" class="flow-payloads-list"></div>
-      <div class="dialog-actions modal-actions-split">
-        <div class="modal-actions-left">
-          <button type="button" class="btn btn-danger" data-action="adversary-close-payload-picker" data-i18n="common.cancel">Cancel</button>
-        </div>
-        <div class="modal-actions-right">
-          <button type="button" class="btn btn-primary" data-action="adversary-open-payload-form" data-i18n="adversaries.payload.create_inline">Create new payload</button>
-        </div>
-      </div>
-    </article>
-  </dialog>
 
-  <dialog id="adversary-payload-form-dialog" class="detail-dialog">
-    <article class="glass detail-card">
-      <header>
-        <h3 data-i18n="adversaries.payload.new_title">Create payload</h3>
-        <button type="button" class="icon-btn detail-close-btn" data-action="adversary-cancel-payload-form" data-i18n-title="common.close" aria-label="Close" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
-      </header>
-      <form id="adversary-flow-payload-form" class="stack">
-        <div class="adversary-payload-form-grid">
-          <label>
-            <span data-i18n="adversaries.payload.name">Payload name</span>
-            <input id="adversary-flow-payload-name" type="text" data-i18n-placeholder="adversaries.payload.name_placeholder" placeholder="e.g., Linux telemetry probe">
-          </label>
-          <label>
-            <span data-i18n="adversaries.payload.language">Technology</span>
-            <select id="adversary-flow-payload-tech">
-              <option value="bash">Bash</option>
-              <option value="powershell">PowerShell</option>
-              <option value="python">Python</option>
-              <option value="javascript">JavaScript</option>
-              <option value="rubber_ducky">Rubber Ducky / HID</option>
-            </select>
-          </label>
-          <label>
-            <span data-i18n="adversaries.payload.runner">Runner</span>
-            <select id="adversary-flow-payload-runner">
-              <option value="spuc-agent">spuc-agent</option>
-              <option value="bash">bash</option>
-              <option value="powershell">powershell</option>
-              <option value="python">python</option>
-              <option value="javascript">javascript</option>
-              <option value="rubber-ducky">rubber-ducky / HID</option>
-            </select>
-          </label>
-        </div>
-        <label>
-          <span data-i18n="adversaries.payload.description">Description</span>
-          <textarea id="adversary-flow-payload-desc" rows="2" data-i18n-placeholder="adversaries.payload.description_placeholder" placeholder="What this payload validates..."></textarea>
-        </label>
-        <label>
-          <span data-i18n="adversaries.payload.content">Payload content</span>
-          <textarea id="adversary-flow-payload-content" rows="8" spellcheck="false" data-i18n-placeholder="adversaries.payload.content_placeholder" placeholder="Paste payload code here..."></textarea>
-        </label>
-        <div class="adversary-payload-preview-actions">
-          <button type="button" class="btn btn-ghost" data-action="adversary-preview-payload" data-i18n="adversaries.payload.preview">Preview</button>
-          <pre id="adversary-payload-preview" class="detail-code hidden"></pre>
-        </div>
-        <div class="dialog-actions modal-actions-split">
-          <div class="modal-actions-left">
-            <button type="button" class="btn btn-ghost" data-action="adversary-cancel-payload-form" data-i18n="common.cancel">Cancel</button>
-          </div>
-          <div class="modal-actions-right">
-            <button type="button" id="adversary-save-custom-payload" class="btn btn-primary" data-action="adversary-save-custom-payload" data-i18n="adversaries.payload.add" disabled>Save and add to flow</button>
-          </div>
-        </div>
-      </form>
-    </article>
-  </dialog>
 
   <dialog id="confirm-dialog" class="detail-dialog">
     <article class="glass detail-card confirm-card">
@@ -1450,45 +1059,6 @@
     </article>
   </dialog>
 
-  <dialog id="payload-catalog-form-dialog" class="detail-dialog">
-    <article class="glass detail-card compact-modal">
-      <header>
-        <h3 id="payload-catalog-form-title" data-i18n="payloads.create.title">Create payload</h3>
-      </header>
-      <form id="payload-catalog-create-form" class="stack">
-        <label>
-          <span data-i18n="adversaries.payload.name">Payload name</span>
-          <input id="payload-catalog-create-name" type="text" data-i18n-placeholder="adversaries.payload.name_placeholder" placeholder="e.g., Linux telemetry probe">
-        </label>
-        <label>
-          <span data-i18n="adversaries.payload.language">Payload type</span>
-          <select id="payload-catalog-create-tech">
-            <option value="bash">Bash</option>
-            <option value="powershell">PowerShell</option>
-            <option value="python">Python</option>
-            <option value="javascript">JavaScript</option>
-            <option value="rubber_ducky">Rubber Ducky / HID</option>
-          </select>
-        </label>
-        <label>
-          <span data-i18n="adversaries.payload.description">Description</span>
-          <textarea id="payload-catalog-create-desc" rows="2" data-i18n-placeholder="adversaries.payload.description_placeholder" placeholder="What this payload validates..."></textarea>
-        </label>
-        <label>
-          <span data-i18n="adversaries.payload.content">Content</span>
-          <textarea id="payload-catalog-create-content" rows="8" spellcheck="false" data-i18n-placeholder="adversaries.payload.content_placeholder" placeholder="Paste or write the payload here"></textarea>
-        </label>
-        <div class="dialog-actions modal-actions-split">
-          <div class="modal-actions-left">
-            <button type="button" class="btn btn-ghost" data-action="payload-catalog-close-create" data-i18n="common.cancel">Cancel</button>
-          </div>
-          <div class="modal-actions-right">
-            <button id="payload-catalog-save-create" type="button" class="btn btn-primary" data-action="payload-catalog-save-create" data-i18n="adversaries.payload.save" disabled>Save payload</button>
-          </div>
-        </div>
-      </form>
-    </article>
-  </dialog>
 
   <dialog id="stix-object-dialog" class="detail-dialog">
     <article class="glass detail-card">
@@ -1633,9 +1203,9 @@
             <option value="TLP:RED">TLP:RED</option>
           </select>
         </label>
-        <label class="hidden" aria-hidden="true">
+        <label>
           <span>PAP</span>
-          <select id="rulelab-pap" class="level-select pap-select level-green" data-action="level-select" tabindex="-1">
+          <select id="rulelab-pap" class="level-select pap-select level-green" data-action="level-select">
             <option value="PAP:CLEAR">PAP:CLEAR</option>
             <option value="PAP:GREEN" selected>PAP:GREEN</option>
             <option value="PAP:AMBER">PAP:AMBER</option>

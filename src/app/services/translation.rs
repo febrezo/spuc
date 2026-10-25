@@ -71,6 +71,7 @@ pub(crate) fn evaluate_rule(request: TranslationRequest<'_>) -> Result<Vec<Trans
             Ok(ir_expr) => emit_target_with_mode_resolved(
                 target,
                 ir_expr,
+                request.rule,
                 request.description,
                 request.sigma_targets,
                 request.mode,

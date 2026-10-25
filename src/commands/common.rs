@@ -2,31 +2,24 @@
 
 use anyhow::{anyhow, Result};
 use chrono::Utc;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File};
-use std::hash::{Hash, Hasher};
 use std::io::{BufRead as IoBufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::catalog::activities::{ActivityLog, TranslationActivity};
 use crate::cli::{AbilityTarget, BuildOutput, ConversionMode, ExportFormat, OutputTarget};
 use crate::commands::sigma_runtime::sigma_runtime_info;
 use crate::commands::sigma_targets::{
     dynamic_sigma_targets, dynamic_target_label, target_to_backend,
 };
 use crate::emitters::{self, EmitResult, FailureCause, FidelityStatus};
-use crate::ui::ansi::{BLUE, BOLD, GREEN, GREEN_SOFT, ORANGE, PURPLE, RED, RESET, UNBOLD, YELLOW};
-use crate::ui::print::render_rule_header;
+use crate::ui::ansi::{BOLD, GREEN, GREEN_SOFT, ORANGE, PURPLE, RED, RESET, UNBOLD, YELLOW};
+use crate::ui::output::{self as emu_output, OutputBlock};
+use crate::ui::print::{render_coverage_header, render_rule_header};
 use crate::{ir, normalize, parser};
-use spuc::emulation::ability as emu_ability;
-use spuc::emulation::catalog::{AbilityCatalog, TranslationActivity};
-use spuc::emulation::export::{self as emu_export, AbilityExportTarget};
-use spuc::emulation::materialize as emu_materialize;
-use spuc::emulation::output::{self as emu_output, OutputBlock, OutputSection};
-
-pub(crate) const DUAL_FLOW_ENGINE_VERSION: &str =
-    concat!("spuc-", env!("CARGO_PKG_VERSION"), "-dual-v1");
 
 type CoverageInfo = (
     Vec<String>,
@@ -59,6 +52,7 @@ fn output_target_key(target: OutputTarget) -> &'static str {
         OutputTarget::Sigma => "sigma",
         OutputTarget::Eql => "eql",
         OutputTarget::Kql => "kql",
+        OutputTarget::CytomicOrionSql => "cytomic-orion-sql",
         OutputTarget::Snort => "snort",
         OutputTarget::Suricata => "suricata",
         OutputTarget::Yara => "yara",
@@ -102,19 +96,6 @@ pub(crate) struct TranslateOptions<'a> {
     pub(crate) sigma_targets: &'a [String],
     pub(crate) mode: ConversionMode,
     pub(crate) export_formats: &'a [ExportFormat],
-    pub(crate) refresh_cache: bool,
-}
-
-pub(crate) struct EmulateOptions<'a> {
-    pub(crate) targets: &'a [AbilityTarget],
-    pub(crate) input: RuleInput<'a>,
-    pub(crate) output_dir: Option<&'a Path>,
-    pub(crate) description: Option<&'a str>,
-    pub(crate) ttp: Option<&'a str>,
-    pub(crate) confidence: Option<u8>,
-    pub(crate) mode: ConversionMode,
-    pub(crate) export_formats: &'a [ExportFormat],
-    pub(crate) refresh_cache: bool,
 }
 
 pub(crate) fn load_rules(rules: &[String], file: Option<&Path>) -> Result<Vec<String>> {
@@ -154,12 +135,11 @@ pub(crate) fn translate_rules(options: TranslateOptions<'_>) -> Result<()> {
     }
 
     let should_export_csv = resolve_csv_export(options.output_dir, options.export_formats, true)?;
-    let catalog = AbilityCatalog::from_default_root().ok();
+    let activities = ActivityLog::from_default_root().ok();
     let mut csv_rows: Vec<CsvRow> = Vec::new();
     for (idx, rule_str) in rules.iter().enumerate() {
         render_rule_header(idx, rules.len(), rule_str);
         let parsed = parse_and_normalize(rule_str);
-        let rule_hash = compute_rule_hash(rule_str, &parsed);
 
         for target in &targets {
             let label = target.label();
@@ -167,6 +147,7 @@ pub(crate) fn translate_rules(options: TranslateOptions<'_>) -> Result<()> {
                 Ok(ir_expr) => emit_target_with_mode_resolved(
                     target,
                     ir_expr,
+                    rule_str,
                     options.description,
                     options.sigma_targets,
                     options.mode,
@@ -185,7 +166,7 @@ pub(crate) fn translate_rules(options: TranslateOptions<'_>) -> Result<()> {
             render_result(&label, &result, &view);
 
             record_activity(
-                catalog.as_ref(),
+                activities.as_ref(),
                 TranslationActivity::new(
                     "translate",
                     rule_str,
@@ -193,8 +174,7 @@ pub(crate) fn translate_rules(options: TranslateOptions<'_>) -> Result<()> {
                     &view.runtime_status,
                     view.conversion_confidence,
                     None,
-                )
-                .with_cache_meta(&rule_hash, DUAL_FLOW_ENGINE_VERSION, false),
+                ),
             );
 
             if should_export_csv {
@@ -211,18 +191,6 @@ pub(crate) fn translate_rules(options: TranslateOptions<'_>) -> Result<()> {
                 });
             }
         }
-        if let Some(catalog_ref) = catalog.as_ref() {
-            sync_hidden_emulation_from_translate(
-                catalog_ref,
-                rule_str,
-                options.description,
-                options.ttp,
-                options.confidence.unwrap_or(70),
-                &parsed,
-                &rule_hash,
-                options.refresh_cache,
-            )?;
-        }
         println!();
     }
     if let Some(dir) = options.output_dir.filter(|_| should_export_csv) {
@@ -231,221 +199,27 @@ pub(crate) fn translate_rules(options: TranslateOptions<'_>) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn emulate_rules(options: EmulateOptions<'_>) -> Result<()> {
-    let rules = options.input.load()?;
-    if rules.is_empty() {
-        return Err(anyhow!("No rules provided. Use --rule or --file."));
-    }
-    let targets = resolve_ability_targets(options.targets);
-    let catalog = AbilityCatalog::from_default_root()?;
-    let should_export_csv = resolve_csv_export(options.output_dir, options.export_formats, false)?;
-    let mut csv_rows: Vec<CsvRow> = Vec::new();
-    let confidence = options.confidence.unwrap_or(70);
-    let mut generated = 0usize;
-    let empty_sigma_targets: Vec<String> = Vec::new();
-
-    for (idx, rule_str) in rules.iter().enumerate() {
-        render_rule_header(idx, rules.len(), rule_str);
-        let parsed = parse_and_normalize(rule_str);
-        let rule_hash = compute_rule_hash(rule_str, &parsed);
-        let ability = match build_ability_from_rule(
-            rule_str,
-            None,
-            None,
-            options.description,
-            options.ttp,
-            confidence,
-        ) {
-            Ok(ability) => ability,
-            Err(err) => {
-                if matches!(options.mode, ConversionMode::Strict) {
-                    return Err(err);
-                }
-                println!("{YELLOW}Skipping rule (partial mode): {err}{RESET}");
-                for target in &targets {
-                    record_activity(
-                        Some(&catalog),
-                        TranslationActivity::new(
-                            "emulate",
-                            rule_str,
-                            ability_target_label(*target),
-                            "unsupported",
-                            0,
-                            None,
-                        )
-                        .with_cache_meta(
-                            &rule_hash,
-                            DUAL_FLOW_ENGINE_VERSION,
-                            false,
-                        ),
-                    );
-                    if should_export_csv {
-                        csv_rows.push(CsvRow {
-                            input_rule: rule_str.clone(),
-                            target: ability_target_label(*target).to_ascii_uppercase(),
-                            runtime_status: "unsupported".to_string(),
-                            conversion_confidence: 0,
-                            rule_confidence: options.confidence,
-                            cause: "Unsupported observable scope for ability v1".to_string(),
-                            summary: "No defensive emulation mapping available".to_string(),
-                            notes: err.to_string(),
-                            output: String::new(),
-                        });
-                    }
-                }
-                sync_hidden_translation_from_emulate(
-                    &catalog,
-                    rule_str,
-                    options.description,
-                    options.ttp,
-                    options.confidence,
-                    options.mode,
-                    &empty_sigma_targets,
-                    &parsed,
-                    &rule_hash,
-                    options.refresh_cache,
-                )?;
-                println!();
-                continue;
-            }
-        };
-
-        let (saved_path, created) = catalog.upsert_by_source_pattern(&ability)?;
-        println!(
-            "{YELLOW}Ability {} in catalog: {}{RESET}",
-            if created { "saved" } else { "updated" },
-            saved_path.display()
-        );
-        let summary = render_ability_card(&ability);
-
-        for target in &targets {
-            let target_label = ability_target_label(*target);
-            let artifact = emu_export::export_ability(ability_target_to_export(*target), &ability)?;
-            let mut output_path = None;
-            if let Some(dir) = options.output_dir {
-                fs::create_dir_all(dir)?;
-                let artifact_path = dir.join(format!(
-                    "{}-{}.{}",
-                    ability.id,
-                    target_label.replace('-', "_"),
-                    ability_target_extension(*target)
-                ));
-                fs::write(&artifact_path, &artifact)?;
-                output_path = Some(artifact_path.display().to_string());
-                println!(
-                    "{YELLOW}Artifact saved ({target_label}) to {}{RESET}",
-                    artifact_path.display()
-                );
-            }
-
-            let sections = vec![
-                OutputSection {
-                    block: OutputBlock::Summary,
-                    title: format!("Emulation Summary ({target_label})"),
-                    body: summary.clone(),
-                },
-                OutputSection {
-                    block: OutputBlock::Artifact,
-                    title: format!("Emulation Artifact ({target_label})"),
-                    body: artifact.clone(),
-                },
-            ];
-            println!("{}", emu_output::render_sections(&sections));
-
-            record_activity(
-                Some(&catalog),
-                TranslationActivity::new(
-                    "emulate",
-                    rule_str,
-                    target_label,
-                    "exact",
-                    ability.confidence,
-                    output_path.clone(),
-                )
-                .with_cache_meta(&rule_hash, DUAL_FLOW_ENGINE_VERSION, false),
-            );
-            if should_export_csv {
-                csv_rows.push(CsvRow {
-                    input_rule: rule_str.clone(),
-                    target: target_label.to_ascii_uppercase(),
-                    runtime_status: "exact".to_string(),
-                    conversion_confidence: ability.confidence,
-                    rule_confidence: options.confidence,
-                    cause: String::new(),
-                    summary: "Defensive ability generated".to_string(),
-                    notes: format!(
-                        "classification={} | platforms={}",
-                        ability_classification_label(&ability.classification),
-                        ability.supported_platforms.join(",")
-                    ),
-                    output: output_path.unwrap_or_default(),
-                });
-            }
-        }
-        sync_hidden_translation_from_emulate(
-            &catalog,
-            rule_str,
-            options.description,
-            options.ttp,
-            options.confidence,
-            options.mode,
-            &empty_sigma_targets,
-            &parsed,
-            &rule_hash,
-            options.refresh_cache,
-        )?;
-        generated += 1;
-        println!();
-    }
-
-    if generated == 0 {
-        return Err(anyhow!(
-            "No emulation artifacts were generated. Review rules or switch mode."
-        ));
-    }
-    if let Some(dir) = options.output_dir.filter(|_| should_export_csv) {
-        write_csv_named(dir, "spuc_emulation_output.csv", &csv_rows)?;
-    }
-    Ok(())
-}
-
-pub(crate) fn all_ability_targets() -> Vec<AbilityTarget> {
-    vec![
-        AbilityTarget::SpucAgent,
-        AbilityTarget::Bash,
-        AbilityTarget::Powershell,
-        AbilityTarget::AtomicRedTeam,
-        AbilityTarget::MitreCaldera,
-    ]
-}
-
-pub(crate) fn ability_target_to_export(target: AbilityTarget) -> AbilityExportTarget {
-    match target {
-        AbilityTarget::SpucAgent => AbilityExportTarget::SpucAgent,
-        AbilityTarget::Bash => AbilityExportTarget::Bash,
-        AbilityTarget::Powershell => AbilityExportTarget::Powershell,
-        AbilityTarget::AtomicRedTeam => AbilityExportTarget::AtomicRedTeam,
-        AbilityTarget::MitreCaldera => AbilityExportTarget::MitreCaldera,
+pub(crate) fn parse_target(raw: &str) -> Option<OutputTarget> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "sigma" => Some(OutputTarget::Sigma),
+        "eql" => Some(OutputTarget::Eql),
+        "kql" => Some(OutputTarget::Kql),
+        "cytomic-orion-sql" | "cytomic" | "orion-sql" => Some(OutputTarget::CytomicOrionSql),
+        "snort" => Some(OutputTarget::Snort),
+        "suricata" => Some(OutputTarget::Suricata),
+        "yara" => Some(OutputTarget::Yara),
+        _ => None,
     }
 }
 
-pub(crate) fn ability_target_label(target: AbilityTarget) -> &'static str {
-    match target {
-        AbilityTarget::SpucAgent => "spuc-agent",
-        AbilityTarget::Bash => "bash",
-        AbilityTarget::Powershell => "powershell",
-        AbilityTarget::AtomicRedTeam => "atomic-red-team",
-        AbilityTarget::MitreCaldera => "mitre-caldera",
-    }
-}
-
-pub(crate) fn ability_target_extension(target: AbilityTarget) -> &'static str {
-    match target {
-        AbilityTarget::SpucAgent => "json",
-        AbilityTarget::Bash => "sh",
-        AbilityTarget::Powershell => "ps1",
-        AbilityTarget::AtomicRedTeam => "yaml",
-        AbilityTarget::MitreCaldera => "json",
+pub(crate) fn parse_ability_target(raw: &str) -> Option<AbilityTarget> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "spuc-agent" => Some(AbilityTarget::SpucAgent),
+        "bash" => Some(AbilityTarget::Bash),
+        "powershell" => Some(AbilityTarget::Powershell),
+        "atomic-red-team" | "atomic" => Some(AbilityTarget::AtomicRedTeam),
+        "mitre-caldera" | "caldera" => Some(AbilityTarget::MitreCaldera),
+        _ => None,
     }
 }
 
@@ -511,14 +285,6 @@ pub(crate) fn resolve_translation_targets(
     resolved
 }
 
-fn resolve_ability_targets(targets: &[AbilityTarget]) -> Vec<AbilityTarget> {
-    if targets.is_empty() {
-        all_ability_targets()
-    } else {
-        targets.to_vec()
-    }
-}
-
 fn resolve_csv_export(
     output: Option<&Path>,
     export: &[ExportFormat],
@@ -535,144 +301,30 @@ fn resolve_csv_export(
     Ok(output.is_some() && wants_csv)
 }
 
-fn compute_rule_hash(rule: &str, parsed: &Result<ir::IrExpr, EmitResult>) -> String {
-    let normalized_rule = match parsed {
-        Ok(ir_expr) => format!("{ir_expr:?}"),
-        Err(_) => rule
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-            .trim()
-            .to_string(),
-    };
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    format!("{DUAL_FLOW_ENGINE_VERSION}:{normalized_rule}").hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
-}
-
-#[allow(clippy::too_many_arguments)]
-fn sync_hidden_emulation_from_translate(
-    catalog: &AbilityCatalog,
-    rule: &str,
-    description: Option<&str>,
-    ttp: Option<&str>,
-    confidence: u8,
-    parsed: &Result<ir::IrExpr, EmitResult>,
-    rule_hash: &str,
-    refresh: bool,
-) -> Result<()> {
-    let ability_opt = if parsed.is_ok() {
-        match build_ability_from_rule(rule, None, None, description, ttp, confidence) {
-            Ok(ability) => {
-                let _ = catalog.upsert_by_source_pattern(&ability)?;
-                Some(ability)
-            }
-            Err(_) => None,
-        }
-    } else {
-        None
-    };
-    for target in all_ability_targets() {
-        let target_label = ability_target_label(target);
-        if !refresh
-            && catalog.has_cached_activity(
-                "emulate",
-                rule_hash,
-                DUAL_FLOW_ENGINE_VERSION,
-                target_label,
-                true,
-            )?
-        {
-            continue;
-        }
-        let (status, impact) = if let Some(ability) = &ability_opt {
-            if emu_export::export_ability(ability_target_to_export(target), ability).is_ok() {
-                ("exact", ability.confidence)
-            } else {
-                ("unsupported", 0)
-            }
-        } else {
-            ("unsupported", 0)
-        };
-        record_activity(
-            Some(catalog),
-            TranslationActivity::new("emulate", rule, target_label, status, impact, None)
-                .with_cache_meta(rule_hash, DUAL_FLOW_ENGINE_VERSION, true),
-        );
-    }
-    Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
-fn sync_hidden_translation_from_emulate(
-    catalog: &AbilityCatalog,
-    rule: &str,
-    description: Option<&str>,
-    _ttp: Option<&str>,
-    rule_confidence: Option<u8>,
-    mode: ConversionMode,
-    sigma_targets: &[String],
-    parsed: &Result<ir::IrExpr, EmitResult>,
-    rule_hash: &str,
-    refresh: bool,
-) -> Result<()> {
-    for label in available_detection_target_labels() {
-        if !refresh
-            && catalog.has_cached_activity(
-                "translate",
-                rule_hash,
-                DUAL_FLOW_ENGINE_VERSION,
-                &label,
-                true,
-            )?
-        {
-            continue;
-        }
-
-        let Some(target) = resolve_translation_targets(std::slice::from_ref(&label), sigma_targets)
-            .into_iter()
-            .next()
-        else {
-            continue;
-        };
-
-        let result = match parsed {
-            Ok(ir_expr) => {
-                emit_target_with_mode_resolved(&target, ir_expr, description, sigma_targets, mode)
-                    .unwrap_or_else(|e| {
-                        EmitResult::unsupported_with_cause(
-                            e.to_string(),
-                            FailureCause::EmitterNotImplemented,
-                        )
-                    })
-            }
-            Err(res) => res.clone(),
-        };
-        let result = finalize_result(&label, result);
-        let result = apply_indicator_confidence_resolved(&target, result, rule_confidence);
-        let view = build_result_view(&label, &result, rule_confidence);
-        record_activity(
-            Some(catalog),
-            TranslationActivity::new(
-                "translate",
-                rule,
-                &label,
-                &view.runtime_status,
-                view.conversion_confidence,
-                None,
-            )
-            .with_cache_meta(rule_hash, DUAL_FLOW_ENGINE_VERSION, true),
-        );
-    }
-    Ok(())
-}
-
-fn record_activity(catalog: Option<&AbilityCatalog>, activity: TranslationActivity) {
-    if let Some(catalog) = catalog {
-        if let Err(err) = catalog.record_translation_activity(&activity) {
+fn record_activity(activities: Option<&ActivityLog>, activity: TranslationActivity) {
+    if let Some(activities) = activities {
+        if let Err(err) = activities.record_translation_activity(&activity) {
             println!("{YELLOW}Warning: unable to record catalog activity: {err}{RESET}");
         }
     }
+}
+
+/// Records a visible (non-hidden) catalog activity row. Used by the web rules
+/// save flow so statuses in the grid derive from honest translate activity.
+pub(crate) fn record_visible_translation_activity(
+    command: &str,
+    rule: &str,
+    target: &str,
+    status: &str,
+    impact: u8,
+) {
+    let Ok(activities) = ActivityLog::from_default_root() else {
+        return;
+    };
+    record_activity(
+        Some(&activities),
+        TranslationActivity::new(command, rule, target, status, impact, None),
+    );
 }
 
 pub(crate) fn resolve_output_blocks(
@@ -798,1138 +450,6 @@ fn quoted_bold(text: &str) -> String {
     format!("{BOLD}\"{text}\"{UNBOLD}")
 }
 
-fn ability_value_to_string(value: &ir::IrValue) -> String {
-    match value {
-        ir::IrValue::String(v) => v.clone(),
-        ir::IrValue::Integer(v) => v.to_string(),
-        ir::IrValue::Boolean(v) => v.to_string(),
-        ir::IrValue::Timestamp(v) => v.clone(),
-        ir::IrValue::Hex(v) => format!("h'{}'", v),
-    }
-}
-
-fn ability_operator_label(op: &ir::IrOp) -> &'static str {
-    match op {
-        ir::IrOp::Eq => "EQ",
-        ir::IrOp::Ne => "NE",
-        ir::IrOp::Gt => "GT",
-        ir::IrOp::Ge => "GE",
-        ir::IrOp::Lt => "LT",
-        ir::IrOp::Le => "LE",
-        ir::IrOp::Matches => "MATCHES",
-        ir::IrOp::IsSubset => "ISSUBSET",
-    }
-}
-
-fn ability_hint_action(
-    idx: usize,
-    predicate: &ir::IrPredicate,
-    reason: &str,
-) -> emu_ability::AbilityAction {
-    emu_ability::AbilityAction {
-        id: format!("act-{:03}", idx + 1),
-        title: format!(
-            "Record unsupported observable hint ({}:{})",
-            predicate.target, predicate.field
-        ),
-        action_type: "emit_observable_hint".to_string(),
-        observable: format!("{}:{}", predicate.target, predicate.field),
-        operator: ability_operator_label(&predicate.op).to_string(),
-        value: ability_value_to_string(&predicate.value),
-        safe_instructions: format!(
-            "No concrete materialization in ability v1. Preserve this predicate as analyst context ({reason})."
-        ),
-    }
-}
-
-pub(crate) fn build_ability_from_rule(
-    rule: &str,
-    id: Option<&str>,
-    name: Option<&str>,
-    description: Option<&str>,
-    ttp: Option<&str>,
-    confidence: u8,
-) -> Result<emu_ability::Ability> {
-    let ir = parse_and_normalize(rule).map_err(|e| {
-        let mut details = Vec::new();
-        if let Some(cause) = &e.cause {
-            details.push(format!("cause={}", failure_cause_human(cause)));
-        }
-        if !e.notes.is_empty() {
-            details.push(e.notes.join(" | "));
-        }
-        if details.is_empty() {
-            details.push("unknown parse/normalization issue".to_string());
-        }
-        anyhow!(
-            "Rule cannot be used for ability generation in this iteration: {}",
-            details.join(" | ")
-        )
-    })?;
-    let predicates = collect_ability_predicates(&ir)?;
-    if predicates.is_empty() {
-        return Err(anyhow!("No predicates found in pattern."));
-    }
-
-    let mut requires: BTreeMap<String, emu_ability::AbilityRequirement> = BTreeMap::new();
-    let mut optional: BTreeMap<String, emu_ability::AbilityRequirement> = BTreeMap::new();
-    let mut agent_capabilities: BTreeSet<String> = BTreeSet::new();
-    let mut actions = Vec::new();
-    let mut windows_hint = false;
-    let mut unix_hint = false;
-    let mut has_process = false;
-    let mut has_file_or_dir = false;
-    let mut has_registry = false;
-    let mut has_network = false;
-
-    for (idx, predicate) in predicates.iter().enumerate() {
-        let op = match ability_operator(&predicate.op) {
-            Ok(op) => op,
-            Err(_) => {
-                actions.push(ability_hint_action(
-                    idx,
-                    predicate,
-                    "operator is not materializable in ability v1",
-                ));
-                continue;
-            }
-        };
-        let observable = format!("{}:{}", predicate.target, predicate.field);
-        match (predicate.target.as_str(), predicate.field.as_str()) {
-            ("process", "command_line") => {
-                let value = ability_string_value(&predicate.value)?;
-                let value_lower = value.to_ascii_lowercase();
-                has_process = true;
-                if !matches!(
-                    predicate.op,
-                    ir::IrOp::Eq | ir::IrOp::Ne | ir::IrOp::Matches
-                ) {
-                    return Err(anyhow!(
-                        "Unsupported operator for process:command_line in ability v1."
-                    ));
-                }
-                insert_requirement(
-                    &mut requires,
-                    "cap.process.spawn",
-                    "Host can spawn a benign process for telemetry simulation.",
-                );
-                agent_capabilities.insert("cap.telemetry.process".to_string());
-                if value_lower.contains("powershell") {
-                    insert_requirement(
-                        &mut optional,
-                        "cap.shell.powershell",
-                        "PowerShell shell available for command-line shaped simulation.",
-                    );
-                    windows_hint = true;
-                }
-                if value_lower.contains(".exe") || value.contains('\\') {
-                    windows_hint = true;
-                }
-                if value_lower.contains("/bin/")
-                    || value_lower.contains(" bash")
-                    || value_lower.contains(" sh")
-                {
-                    unix_hint = true;
-                    insert_requirement(
-                        &mut optional,
-                        "cap.shell.bash",
-                        "Bash shell available for command-line shaped simulation.",
-                    );
-                }
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Emit process command-line observable".to_string(),
-                    action_type: "emit_process_command_line".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value,
-                    safe_instructions:
-                        "Run a benign command that produces telemetry aligned with this predicate."
-                            .to_string(),
-                });
-            }
-            ("process", "name") => {
-                let value = ability_string_value(&predicate.value)?;
-                has_process = true;
-                if !matches!(
-                    predicate.op,
-                    ir::IrOp::Eq | ir::IrOp::Ne | ir::IrOp::Matches
-                ) {
-                    return Err(anyhow!(
-                        "Unsupported operator for process:name in ability v1."
-                    ));
-                }
-                if matches!(predicate.op, ir::IrOp::Matches) {
-                    emu_materialize::synthesize_regex_sample(&value, "spuc-process").map_err(
-                        |err| anyhow!("Unsupported regex for materialized process:name: {}", err),
-                    )?;
-                }
-                insert_requirement(
-                    &mut requires,
-                    "cap.process.spawn",
-                    "Host can spawn a benign process for telemetry simulation.",
-                );
-                agent_capabilities.insert("cap.telemetry.process".to_string());
-                let lower = value.to_ascii_lowercase();
-                if lower.ends_with(".exe") || value.contains('\\') {
-                    windows_hint = true;
-                }
-                if lower.contains("bash") || lower.contains("sh") {
-                    unix_hint = true;
-                }
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Emit process-name observable".to_string(),
-                    action_type: "emit_process_name".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value,
-                    safe_instructions:
-                        "Spawn a benign process with a name aligned to this predicate.".to_string(),
-                });
-            }
-            ("process", "cwd") => {
-                let value = ability_string_value(&predicate.value)?;
-                has_process = true;
-                if !matches!(
-                    predicate.op,
-                    ir::IrOp::Eq | ir::IrOp::Ne | ir::IrOp::Matches
-                ) {
-                    return Err(anyhow!(
-                        "Unsupported operator for process:cwd in ability v1."
-                    ));
-                }
-                if matches!(predicate.op, ir::IrOp::Matches) {
-                    emu_materialize::synthesize_regex_sample(
-                        &value,
-                        "spuc-generated-working-directory",
-                    )
-                    .map_err(|err| {
-                        anyhow!("Unsupported regex for materialized process:cwd: {}", err)
-                    })?;
-                }
-                insert_requirement(
-                    &mut requires,
-                    "cap.process.spawn",
-                    "Host can spawn a benign process for telemetry simulation.",
-                );
-                insert_requirement(
-                    &mut requires,
-                    "cap.directory.create",
-                    "Host can create benign directories for defensive telemetry simulation.",
-                );
-                agent_capabilities.insert("cap.telemetry.process".to_string());
-                if value.contains('\\') {
-                    windows_hint = true;
-                }
-                if value.starts_with('/') {
-                    unix_hint = true;
-                }
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Emit process working-directory observable".to_string(),
-                    action_type: "emit_process_cwd".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value,
-                    safe_instructions:
-                        "Run a benign process from a working directory aligned with this predicate."
-                            .to_string(),
-                });
-            }
-            ("process", "pid" | "created_time" | "is_hidden") => {
-                actions.push(ability_hint_action(
-                    idx,
-                    predicate,
-                    "process field is not fully materializable in ability v1",
-                ));
-                continue;
-            }
-            ("file", "name") => {
-                let value = ability_string_value(&predicate.value)?;
-                let value_lower = value.to_ascii_lowercase();
-                has_file_or_dir = true;
-                if !matches!(
-                    predicate.op,
-                    ir::IrOp::Eq | ir::IrOp::Ne | ir::IrOp::Matches
-                ) {
-                    return Err(anyhow!("Unsupported operator for file:name in ability v1."));
-                }
-                if matches!(predicate.op, ir::IrOp::Matches) {
-                    emu_materialize::synthesize_regex_sample(&value, "spuc-generated-file.bin")
-                        .map_err(|err| {
-                            anyhow!(
-                                "Unsupported regex for materialized file:name in ability v1: {}",
-                                err
-                            )
-                        })?;
-                }
-                insert_requirement(
-                    &mut requires,
-                    "cap.file.create",
-                    "Host can create benign files for defensive telemetry simulation.",
-                );
-                agent_capabilities.insert("cap.telemetry.file".to_string());
-                if value_lower.ends_with(".exe") || value.contains('\\') {
-                    windows_hint = true;
-                }
-                if value.starts_with('/') || value_lower.ends_with(".sh") {
-                    unix_hint = true;
-                }
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Materialize file-name observable".to_string(),
-                    action_type: "materialize_file_name".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value,
-                    safe_instructions:
-                        "Create a benign file whose path/name satisfies the predicate.".to_string(),
-                });
-            }
-            ("file", "size") => {
-                let value = ability_integer_value(&predicate.value)?;
-                has_file_or_dir = true;
-                if !matches!(
-                    predicate.op,
-                    ir::IrOp::Eq
-                        | ir::IrOp::Ne
-                        | ir::IrOp::Gt
-                        | ir::IrOp::Ge
-                        | ir::IrOp::Lt
-                        | ir::IrOp::Le
-                ) {
-                    return Err(anyhow!("Unsupported operator for file:size in ability v1."));
-                }
-                if value < 0 {
-                    return Err(anyhow!("file:size must be >= 0 in ability v1."));
-                }
-                insert_requirement(
-                    &mut requires,
-                    "cap.file.create",
-                    "Host can create benign files for defensive telemetry simulation.",
-                );
-                agent_capabilities.insert("cap.telemetry.file".to_string());
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Materialize file-size observable".to_string(),
-                    action_type: "materialize_file_size".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value: value.to_string(),
-                    safe_instructions:
-                        "Create/adjust a benign file so its size satisfies the predicate."
-                            .to_string(),
-                });
-            }
-            ("artifact", "payload_bin") => {
-                let value = ability_payload_value(&predicate.value)?;
-                has_file_or_dir = true;
-                if !matches!(
-                    predicate.op,
-                    ir::IrOp::Eq | ir::IrOp::Ne | ir::IrOp::Matches
-                ) {
-                    return Err(anyhow!(
-                        "Unsupported operator for artifact:payload_bin in ability v1."
-                    ));
-                }
-                if matches!(predicate.op, ir::IrOp::Matches) {
-                    emu_materialize::synthesize_regex_sample(&value, "spuc-content").map_err(
-                        |err| {
-                            anyhow!(
-                                "Unsupported regex for materialized artifact:payload_bin in ability v1: {}",
-                                err
-                            )
-                        },
-                    )?;
-                }
-                insert_requirement(
-                    &mut requires,
-                    "cap.file.create",
-                    "Host can create benign files for defensive telemetry simulation.",
-                );
-                agent_capabilities.insert("cap.telemetry.file".to_string());
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Materialize file-content observable".to_string(),
-                    action_type: "materialize_file_content".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value,
-                    safe_instructions:
-                        "Create a benign file whose content satisfies the payload predicate."
-                            .to_string(),
-                });
-            }
-            ("directory", "path") => {
-                let value = ability_string_value(&predicate.value)?;
-                has_file_or_dir = true;
-                if !matches!(
-                    predicate.op,
-                    ir::IrOp::Eq | ir::IrOp::Ne | ir::IrOp::Matches
-                ) {
-                    return Err(anyhow!(
-                        "Unsupported operator for directory:path in ability v1."
-                    ));
-                }
-                if matches!(predicate.op, ir::IrOp::Matches) {
-                    emu_materialize::synthesize_regex_sample(&value, "spuc-generated-directory")
-                        .map_err(|err| {
-                            anyhow!(
-                                "Unsupported regex for materialized directory:path in ability v1: {}",
-                                err
-                            )
-                        })?;
-                }
-                insert_requirement(
-                    &mut requires,
-                    "cap.directory.create",
-                    "Host can create benign directories for defensive telemetry simulation.",
-                );
-                agent_capabilities.insert("cap.telemetry.file".to_string());
-                if value.contains('\\') {
-                    windows_hint = true;
-                }
-                if value.starts_with('/') {
-                    unix_hint = true;
-                }
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Materialize directory-path observable".to_string(),
-                    action_type: "materialize_directory_path".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value,
-                    safe_instructions:
-                        "Create a benign directory whose path satisfies the predicate.".to_string(),
-                });
-            }
-            ("windows-registry-key", "key") => {
-                let value = ability_string_value(&predicate.value)?;
-                has_registry = true;
-                windows_hint = true;
-                if !matches!(
-                    predicate.op,
-                    ir::IrOp::Eq | ir::IrOp::Ne | ir::IrOp::Matches
-                ) {
-                    return Err(anyhow!(
-                        "Unsupported operator for windows-registry-key:key in ability v1."
-                    ));
-                }
-                if matches!(predicate.op, ir::IrOp::Matches) {
-                    emu_materialize::synthesize_regex_sample(
-                        &value,
-                        "HKEY_CURRENT_USER\\Software\\SPUC\\Generated",
-                    )
-                    .map_err(|err| {
-                        anyhow!(
-                            "Unsupported regex for materialized windows-registry-key:key: {}",
-                            err
-                        )
-                    })?;
-                }
-                insert_requirement(
-                    &mut requires,
-                    "cap.registry.write",
-                    "Host can create benign registry keys/values for defensive telemetry simulation.",
-                );
-                agent_capabilities.insert("cap.telemetry.registry".to_string());
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Materialize registry-key path observable".to_string(),
-                    action_type: "materialize_registry_key_path".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value,
-                    safe_instructions: "Create a benign registry key aligned with this predicate."
-                        .to_string(),
-                });
-            }
-            ("windows-registry-key", "values[*].name") => {
-                let value = ability_string_value(&predicate.value)?;
-                has_registry = true;
-                windows_hint = true;
-                if !matches!(
-                    predicate.op,
-                    ir::IrOp::Eq | ir::IrOp::Ne | ir::IrOp::Matches
-                ) {
-                    return Err(anyhow!(
-                        "Unsupported operator for windows-registry-key:values[*].name in ability v1."
-                    ));
-                }
-                if matches!(predicate.op, ir::IrOp::Matches) {
-                    emu_materialize::synthesize_regex_sample(&value, "SpucValue").map_err(|err| {
-                        anyhow!(
-                            "Unsupported regex for materialized windows-registry-key:values[*].name: {}",
-                            err
-                        )
-                    })?;
-                }
-                insert_requirement(
-                    &mut requires,
-                    "cap.registry.write",
-                    "Host can create benign registry keys/values for defensive telemetry simulation.",
-                );
-                agent_capabilities.insert("cap.telemetry.registry".to_string());
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Materialize registry value-name observable".to_string(),
-                    action_type: "materialize_registry_value_name".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value,
-                    safe_instructions:
-                        "Create a benign registry value name aligned with this predicate."
-                            .to_string(),
-                });
-            }
-            ("windows-registry-key", "values[*].data") => {
-                let value = ability_text_value(&predicate.value)?;
-                has_registry = true;
-                windows_hint = true;
-                if !matches!(
-                    predicate.op,
-                    ir::IrOp::Eq | ir::IrOp::Ne | ir::IrOp::Matches
-                ) {
-                    return Err(anyhow!(
-                        "Unsupported operator for windows-registry-key:values[*].data in ability v1."
-                    ));
-                }
-                if matches!(predicate.op, ir::IrOp::Matches) {
-                    emu_materialize::synthesize_regex_sample(&value, "spuc-registry-data").map_err(
-                        |err| {
-                            anyhow!(
-                                "Unsupported regex for materialized windows-registry-key:values[*].data: {}",
-                                err
-                            )
-                        },
-                    )?;
-                }
-                insert_requirement(
-                    &mut requires,
-                    "cap.registry.write",
-                    "Host can create benign registry keys/values for defensive telemetry simulation.",
-                );
-                agent_capabilities.insert("cap.telemetry.registry".to_string());
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Materialize registry value-data observable".to_string(),
-                    action_type: "materialize_registry_value_data".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value,
-                    safe_instructions:
-                        "Create a benign registry value data payload aligned with this predicate."
-                            .to_string(),
-                });
-            }
-            ("windows-registry-key", "values[*].data_type") => {
-                let value = ability_string_value(&predicate.value)?.to_ascii_uppercase();
-                has_registry = true;
-                windows_hint = true;
-                if !matches!(predicate.op, ir::IrOp::Eq) {
-                    return Err(anyhow!(
-                        "Unsupported operator for windows-registry-key:values[*].data_type in ability v1."
-                    ));
-                }
-                if value != "REG_SZ" && value != "REG_DWORD" {
-                    return Err(anyhow!(
-                        "windows-registry-key:values[*].data_type only supports REG_SZ or REG_DWORD in ability v1."
-                    ));
-                }
-                insert_requirement(
-                    &mut requires,
-                    "cap.registry.write",
-                    "Host can create benign registry keys/values for defensive telemetry simulation.",
-                );
-                agent_capabilities.insert("cap.telemetry.registry".to_string());
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Materialize registry value-type observable".to_string(),
-                    action_type: "materialize_registry_value_type".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value,
-                    safe_instructions:
-                        "Create a benign registry value with the requested value type.".to_string(),
-                });
-            }
-            ("windows-registry-key", "number_of_subkeys") => {
-                let value = ability_integer_value(&predicate.value)?;
-                has_registry = true;
-                windows_hint = true;
-                if !matches!(
-                    predicate.op,
-                    ir::IrOp::Eq
-                        | ir::IrOp::Ne
-                        | ir::IrOp::Gt
-                        | ir::IrOp::Ge
-                        | ir::IrOp::Lt
-                        | ir::IrOp::Le
-                ) {
-                    return Err(anyhow!(
-                        "Unsupported operator for windows-registry-key:number_of_subkeys in ability v1."
-                    ));
-                }
-                if value < 0 {
-                    return Err(anyhow!(
-                        "windows-registry-key:number_of_subkeys must be >= 0 in ability v1."
-                    ));
-                }
-                insert_requirement(
-                    &mut requires,
-                    "cap.registry.write",
-                    "Host can create benign registry keys/values for defensive telemetry simulation.",
-                );
-                agent_capabilities.insert("cap.telemetry.registry".to_string());
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Materialize registry subkey-count observable".to_string(),
-                    action_type: "materialize_registry_subkey_count".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value: value.to_string(),
-                    safe_instructions:
-                        "Create benign registry subkeys so count constraints can be evaluated."
-                            .to_string(),
-                });
-            }
-            ("windows-registry-key", "modified_time") => {
-                actions.push(ability_hint_action(
-                    idx,
-                    predicate,
-                    "registry modified_time is not fully materializable in ability v1",
-                ));
-                continue;
-            }
-            ("network-traffic", "src_ref.value" | "src_ref.type" | "src_port") => {
-                actions.push(ability_hint_action(
-                    idx,
-                    predicate,
-                    "network source-side fields are not materializable in ability v1",
-                ));
-                continue;
-            }
-            ("ipv4-addr", "value") | ("ipv6-addr", "value") => {
-                let value = ability_string_value(&predicate.value)?;
-                has_network = true;
-                insert_requirement(
-                    &mut requires,
-                    "cap.network.connect",
-                    "Host can generate benign outbound network connections for telemetry simulation.",
-                );
-                agent_capabilities.insert("cap.telemetry.network".to_string());
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Emit network destination-host observable".to_string(),
-                    action_type: "emit_network_dst_host".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value,
-                    safe_instructions:
-                        "Generate a benign outbound connection to a destination aligned with this indicator."
-                            .to_string(),
-                });
-            }
-            ("url", "value") => {
-                let value = ability_string_value(&predicate.value)?;
-                has_network = true;
-                insert_requirement(
-                    &mut requires,
-                    "cap.network.connect",
-                    "Host can generate benign outbound network connections for telemetry simulation.",
-                );
-                agent_capabilities.insert("cap.telemetry.network".to_string());
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Record URL observable hint".to_string(),
-                    action_type: "emit_url_observable".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value,
-                    safe_instructions:
-                        "Preserve URL observable for analyst review; concrete URL materialization remains conservative in ability v1."
-                            .to_string(),
-                });
-            }
-            ("network-traffic", "dst_ref.value") => {
-                let value = ability_string_value(&predicate.value)?;
-                has_network = true;
-                if !matches!(
-                    predicate.op,
-                    ir::IrOp::Eq | ir::IrOp::Ne | ir::IrOp::Matches
-                ) {
-                    return Err(anyhow!(
-                        "Unsupported operator for network-traffic:dst_ref.value in ability v1."
-                    ));
-                }
-                if matches!(predicate.op, ir::IrOp::Matches) {
-                    emu_materialize::synthesize_regex_sample(&value, "127.0.0.1").map_err(
-                        |err| {
-                            anyhow!(
-                                "Unsupported regex for materialized network-traffic:dst_ref.value: {}",
-                                err
-                            )
-                        },
-                    )?;
-                }
-                insert_requirement(
-                    &mut requires,
-                    "cap.network.connect",
-                    "Host can generate benign outbound network connections for telemetry simulation.",
-                );
-                agent_capabilities.insert("cap.telemetry.network".to_string());
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Emit network destination-host observable".to_string(),
-                    action_type: "emit_network_dst_host".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value,
-                    safe_instructions:
-                        "Generate a benign outbound connection to a destination matching this predicate."
-                            .to_string(),
-                });
-            }
-            ("network-traffic", "dst_ref.type") => {
-                let value = ability_string_value(&predicate.value)?;
-                has_network = true;
-                if !matches!(predicate.op, ir::IrOp::Eq | ir::IrOp::Ne) {
-                    return Err(anyhow!(
-                        "Unsupported operator for network-traffic:dst_ref.type in ability v1."
-                    ));
-                }
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Emit network destination-type observable".to_string(),
-                    action_type: "emit_network_dst_type".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value,
-                    safe_instructions:
-                        "Use destination address type as a hint for outbound benign probe."
-                            .to_string(),
-                });
-            }
-            ("network-traffic", "dst_port") => {
-                let value = ability_port_value(&predicate.value)?;
-                has_network = true;
-                if !matches!(
-                    predicate.op,
-                    ir::IrOp::Eq
-                        | ir::IrOp::Ne
-                        | ir::IrOp::Gt
-                        | ir::IrOp::Ge
-                        | ir::IrOp::Lt
-                        | ir::IrOp::Le
-                ) {
-                    return Err(anyhow!(
-                        "Unsupported operator for network-traffic:dst_port in ability v1."
-                    ));
-                }
-                insert_requirement(
-                    &mut requires,
-                    "cap.network.connect",
-                    "Host can generate benign outbound network connections for telemetry simulation.",
-                );
-                agent_capabilities.insert("cap.telemetry.network".to_string());
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Emit network destination-port observable".to_string(),
-                    action_type: "emit_network_dst_port".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value: value.to_string(),
-                    safe_instructions:
-                        "Generate a benign outbound connection targeting a destination port aligned with this predicate."
-                            .to_string(),
-                });
-            }
-            ("network-traffic", "protocols") => {
-                let value = ability_string_value(&predicate.value)?;
-                has_network = true;
-                if !matches!(
-                    predicate.op,
-                    ir::IrOp::Eq | ir::IrOp::Ne | ir::IrOp::Matches
-                ) {
-                    return Err(anyhow!(
-                        "Unsupported operator for network-traffic:protocols in ability v1."
-                    ));
-                }
-                if matches!(predicate.op, ir::IrOp::Matches) {
-                    emu_materialize::synthesize_regex_sample(&value, "tcp").map_err(|err| {
-                        anyhow!(
-                            "Unsupported regex for materialized network-traffic:protocols: {}",
-                            err
-                        )
-                    })?;
-                }
-                insert_requirement(
-                    &mut requires,
-                    "cap.network.connect",
-                    "Host can generate benign outbound network connections for telemetry simulation.",
-                );
-                agent_capabilities.insert("cap.telemetry.network".to_string());
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Emit network protocol observable".to_string(),
-                    action_type: "emit_network_protocol".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value,
-                    safe_instructions:
-                        "Generate benign outbound traffic with protocol hints aligned to this predicate."
-                            .to_string(),
-                });
-            }
-            ("domain-name", "value") => {
-                let value = ability_string_value(&predicate.value)?;
-                has_network = true;
-                if !matches!(
-                    predicate.op,
-                    ir::IrOp::Eq | ir::IrOp::Ne | ir::IrOp::Matches
-                ) {
-                    return Err(anyhow!(
-                        "Unsupported operator for domain-name:value in ability v1."
-                    ));
-                }
-                if matches!(predicate.op, ir::IrOp::Matches) {
-                    emu_materialize::synthesize_regex_sample(&value, "example.com").map_err(
-                        |err| {
-                            anyhow!(
-                                "Unsupported regex for materialized domain-name:value in ability v1: {}",
-                                err
-                            )
-                        },
-                    )?;
-                }
-                insert_requirement(
-                    &mut requires,
-                    "cap.dns.resolve",
-                    "Host can issue benign DNS queries for telemetry simulation.",
-                );
-                agent_capabilities.insert("cap.telemetry.network".to_string());
-                actions.push(emu_ability::AbilityAction {
-                    id: format!("act-{:03}", idx + 1),
-                    title: "Emit DNS query-domain observable".to_string(),
-                    action_type: "emit_dns_query_domain".to_string(),
-                    observable,
-                    operator: op.to_string(),
-                    value,
-                    safe_instructions:
-                        "Generate a benign DNS query for a domain aligned with this predicate."
-                            .to_string(),
-                });
-            }
-            ("file", "ctime" | "mtime" | "atime") | ("directory", "ctime" | "mtime" | "atime") => {
-                actions.push(ability_hint_action(
-                    idx,
-                    predicate,
-                    "temporal file/directory fields are not fully materializable in ability v1",
-                ));
-                continue;
-            }
-            ("file", field) if field.starts_with("hashes.") => {
-                let _ = field;
-                actions.push(ability_hint_action(
-                    idx,
-                    predicate,
-                    "hash-constrained file predicates are not materializable in ability v1",
-                ));
-                continue;
-            }
-            _ => {
-                actions.push(ability_hint_action(
-                    idx,
-                    predicate,
-                    "observable path is outside concrete materialization scope in ability v1",
-                ));
-                continue;
-            }
-        }
-    }
-
-    if actions.is_empty() {
-        return Err(anyhow!(
-            "No materializable or hintable predicates found in pattern."
-        ));
-    }
-
-    let platforms = if windows_hint && !unix_hint {
-        vec!["windows".to_string()]
-    } else if unix_hint && !windows_hint {
-        vec!["linux".to_string(), "macos".to_string()]
-    } else {
-        vec![
-            "linux".to_string(),
-            "macos".to_string(),
-            "windows".to_string(),
-        ]
-    };
-
-    let classification = match (has_process || has_registry || has_network, has_file_or_dir) {
-        (true, true) => emu_ability::AbilityClassification::ProcessExecutionTrace,
-        (true, false) => emu_ability::AbilityClassification::CommandLineTrace,
-        (false, true) => emu_ability::AbilityClassification::FileDrop,
-        (false, false) => emu_ability::AbilityClassification::CommandLineTrace,
-    };
-
-    let generated = emu_ability::Ability {
-        schema_version: emu_ability::ABILITY_SCHEMA_VERSION.to_string(),
-        id: id
-            .map(|v| v.to_string())
-            .unwrap_or_else(|| format!("abl-{}", Utc::now().timestamp_millis())),
-        name: name
-            .map(|v| v.to_string())
-            .unwrap_or_else(|| "STIX defensive emulation ability".to_string()),
-        description: description.map(|v| v.to_string()).unwrap_or_else(|| {
-            format!(
-                "Defensive and controlled telemetry emulation derived from one STIX pattern ({} action(s)).",
-                actions.len()
-            )
-        }),
-        ttp: normalize_ttp(ttp),
-        supported_platforms: platforms,
-        requires: requires.into_values().collect(),
-        optional: optional.into_values().collect(),
-        agent_capabilities: agent_capabilities.into_iter().collect(),
-        actions,
-        source_pattern: rule.to_string(),
-        classification,
-        emulation_level: emu_ability::EmulationLevel::TraceSimulation,
-        confidence,
-    };
-
-    generated.validate_structure().map_err(|issues| {
-        anyhow!(
-            "Generated ability failed validation: {}",
-            issues.join(" | ")
-        )
-    })?;
-    Ok(generated)
-}
-
-fn normalize_ttp(raw: Option<&str>) -> Option<String> {
-    raw.map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| value.to_ascii_uppercase())
-}
-
-fn collect_ability_predicates(expr: &ir::IrExpr) -> Result<Vec<ir::IrPredicate>> {
-    fn walk(expr: &ir::IrExpr, out: &mut Vec<ir::IrPredicate>) -> Result<()> {
-        match expr {
-            ir::IrExpr::Predicate(p) => {
-                out.push(p.clone());
-                Ok(())
-            }
-            ir::IrExpr::All(items) => {
-                for item in items {
-                    walk(item, out)?;
-                }
-                Ok(())
-            }
-            ir::IrExpr::Qualified(inner, _) => walk(inner, out),
-            ir::IrExpr::Any(items) | ir::IrExpr::FollowedBy(items) => {
-                for item in items {
-                    walk(item, out)?;
-                }
-                Ok(())
-            }
-        }
-    }
-
-    let mut predicates = Vec::new();
-    walk(expr, &mut predicates)?;
-    Ok(predicates)
-}
-
-fn ability_operator(op: &ir::IrOp) -> Result<&'static str> {
-    match op {
-        ir::IrOp::Eq => Ok("EQ"),
-        ir::IrOp::Ne => Ok("NE"),
-        ir::IrOp::Gt => Ok("GT"),
-        ir::IrOp::Ge => Ok("GE"),
-        ir::IrOp::Lt => Ok("LT"),
-        ir::IrOp::Le => Ok("LE"),
-        ir::IrOp::Matches => Ok("MATCHES"),
-        ir::IrOp::IsSubset => Err(anyhow!("Ability v1 does not support ISSUBSET.")),
-    }
-}
-
-fn ability_string_value(value: &ir::IrValue) -> Result<String> {
-    match value {
-        ir::IrValue::String(s) => Ok(s.clone()),
-        _ => Err(anyhow!(
-            "Ability v1 expected a string value for this observable."
-        )),
-    }
-}
-
-fn ability_integer_value(value: &ir::IrValue) -> Result<i64> {
-    match value {
-        ir::IrValue::Integer(v) => Ok(*v),
-        _ => Err(anyhow!(
-            "Ability v1 expected an integer value for this observable."
-        )),
-    }
-}
-
-fn ability_port_value(value: &ir::IrValue) -> Result<i64> {
-    let port = ability_integer_value(value)?;
-    if !(1..=65535).contains(&port) {
-        return Err(anyhow!(
-            "Ability v1 expects network ports in range 1..65535."
-        ));
-    }
-    Ok(port)
-}
-
-fn ability_text_value(value: &ir::IrValue) -> Result<String> {
-    match value {
-        ir::IrValue::String(s) => Ok(s.clone()),
-        ir::IrValue::Integer(v) => Ok(v.to_string()),
-        ir::IrValue::Boolean(v) => Ok(v.to_string()),
-        ir::IrValue::Timestamp(ts) => Ok(ts.clone()),
-        ir::IrValue::Hex(_) => Err(anyhow!(
-            "Ability v1 does not materialize hex values for this observable yet."
-        )),
-    }
-}
-
-fn ability_payload_value(value: &ir::IrValue) -> Result<String> {
-    match value {
-        ir::IrValue::String(s) => Ok(s.clone()),
-        ir::IrValue::Hex(_) => Err(anyhow!(
-            "Ability v1 does not materialize hex artifact:payload_bin values yet; use plain string or MATCHES."
-        )),
-        _ => Err(anyhow!(
-            "Ability v1 expected a string payload value for artifact:payload_bin."
-        )),
-    }
-}
-
-fn insert_requirement(
-    requirements: &mut BTreeMap<String, emu_ability::AbilityRequirement>,
-    id: &str,
-    description: &str,
-) {
-    requirements
-        .entry(id.to_string())
-        .or_insert_with(|| emu_ability::AbilityRequirement {
-            id: id.to_string(),
-            description: description.to_string(),
-        });
-}
-
-pub(crate) fn render_ability_card(ability: &emu_ability::Ability) -> String {
-    let platforms = if ability.supported_platforms.is_empty() {
-        "-".to_string()
-    } else {
-        ability.supported_platforms.join(", ")
-    };
-    let requires = if ability.requires.is_empty() {
-        "-".to_string()
-    } else {
-        ability
-            .requires
-            .iter()
-            .map(|r| format!("{} ({})", r.id, r.description))
-            .collect::<Vec<_>>()
-            .join(" | ")
-    };
-    let optional = if ability.optional.is_empty() {
-        "-".to_string()
-    } else {
-        ability
-            .optional
-            .iter()
-            .map(|r| format!("{} ({})", r.id, r.description))
-            .collect::<Vec<_>>()
-            .join(" | ")
-    };
-    let actions = ability
-        .actions
-        .iter()
-        .map(|a| format!("{}: {} {} '{}'", a.id, a.observable, a.operator, a.value))
-        .collect::<Vec<_>>()
-        .join(" | ");
-    let agent_capabilities = if ability.agent_capabilities.is_empty() {
-        "-".to_string()
-    } else {
-        ability.agent_capabilities.join(", ")
-    };
-
-    format!(
-        "{BOLD}Ability Card{RESET}\n- schema_version: {}\n- id: {}\n- name: {}\n- description: {}\n- classification: {}\n- emulation_level: {}\n- confidence: {}\n- supported_platforms: {}\n- requires: {}\n- optional: {}\n- agent_capabilities: {}\n- actions: {}\n- source_pattern: {}",
-        ability.schema_version,
-        ability.id,
-        ability.name,
-        ability.description,
-        ability_classification_label(&ability.classification),
-        ability_emulation_label(&ability.emulation_level),
-        ability.confidence,
-        platforms,
-        requires,
-        optional,
-        agent_capabilities,
-        actions,
-        ability.source_pattern
-    )
-}
-
-pub(crate) fn ability_classification_label(
-    classification: &emu_ability::AbilityClassification,
-) -> &'static str {
-    match classification {
-        emu_ability::AbilityClassification::CommandLineTrace => "command_line_trace",
-        emu_ability::AbilityClassification::ProcessExecutionTrace => "process_execution_trace",
-        emu_ability::AbilityClassification::FileDrop => "file_drop",
-    }
-}
-
-pub(crate) fn ability_emulation_label(level: &emu_ability::EmulationLevel) -> &'static str {
-    match level {
-        emu_ability::EmulationLevel::TraceSimulation => "trace_simulation",
-    }
-}
-fn render_coverage_header(target: &OutputTarget) {
-    let plain = format!("Coverage for {:?}", target);
-    let styled = format!("{PURPLE}{BOLD}{}{RESET}", plain);
-    print_boxed_line(&plain, &styled);
-}
-
-fn print_boxed_line(plain: &str, styled: &str) {
-    let width = plain.chars().count() + 2;
-    let top = format!("┌{}┐", "─".repeat(width));
-    let bot = format!("└{}┘", "─".repeat(width));
-    println!("{BLUE}{top}{RESET}");
-    println!("{BLUE}│{RESET} {styled} {BLUE}│{RESET}");
-    println!("{BLUE}{bot}{RESET}");
-}
-
-pub(crate) fn parse_target(raw: &str) -> Option<OutputTarget> {
-    match raw.trim().to_ascii_lowercase().as_str() {
-        "sigma" => Some(OutputTarget::Sigma),
-        "eql" => Some(OutputTarget::Eql),
-        "kql" => Some(OutputTarget::Kql),
-        "snort" => Some(OutputTarget::Snort),
-        "suricata" => Some(OutputTarget::Suricata),
-        "yara" => Some(OutputTarget::Yara),
-        _ => None,
-    }
-}
-
-pub(crate) fn parse_ability_target(raw: &str) -> Option<AbilityTarget> {
-    match raw.trim().to_ascii_lowercase().as_str() {
-        "spuc-agent" => Some(AbilityTarget::SpucAgent),
-        "bash" => Some(AbilityTarget::Bash),
-        "powershell" => Some(AbilityTarget::Powershell),
-        "atomic-red-team" | "atomic" => Some(AbilityTarget::AtomicRedTeam),
-        "mitre-caldera" | "caldera" => Some(AbilityTarget::MitreCaldera),
-        _ => None,
-    }
-}
-
 fn emit_target(
     target: &OutputTarget,
     ir: &ir::IrExpr,
@@ -1941,6 +461,11 @@ fn emit_target(
         OutputTarget::Sigma => emit_sigma(&sanitized_ir, description, sigma_targets),
         OutputTarget::Eql => emitters::eql::emit(&sanitized_ir, description),
         OutputTarget::Kql => emitters::kql::emit(&sanitized_ir, description),
+        OutputTarget::CytomicOrionSql => emitters::cytomic_orion_sql::emit(
+            &sanitized_ir,
+            "<source pattern unavailable>",
+            description,
+        ),
         OutputTarget::Suricata => emitters::suricata::emit(&sanitized_ir, description),
         OutputTarget::Snort => emitters::snort::emit(&sanitized_ir, description),
         OutputTarget::Yara => emitters::yara::emit(&sanitized_ir, description),
@@ -1977,11 +502,18 @@ fn emit_dynamic_sigma_target(
 pub(crate) fn emit_target_with_mode_resolved(
     target: &ResolvedOutputTarget,
     ir: &ir::IrExpr,
+    source_rule: &str,
     description: Option<&str>,
     sigma_targets: &[String],
     mode: ConversionMode,
 ) -> Result<EmitResult> {
     match target {
+        ResolvedOutputTarget::Native(OutputTarget::CytomicOrionSql) => {
+            emit_with_mode(ir, mode, |expr| {
+                let sanitized_ir = drop_redundant_network_ref_type(expr);
+                emitters::cytomic_orion_sql::emit(&sanitized_ir, source_rule, description)
+            })
+        }
         ResolvedOutputTarget::Native(native) => {
             emit_target_with_mode(native, ir, description, sigma_targets, mode)
         }
@@ -2164,6 +696,7 @@ pub(crate) fn all_targets() -> Vec<OutputTarget> {
         OutputTarget::Sigma,
         OutputTarget::Eql,
         OutputTarget::Kql,
+        OutputTarget::CytomicOrionSql,
         OutputTarget::Yara,
         OutputTarget::Snort,
         OutputTarget::Suricata,
@@ -2296,17 +829,18 @@ fn render_result(label: &str, res: &EmitResult, view: &ResultView) {
         println!("Notes={}", view.notes.join(" | "));
     }
     if let Some(rule) = &res.rule {
-        if !matches!(res.status, FidelityStatus::Unsupported) {
-            println!(
-                "{}──────────────── output ────────────────{RESET}",
-                style.color
-            );
-            println!("{rule}");
-        }
+        println!(
+            "{}──────────────── output ────────────────{RESET}",
+            style.color
+        );
+        println!("{rule}");
     }
 }
 
 fn capitalize_first(input: &str) -> String {
+    if input.starts_with("unsupported_") {
+        return input.to_string();
+    }
     let mut chars = input.chars();
     match chars.next() {
         Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
@@ -2422,6 +956,7 @@ pub(crate) fn pretty_label(label: &str) -> &'static str {
         "sigma" => "Sigma",
         "eql" => "EQL",
         "kql" => "KQL",
+        "cytomic-orion-sql" => "Cytomic",
         "yara" => "YARA",
         _ => "Target",
     }
@@ -2497,6 +1032,9 @@ pub(crate) fn apply_indicator_confidence(
             }
             OutputTarget::Eql | OutputTarget::Kql => {
                 format!("// spuc_indicator_confidence: {conf}\n{rule}")
+            }
+            OutputTarget::CytomicOrionSql => {
+                format!("-- spuc_indicator_confidence: {conf}\n{rule}")
             }
         };
         res.rule = Some(updated);
@@ -2818,6 +1356,39 @@ fn coverage_info() -> HashMap<OutputTarget, CoverageInfo> {
         ),
     );
     map.insert(
+        OutputTarget::CytomicOrionSql,
+        (
+            vec![
+                "Cytomic Advanced SQL Query emitter".to_string(),
+                "Default output uses EDR-compatible Telemetry with EventType filters".to_string(),
+                "Regex MATCHES is rejected unless support is explicitly configured in a future profile".to_string(),
+            ],
+            vec![
+                "process:name -> ProcessName (ops: =, !=, LIKE)".to_string(),
+                "process:command_line -> CommandLine (ops: =, !=, LIKE)".to_string(),
+                "process:pid -> ChildPid (ops: =, !=, >, >=, <, <=)".to_string(),
+                "process:parent_ref.name -> ParentFilename (ops: =, !=, LIKE)".to_string(),
+                "file:name | path | hashes.MD5 -> ChildFilename | ChildPath | ChildMd5 (ops: =, !=, LIKE)".to_string(),
+                "ipv4-addr:value | network-traffic refs/ports -> RemoteIp/LocalIp/RemotePort/LocalPort".to_string(),
+                "domain-name:value -> DomainList OR InitialDomain OR Hostname".to_string(),
+                "windows-registry-key:key | values[*].name | values[*].data -> Key | Value | ValueData".to_string(),
+            ],
+            vec!["=", "!=", ">", ">=", "<", "<=", "LIKE"]
+                .into_iter()
+                .map(String::from)
+                .collect(),
+            vec![
+                "MATCHES: unsupported_regex by default; simple (?i).*value.* receives a suggested LIKE fallback".to_string(),
+                "REPEATS/WITHIN/START/STOP: not supported".to_string(),
+            ],
+            vec![
+                "Full Orion table preference is not enabled without a schema/profile selector; default mode stays on Telemetry".to_string(),
+                "Unmapped STIX object paths fail explicitly with unsupported_field".to_string(),
+                "Mixed Telemetry EventType patterns are rejected conservatively".to_string(),
+            ],
+        ),
+    );
+    map.insert(
         OutputTarget::Kql,
         (
             vec![
@@ -3074,6 +1645,10 @@ mod tests {
         assert_eq!(parse_target("sigma"), Some(OutputTarget::Sigma));
         assert_eq!(parse_target("eql"), Some(OutputTarget::Eql));
         assert_eq!(parse_target("kql"), Some(OutputTarget::Kql));
+        assert_eq!(
+            parse_target("cytomic-orion-sql"),
+            Some(OutputTarget::CytomicOrionSql)
+        );
         assert_eq!(parse_target("snort"), Some(OutputTarget::Snort));
         assert_eq!(parse_target("suricata"), Some(OutputTarget::Suricata));
         assert_eq!(parse_target("yara"), Some(OutputTarget::Yara));

@@ -20,7 +20,6 @@ pub(crate) fn options<'a>(
     sigma_targets: &'a [String],
     mode: ConversionMode,
     export_formats: &'a [ExportFormat],
-    refresh_cache: bool,
 ) -> TranslateOptions<'a> {
     TranslateOptions {
         targets,
@@ -35,7 +34,6 @@ pub(crate) fn options<'a>(
         sigma_targets,
         mode,
         export_formats,
-        refresh_cache,
     }
 }
 
@@ -63,7 +61,6 @@ mod tests {
             &sigma_targets,
             ConversionMode::Partial,
             &export_formats,
-            true,
         );
 
         assert_eq!(options.targets, &targets);
@@ -76,6 +73,5 @@ mod tests {
         assert_eq!(options.sigma_targets, &sigma_targets);
         assert_eq!(options.mode, ConversionMode::Partial);
         assert_eq!(options.export_formats, &export_formats);
-        assert!(options.refresh_cache);
     }
 }

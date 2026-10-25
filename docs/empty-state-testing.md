@@ -6,8 +6,8 @@ This guide resets SPUC state so web and CLI flows behave as if no local catalog 
 
 The reset covers:
 
-- file-based SPUC data under `<config_root>` (rules/abilities/adversaries/STIX objects/users/policies/logs)
-- browser-only web state (custom payload catalog, learning progress, UI route/view preferences)
+- file-based SPUC data under `<config_root>` (rules/STIX objects/users/policies/logs)
+- browser-only web state (learning progress, UI route/view preferences)
 
 ## 1) Resolve and inspect current config root
 
@@ -45,7 +45,7 @@ mkdir -p "$SPUC_ROOT"
 
 Expected result:
 
-- `abilities/`, `intrusion_sets/`, `catalog/`, `stix-objects.json`, `web_users.json`, and `web_oauth_policy.json` are absent until recreated by SPUC.
+- `catalog/`, `stix-objects.json`, `web_users.json`, and `web_oauth_policy.json` are absent until recreated by SPUC.
 
 ## 4) Clear browser localStorage for SPUC
 
@@ -53,11 +53,9 @@ Open SPUC in the browser, then DevTools Console, and run:
 
 ```js
 [
-  "spuc-web-custom-payloads",
   "spuc-web-learning-progress",
   "spuc-web-last-route",
   "spuc-web-rules-view-mode",
-  "spuc-web-adversaries-view-mode",
   "spuc-web-locale",
   "spuc-web-theme",
   "spuc-web-welcome-dismissed"
@@ -66,7 +64,7 @@ Open SPUC in the browser, then DevTools Console, and run:
 
 Notes:
 
-- this step is required to validate payload and learning empty states correctly
+- this step is required to validate learning empty states correctly
 - clearing `<config_root>` alone does not remove browser localStorage
 
 ## 5) Start SPUC in standalone mode
@@ -82,8 +80,6 @@ Open:
 ## 6) Validation checklist (must look empty)
 
 1. Rules route shows welcome/empty-state actions (new/import) and no catalog entries.
-2. Emulation route shows empty adversary state and create action.
-3. Payloads route shows empty payload catalog welcome state.
 4. STIX Objects route shows empty catalog welcome state.
 5. Learning route has no prior completion progress.
 
@@ -91,10 +87,8 @@ Open:
 
 1. Create one STIX rule from Laboratory and save.
 2. Confirm Rules route now switches from welcome to catalog.
-3. Create one payload from Payloads.
-4. Confirm Payloads route switches from welcome to table.
-5. Create one adversary and save.
-6. Confirm Emulation route now lists the created adversary.
+3. Create one STIX object from the STIX Objects route.
+4. Confirm STIX Objects route switches from welcome to table.
 
 ## 8) Repeatable QA mode (isolated config root)
 
