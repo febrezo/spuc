@@ -47,14 +47,7 @@ fn help_groups_root_commands() {
     assert!(stdout.contains("Usage: spuc"));
     assert!(stdout.contains("Commands:"));
 
-    let order = [
-        "emulate",
-        "jsonrpc",
-        "translate",
-        "verify",
-        "version",
-        "web",
-    ];
+    let order = ["jsonrpc", "translate", "verify", "version", "web"];
     let mut previous = 0usize;
     for name in order {
         let marker = format!("\n  {name}");
@@ -96,6 +89,7 @@ fn removed_cli_commands_are_rejected() {
         "rules",
         "learn",
         "explore",
+        "emulate",
     ] {
         let out = Command::new(spuc_bin())
             .arg(command)
@@ -172,6 +166,27 @@ fn run_convert(rule: &str, target: &str) -> String {
     String::from_utf8_lossy(&out.stdout).to_string()
 }
 
+fn run_convert_with_description(rule: &str, target: &str, description: &str) -> String {
+    let out = Command::new(spuc_bin())
+        .args([
+            "translate",
+            "--to",
+            target,
+            "--rule",
+            rule,
+            "--description",
+            description,
+        ])
+        .output()
+        .expect("failed to run spuc translate with description");
+    assert!(
+        out.status.success(),
+        "spuc translate failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).to_string()
+}
+
 fn run_convert_with_conf(rule: &str, target: &str, conf: &str) -> (bool, String, String) {
     let out = Command::new(spuc_bin())
         .args([
@@ -190,6 +205,88 @@ fn run_convert_with_conf(rule: &str, target: &str, conf: &str) -> (bool, String,
         String::from_utf8_lossy(&out.stdout).to_string(),
         String::from_utf8_lossy(&out.stderr).to_string(),
     )
+}
+
+#[test]
+fn cytomic_orion_sql_emits_default_telemetry_process_queries() {
+    let out = run_convert("[process:name LIKE '%powershell%']", "cytomic-orion-sql");
+    assert!(out.contains("Cytomic"));
+    assert!(out.contains("-- target_platform: cytomic-orion-sql"));
+    assert!(out.contains("-- source_stix_pattern: [process:name LIKE '%powershell%']"));
+    assert!(out.contains("SELECT *\nFROM Telemetry\nWHERE EventType = 'PROCESS'"));
+    assert!(out.contains("AND ProcessName LIKE '%powershell%';"));
+
+    let out = run_convert("[process:command_line LIKE '%-enc%']", "cytomic-orion-sql");
+    assert!(out.contains("AND CommandLine LIKE '%-enc%';"));
+}
+
+#[test]
+fn cytomic_orion_sql_preserves_and_conditions() {
+    let out = run_convert(
+        "[process:name = 'powershell.exe' AND process:command_line LIKE '%DownloadString%']",
+        "cytomic-orion-sql",
+    );
+    assert!(out.contains("EventType = 'PROCESS'"));
+    assert!(
+        out.contains("ProcessName = 'powershell.exe'\nAND CommandLine LIKE '%DownloadString%';")
+    );
+}
+
+#[test]
+fn cytomic_orion_sql_rejects_unconfigured_regex_with_safe_fallback() {
+    let out = run_convert(
+        "[process:name MATCHES '(?i).*powershell.*']",
+        "cytomic-orion-sql",
+    );
+    assert!(out.contains("status=unsupported"));
+    assert!(out.contains("unsupported_regex"));
+    assert!(out.contains("source_stix_pattern = \"[process:name MATCHES '(?i).*powershell.*']\""));
+    assert!(out.contains("regex = \"(?i).*powershell.*\""));
+    assert!(out.contains("AND LOWER(ProcessName) LIKE '%powershell%';"));
+}
+
+#[test]
+fn cytomic_orion_sql_fails_unmapped_fields_explicitly() {
+    let out = run_convert("[process:cwd = 'C:\\\\Temp']", "cytomic-orion-sql");
+    assert!(out.contains("status=unsupported"));
+    assert!(out.contains("unsupported_field"));
+    assert!(out.contains("process:cwd"));
+}
+
+#[test]
+fn cytomic_orion_sql_maps_network_domain_and_registry_fields() {
+    let network = run_convert(
+        "[network-traffic:dst_ref.value = '8.8.8.8' AND network-traffic:dst_port = 53]",
+        "cytomic-orion-sql",
+    );
+    assert!(network.contains("EventType = 'NETWORK'"));
+    assert!(network.contains("RemoteIp = '8.8.8.8'\nAND RemotePort = 53;"));
+
+    let domain = run_convert(
+        "[domain-name:value LIKE '%example.com%']",
+        "cytomic-orion-sql",
+    );
+    assert!(domain.contains("EventType = 'NETWORK'"));
+    assert!(domain.contains(
+        "(DomainList LIKE '%example.com%' OR InitialDomain LIKE '%example.com%' OR Hostname LIKE '%example.com%');"
+    ));
+
+    let registry = run_convert(
+        "[windows-registry-key:key = 'HKCU\\\\Software\\\\Run']",
+        "cytomic-orion-sql",
+    );
+    assert!(registry.contains("EventType = 'REGISTRY'"));
+    assert!(registry.contains("AND Key = 'HKCU\\Software\\Run';"));
+}
+
+fn collect_rule_sids(output: &str) -> Vec<String> {
+    output
+        .split("sid:")
+        .skip(1)
+        .filter_map(|tail| tail.split(';').next())
+        .map(str::trim)
+        .map(str::to_string)
+        .collect()
 }
 
 #[test]
@@ -277,6 +374,33 @@ fn artifact_payload_semantic_regressions() {
     );
     assert!(mixed.contains("unsupported"));
     assert!(mixed.contains("raw STIX path passthrough disabled"));
+}
+
+#[test]
+fn snort_rules_keep_opencti_descriptions_rule_safe() {
+    let out = run_convert_with_description(
+        "[network-traffic:dst_ref.value = '198.51.100.10' AND network-traffic:dst_port = 443]",
+        "snort",
+        "OpenCTI \"quoted\" title; with newline\nand tab\ttext",
+    );
+
+    assert!(out.contains(
+        "msg:\"[SPUC Generated Snort Rule] OpenCTI 'quoted' title, with newline and tab text\";"
+    ));
+    assert!(!out.contains("OpenCTI \"quoted\""));
+    assert!(!out.contains("title; with newline\n"));
+}
+
+#[test]
+fn snort_rules_use_stable_content_based_sids() {
+    let out = run_convert(
+        "[network-traffic:dst_port = 53] OR [network-traffic:dst_port = 443]",
+        "snort",
+    );
+    let sids = collect_rule_sids(&out);
+
+    assert_eq!(sids.len(), 2);
+    assert_ne!(sids[0], sids[1]);
 }
 
 #[test]

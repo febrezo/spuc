@@ -7,7 +7,7 @@ COPY crates ./crates
 COPY src ./src
 COPY kb ./kb
 
-RUN cargo build --release -p spuc-cli --bin spuc --bin spuc-agent
+RUN cargo build --release -p spuc-cli --bin spuc
 
 FROM debian:bookworm-slim
 
@@ -31,7 +31,6 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages \
     pysigma-backend-splunk
 
 COPY --from=builder /build/target/release/spuc /usr/local/bin/spuc
-COPY --from=builder /build/target/release/spuc-agent /usr/local/bin/spuc-agent
 COPY kb /app/kb
 
 ENV SPUC_CONFIG_DIR=/data

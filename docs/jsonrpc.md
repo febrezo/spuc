@@ -54,7 +54,7 @@ Field reference:
 
 - `rule` (string, required): STIX pattern.
 - `to` (string[], optional): target outputs.
-  - Native values: `sigma`, `eql`, `kql`, `snort`, `suricata`, `yara`.
+  - Native values: `sigma`, `eql`, `kql`, `cytomic-orion-sql`, `snort`, `suricata`, `yara`.
   - Dynamic values: `sigma-to-<backend>` for compatible backends discovered from `sigma plugin list` at process startup.
   - If omitted/empty: SPUC evaluates all targets.
 - `description` (string, optional): analyst context used by translators.
@@ -144,7 +144,7 @@ curl -X POST 'http://127.0.0.1:8080/rpc' \
 ### `ok=false` with `error: "no valid target selected"`
 
 - `to` only contains unknown values.
-- Use native targets (`sigma`, `eql`, `kql`, `snort`, `suricata`, `yara`) plus discovered `sigma-to-*` values from `spuc sigma list-targets`.
+- Use native targets (`sigma`, `eql`, `kql`, `cytomic-orion-sql`, `snort`, `suricata`, `yara`) plus discovered `sigma-to-*` values from `spuc sigma list-targets`.
 
 ### `ok=true` but target status is `unsupported`
 

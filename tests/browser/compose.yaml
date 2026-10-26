@@ -1,0 +1,19 @@
+services:
+  qa:
+    build:
+      context: ../..
+      dockerfile: tests/browser/Dockerfile
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - "/tmp:rw,nosuid,nodev,size=256m,mode=1777"
+    shm_size: "512mb"
+    init: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    environment:
+      XDG_CONFIG_HOME: /tmp/spuc-browser-ci/xdg
+      XDG_CACHE_HOME: /tmp/spuc-browser-ci/cache
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright

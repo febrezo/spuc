@@ -105,14 +105,14 @@ const STIX_OBSERVABLE_FIELDS = {
 const STIX_OBSERVABLES = Object.keys(STIX_OBSERVABLE_FIELDS);
 
 const COMPATIBILITY_GROUPS = [
-  { name: "SIEM", targets: ["sigma", "eql", "kql"] },
+  { name: "SIEM/EDR", targets: ["sigma", "eql", "kql", "cytomic-orion-sql"] },
   { name: "IDS", targets: ["snort", "suricata"] },
   { name: "Content", targets: ["yara"] },
 ];
-let RULE_OUTPUT_TARGETS = ["kql", "sigma", "eql", "snort", "suricata", "yara"];
+let RULE_OUTPUT_TARGETS = ["kql", "sigma", "eql", "cytomic-orion-sql", "snort", "suricata", "yara"];
 const RULE_EMULATION_TARGETS = ["spuc-agent", "bash", "powershell", "atomic-red-team", "mitre-caldera"];
 const ADVERSARY_EXPORTERS = ["spuc-agent", "bash", "powershell", "atomic-red-team", "mitre-caldera"];
-const RULE_COLUMN_KEYS = ["name", "confidence", "tlp", "pap", "rule", "outputs", "emulation"];
+const RULE_COLUMN_KEYS = ["name", "confidence", "tlp", "pap", "rule", "outputs"];
 const ADVERSARY_COLUMN_KEYS = ["name", "confidence", "tlp", "pap", "steps", "platforms", "exporters"];
 const PAYLOAD_COLUMN_KEYS = ["name", "technology", "runner", "description"];
 const DEFAULT_ADVERSARY_ECOSYSTEMS = ["linux", "windows", "macos"];
@@ -125,10 +125,6 @@ const ROUTE_META = {
   "rules-create": { title: "route.rulelab.title", subtitle: "route.rulelab.subtitle" },
   "rules-import": { title: "route.rules.title", subtitle: "route.rules.subtitle" },
   rulelab: { title: "route.rulelab.title", subtitle: "route.rulelab.subtitle" },
-  adversaries: { title: "route.adversaries.title", subtitle: "route.adversaries.subtitle" },
-  "adversaries-catalog": { title: "route.adversaries.title", subtitle: "route.adversaries.subtitle" },
-  "adversaries-create": { title: "route.adversaries.title", subtitle: "route.adversaries.subtitle" },
-  "adversaries-payloads": { title: "route.payloads.title", subtitle: "route.payloads.subtitle" },
   "stix-objects": { title: "route.stix_objects.title", subtitle: "route.stix_objects.subtitle" },
   "stix-objects-catalog": { title: "route.stix_objects.title", subtitle: "route.stix_objects.subtitle" },
   learning: { title: "route.learning.title", subtitle: "route.learning.subtitle" },
@@ -190,71 +186,6 @@ function adversaryEcosystemOptions() {
       .map((value) => String(value || "").trim().toLowerCase())
       .filter(Boolean),
   ];
-}
-
-function normalizeCustomPayloadEntry(entry = {}) {
-  const id = String(entry.id || `payload-${Date.now()}`);
-  const technology = String(entry.technology || "bash").toLowerCase();
-  const runner = String((entry.compatibleRunners || [])[0] || "spuc-agent").toLowerCase();
-  const content = String(entry.content || entry.payload || entry.body || entry.command || "");
-  return {
-    id,
-    name: String(entry.name || "").trim(),
-    technology,
-    compatibleRunners: [runner],
-    description: String(entry.description || "").trim(),
-    content,
-    createdAt: String(entry.createdAt || new Date().toISOString()),
-    updatedAt: String(entry.updatedAt || entry.createdAt || new Date().toISOString()),
-  };
-}
-
-function resetPayloadCatalogFilters() {
-  const searchInput = document.getElementById("payload-catalog-search");
-  if (searchInput instanceof HTMLInputElement) {
-    searchInput.value = "";
-  }
-  ["payload-catalog-tech", "payload-catalog-runner"].forEach((id) => {
-    const select = document.getElementById(id);
-    if (select instanceof HTMLSelectElement) {
-      Array.from(select.options).forEach((option) => {
-        option.selected = false;
-      });
-    }
-  });
-}
-
-function persistCustomPayloadCatalog() {
-  try {
-    localStorage.setItem(CUSTOM_PAYLOADS_STORAGE_KEY, JSON.stringify(state.customPayloads.entries || []));
-  } catch (_error) {
-    // Keep UX resilient if localStorage is unavailable.
-  }
-}
-
-function loadCustomPayloadCatalog() {
-  try {
-    const raw = localStorage.getItem(CUSTOM_PAYLOADS_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    const entries = Array.isArray(parsed)
-      ? parsed.map((entry) => normalizeCustomPayloadEntry(entry)).filter((entry) => entry.name && entry.content)
-      : [];
-    state.customPayloads.entries = entries;
-    state.customPayloads.loaded = true;
-    state.customPayloads.editingId = "";
-    state.customPayloads.selected = new Set();
-    state.adversaryCompose.customPayloads = [...entries];
-  } catch (_error) {
-    state.customPayloads.entries = [];
-    state.customPayloads.loaded = true;
-    state.customPayloads.editingId = "";
-    state.customPayloads.selected = new Set();
-    state.adversaryCompose.customPayloads = [];
-  }
-  if ((state.route === "adversaries-payloads" || state.adversaries.workspaceMode === "payloads")
-    && document.getElementById("payload-catalog-table")) {
-    renderAdversaryWorkspace();
-  }
 }
 
 function loadLearningProgress() {
@@ -1005,7 +936,6 @@ function configureDetailTabs(mode = "json") {
   if (mode === "rule") {
     const overviewLabel = t("detail.rule.tab.overview");
     const detectionLabel = t("detail.rule.tab.detection");
-    const emulationLabel = t("detail.rule.tab.emulation");
     overviewBtn.classList.remove("hidden");
     overviewBtn.innerHTML = `<span class="detail-tab-content"><i class="fa-solid fa-circle-info detail-tab-icon" aria-hidden="true"></i><span>${escapeHtml(overviewLabel)}</span></span>`;
     overviewBtn.dataset.action = "rule-detail-tab";
@@ -1017,11 +947,11 @@ function configureDetailTabs(mode = "json") {
     viewBtn.dataset.tab = "detection";
     viewBtn.title = detectionLabel;
     viewBtn.setAttribute("aria-label", detectionLabel);
-    jsonBtn.innerHTML = `<span class="detail-tab-content"><i class="fa-solid fa-gears detail-tab-icon" aria-hidden="true"></i><span>${escapeHtml(emulationLabel)}</span></span>`;
-    jsonBtn.dataset.action = "rule-detail-tab";
-    jsonBtn.dataset.tab = "emulation";
-    jsonBtn.title = emulationLabel;
-    jsonBtn.setAttribute("aria-label", emulationLabel);
+    jsonBtn.textContent = "JSON";
+    jsonBtn.dataset.action = "detail-tab";
+    jsonBtn.dataset.tab = "json";
+    jsonBtn.title = "JSON";
+    jsonBtn.setAttribute("aria-label", "JSON");
     if (inlineEditBtn) {
       inlineEditBtn.classList.remove("hidden");
       inlineEditBtn.title = t("rules.edit");
@@ -1331,6 +1261,12 @@ async function copyPromptToClipboard(text) {
 function targetLabel(target, family = "emulation") {
   const normalized = String(target || "").toLowerCase();
   if (family === "detection") {
+    const mapping = {
+      "cytomic-orion-sql": "Cytomic",
+    };
+    if (mapping[normalized]) {
+      return mapping[normalized];
+    }
     if (normalized.startsWith("sigma-to-")) {
       return normalized.toUpperCase();
     }
@@ -1344,6 +1280,11 @@ function targetLabel(target, family = "emulation") {
     "mitre-caldera": "MITRE CALDERA",
   };
   return mapping[normalized] || String(target || "");
+}
+
+function isDetectionTarget(target) {
+  const normalized = String(target || "").toLowerCase();
+  return RULE_OUTPUT_TARGETS.includes(normalized) || normalized.startsWith("sigma-to-");
 }
 
 function detailBadgeText(mode, target) {
@@ -1365,11 +1306,6 @@ function inlineHelpTip(text) {
       <span class="help-tip-content">${escapeHtml(text)}</span>
     </span>
   `;
-}
-
-function availableRuleEmulationTargets(entry) {
-  if (!entry?.ability_id) return [];
-  return RULE_EMULATION_TARGETS.filter((target) => statusBucket(entry.emulation_statuses?.[target] || "unsupported") !== "unsupported");
 }
 
 function openDetail(title, payload, extra = "") {
@@ -1419,11 +1355,6 @@ function closeDetailDialogIfOpen() {
   if (dialog instanceof HTMLDialogElement && dialog.open) {
     dialog.close();
   }
-}
-
-async function ensureAbilitiesLoaded() {
-  if ((state.abilities.entries || []).length > 0) return;
-  await loadAbilities();
 }
 
 function resolveAdversaryPlanSteps(stepIds = []) {
@@ -1587,48 +1518,6 @@ function renderAdversaryViewExport(adversary, stepEntries) {
       </article>
     </section>
   `;
-}
-
-function renderAdversaryDetailMain(adversary) {
-  const mount = document.getElementById("adversary-editor-mount");
-  if (!mount) return;
-  const activeTab = state.adversaryView.activeTab || "summary";
-  const stepEntries = resolveAdversaryPlanSteps(adversary.ability_refs || []);
-  let body = "";
-  if (activeTab === "plan") body = renderAdversaryViewPlan(stepEntries);
-  else if (activeTab === "export") body = renderAdversaryViewExport(adversary, stepEntries);
-  else body = renderAdversaryViewSummary(adversary, stepEntries);
-
-  mount.innerHTML = `
-    <article class="glass detail-card adversary-main-view">
-      <div class="adversary-main-tabs" role="tablist" aria-label="${escapeHtml(t("adversaries.detail.tabs_aria"))}">
-        ${renderAdversaryMainTabs(activeTab)}
-      </div>
-      ${body}
-    </article>
-  `;
-}
-
-function setAdversaryDetailTab(tab) {
-  const normalized = ["summary", "plan", "export", "json"].includes(tab) ? tab : "summary";
-  state.adversaryView.activeTab = normalized;
-  if (state.adversaryView.entry) {
-    renderAdversaryDetailMain(state.adversaryView.entry);
-  }
-}
-
-async function openAdversaryDetail(adversaryId) {
-  if (!adversaryId) return;
-  await ensureAbilitiesLoaded();
-  const adversary = await api(`/api/adversaries/${encodeURIComponent(adversaryId)}`);
-  state.adversaryCompose.mode = "view";
-  state.adversaryCompose.editingId = adversary.id || null;
-  state.adversaryView.activeId = adversary.id || null;
-  state.adversaryView.activeTab = "summary";
-  state.adversaryView.entry = adversary;
-  showAdversaryEditorWorkspace();
-  renderAdversaryDetailMain(adversary);
-  renderAdversaryWorkspaceHeader();
 }
 
 function targetSummaryText(target, family) {
@@ -1845,20 +1734,18 @@ function renderRuleTechCard(entry, item, family) {
 
 function setRuleDetailTab(tab) {
   setDetailTab("view");
-  const normalized = tab === "detection" || tab === "emulation" ? tab : "overview";
+  const normalized = tab === "detection" ? tab : "overview";
   state.ruleDetail.activeTab = normalized;
   document.querySelectorAll("[data-action='rule-detail-tab']").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.tab === normalized);
   });
   const overviewPane = document.getElementById("rule-detail-pane-overview");
   const detectionPane = document.getElementById("rule-detail-pane-detection");
-  const emulationPane = document.getElementById("rule-detail-pane-emulation");
   if (overviewPane) overviewPane.classList.toggle("hidden", normalized !== "overview");
   if (detectionPane) detectionPane.classList.toggle("hidden", normalized !== "detection");
-  if (emulationPane) emulationPane.classList.toggle("hidden", normalized !== "emulation");
   const focusTarget = state.ruleDetail.focusedTarget || "";
   if (!focusTarget) return;
-  const pane = normalized === "detection" ? detectionPane : (normalized === "emulation" ? emulationPane : null);
+  const pane = normalized === "detection" ? detectionPane : null;
   if (!pane) return;
   const node = pane
     ? Array.from(pane.querySelectorAll("[data-rule-tech-target]")).find((item) => item.getAttribute("data-rule-tech-target") === focusTarget)
@@ -1987,7 +1874,7 @@ function stixTypeBadge(stixId) {
 async function openRuleDetail(entry, options = {}) {
   state.detailDetectionExport = null;
   state.detailLlmPrompt = null;
-  const preferredTab = options.tab === "detection" || options.tab === "emulation" ? options.tab : "overview";
+  const preferredTab = options.tab === "detection" ? options.tab : "overview";
   const focusedTarget = String(options.target || "").toLowerCase();
   const indicatesList = Array.isArray(entry.indicates_list) && entry.indicates_list.length
     ? entry.indicates_list
@@ -2019,15 +1906,6 @@ async function openRuleDetail(entry, options = {}) {
     compatibilityEntries = [];
   }
 
-  let abilityPayload = null;
-  if (entry.ability_id) {
-    try {
-      abilityPayload = await api(`/api/abilities/${encodeURIComponent(entry.ability_id)}`);
-    } catch (_error) {
-      abilityPayload = null;
-    }
-  }
-
   const detectionRows = RULE_OUTPUT_TARGETS.map((target) => {
     const detail = compatibilityEntries.find((row) => String(row.target || "").toLowerCase() === String(target || "").toLowerCase());
     return {
@@ -2040,17 +1918,6 @@ async function openRuleDetail(entry, options = {}) {
       target_confidence: detail?.conversion_confidence,
     };
   });
-
-  const artifacts = abilityPayload?.export_artifacts || {};
-  const exportFiles = abilityPayload?.export_files || {};
-  const emulationRows = RULE_EMULATION_TARGETS.map((target) => ({
-    target,
-    status: entry.emulation_statuses?.[target] || "unsupported",
-    summary: targetSummaryText(target, "emulation"),
-    output: artifacts[target] || artifacts[String(target || "").toLowerCase()] || "",
-    target_confidence: abilityPayload?.emulation_level || "-",
-    export_files: exportFiles,
-  }));
 
   const observablesAndRelationsSection = `
       <section class="detail-section rule-detail-context-section">
@@ -2088,9 +1955,6 @@ async function openRuleDetail(entry, options = {}) {
 
   const detectionExportRows = detectionRows
     .filter((item) => String(item.output || "").trim().length > 0);
-  const emulationExportRows = emulationRows
-    .filter((item) => String(item.output || "").trim().length > 0);
-
   const view = `
     <div id="rule-detail-pane-overview" class="rule-tech-list">
       <section class="detail-section">
@@ -2141,26 +2005,11 @@ async function openRuleDetail(entry, options = {}) {
         ${detectionRows.map((item) => renderRuleTechCard(entry, item, "detection")).join("")}
       </div>
     </section>
-    <section class="detail-section hidden" id="rule-detail-pane-emulation">
-      <div class="rule-detail-export-row">
-        <div class="rule-export-combo">
-          <button class="btn btn-success" data-action="rule-detail-export" data-family="emulation" ${entry.ability_id && emulationExportRows.length ? "" : "disabled"}>${escapeHtml(t("detail.rule.export"))}</button>
-          <select id="rule-detail-export-emulation-target" class="rule-export-select" ${entry.ability_id && emulationExportRows.length ? "" : "disabled"}>
-            ${emulationExportRows
-              .map((item) => `<option value="${escapeHtml(String(item.target || ""))}">${escapeHtml(targetLabel(item.target, "emulation"))}</option>`)
-              .join("")}
-          </select>
-        </div>
-      </div>
-      <div class="rule-tech-list">
-        ${emulationRows.map((item) => renderRuleTechCard(entry, item, "emulation")).join("")}
-      </div>
-    </section>
   `;
 
   state.ruleDetail.entry = entry;
   state.ruleDetail.detectionRows = detectionRows;
-  state.ruleDetail.emulationRows = emulationRows;
+  state.ruleDetail.emulationRows = [];
   state.ruleDetail.focusedTarget = focusedTarget;
   setDetailTitle(entry.name || t("rules.col.rule"), entry.id || "");
   setDetailModalMode("detection", t("detail.stix_pattern"), "");
@@ -2261,6 +2110,9 @@ function detectionUtilityLinks(target) {
   }
   if (normalized === "eql") {
     return [{ label: "Elastic EQL", url: "https://www.elastic.co/guide/en/elasticsearch/reference/current/eql.html" }];
+  }
+  if (normalized === "cytomic-orion-sql") {
+    return [{ label: "Cytomic", url: "https://www.cytomicmodel.com/" }];
   }
   if (normalized === "snort") {
     return [{ label: "Snort", url: "https://www.snort.org/" }];
@@ -2447,125 +2299,6 @@ function defaultEmulationExportFileName(abilityId, target) {
   return `${id}-${normalized.replaceAll("-", "_")}.${extension}`;
 }
 
-function renderEmulationDetonationGuide(target, payload = {}) {
-  const links = emulationUtilityLinks(target);
-  const command = emulationExecutionCommand(target, payload);
-  if (!command) return "";
-  const steps = ruleExportHintSteps(target);
-  const linksHtml = links.length
-    ? `<ul class="hint-steps">${links.map((item) => `<li><a href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(item.label)}</a></li>`).join("")}</ul>`
-    : `<div class="muted">${escapeHtml(t("detail.emulation.no_links"))}</div>`;
-  const commandHtml = command
-    ? `<pre class="detail-code">${escapeHtml(command)}</pre>`
-    : `<div class="muted">${escapeHtml(t("detail.emulation.no_command"))}</div>`;
-  return `
-    <section class="detail-section">
-      <h4>${escapeHtml(t("detail.emulation.detonation"))}</h4>
-      ${steps}
-    </section>
-    <section class="detail-section">
-      <h4>${escapeHtml(t("detail.emulation.command"))}</h4>
-      ${commandHtml}
-    </section>
-    <section class="detail-section">
-      <h4>${escapeHtml(t("detail.emulation.utility_links"))}</h4>
-      ${linksHtml}
-    </section>
-  `;
-}
-
-function openEmulationDetail(title, stixRule, payload) {
-  state.detailDetectionExport = null;
-  const selectedTarget = String(payload?.selected_target || "").toLowerCase();
-  const availableTargets = Array.isArray(payload?.available_targets) && payload.available_targets.length
-    ? [...new Set(payload.available_targets.map((target) => String(target || "").toLowerCase()).filter(Boolean))]
-    : (selectedTarget ? [selectedTarget] : []);
-  const initialTarget = availableTargets.includes(selectedTarget) ? selectedTarget : (availableTargets[0] || selectedTarget);
-  const alternateTargets = availableTargets.filter((target) => target !== initialTarget);
-  const canExport = Boolean(payload?.ability_id && initialTarget);
-  const actions = Array.isArray(payload?.actions) ? payload.actions : [];
-  const actionsHtml = actions.length
-    ? actions
-      .map(
-        (action, index) => `
-          <section class="detail-section">
-            <h4>${escapeHtml(tf("detail.action_n", { n: index + 1 }))}: ${escapeHtml(action.action_type || t("common.na"))}</h4>
-            <div class="detail-grid">
-              <div class="detail-kv"><span class="label">${escapeHtml(t("detail.observable"))}</span><code>${escapeHtml(action.observable || "-")}</code></div>
-              <div class="detail-kv"><span class="label">${escapeHtml(t("detail.operator"))}</span><code>${escapeHtml(action.operator || "-")}</code></div>
-              <div class="detail-kv"><span class="label">${escapeHtml(t("detail.value"))}</span><code>${escapeHtml(action.value || "-")}</code></div>
-            </div>
-            <pre class="detail-code">${escapeHtml(action.safe_instructions || t("detail.no_instructions"))}</pre>
-          </section>
-        `,
-      )
-      .join("")
-    : `<section class="detail-section"><div class="muted">${escapeHtml(t("detail.no_actions"))}</div></section>`;
-
-  const view = `
-    <section class="detail-section">
-      <h4>${escapeHtml(t("detail.emulation.summary"))}</h4>
-      <div class="detail-grid">
-        <div class="detail-kv"><span class="label">${escapeHtml(t("detail.ability"))}</span><code>${escapeHtml(payload?.ability_name || "-")}</code></div>
-        <div class="detail-kv"><span class="label">${escapeHtml(t("detail.ability_id"))}</span><code>${escapeHtml(payload?.ability_id || "-")}</code></div>
-        <div class="detail-kv"><span class="label">TTP</span><code>${escapeHtml(payload?.ttp || "-")}</code></div>
-        <div class="detail-kv"><span class="label">${escapeHtml(t("detail.level"))}</span><code>${escapeHtml(payload?.emulation_level || "-")}</code></div>
-        <div class="detail-kv"><span class="label">${escapeHtml(t("detail.platforms"))}</span><code>${escapeHtml((payload?.platforms || []).join(", ") || "-")}</code></div>
-        <div class="detail-kv"><span class="label">${escapeHtml(t("detail.classification"))}</span><code>${escapeHtml(payload?.classification || "-")}</code></div>
-      </div>
-      ${payload?.note ? `<div class="muted">${escapeHtml(payload.note)}</div>` : ""}
-    </section>
-    <section class="detail-section">
-      <h4>${escapeHtml(t("detail.emulation.available_exports"))}</h4>
-      <div class="chip-list">
-        ${alternateTargets.map((target) => `<span class="rule-observable-tag">${escapeHtml(targetLabel(target, "emulation"))}</span>`).join("") || `<span class="muted">${escapeHtml(t("common.no_data"))}</span>`}
-      </div>
-    </section>
-    <section class="detail-section">
-      <div class="detail-code-wrap">
-        <div class="detail-code-head">
-          <h4>${escapeHtml(t("detail.stix_rule"))}</h4>
-          ${copyButtonFor(stixRule, t("detail.copy_rule"))}
-        </div>
-        <pre class="detail-code">${escapeHtml(stixRule || "")}</pre>
-      </div>
-    </section>
-    <section class="detail-section">
-      <h4>${escapeHtml(t("detail.emulation.available_exports"))}</h4>
-      <div class="stack">
-        ${availableTargets.length
-          ? availableTargets
-            .map((target) => {
-              const artifacts = payload?.export_artifacts || {};
-              const content = artifacts[target] || artifacts[String(target || "").toLowerCase()] || "";
-              const heading = targetLabel(target, "emulation");
-              return `
-                <div class="detail-code-wrap">
-                  <div class="detail-code-head">
-                    <h4>${escapeHtml(heading)}</h4>
-                    ${copyButtonFor(String(content || ""), t("common.copy"))}
-                  </div>
-                  <pre class="detail-code">${escapeHtml(String(content || "").trim() || t("detail.no_output_for_target"))}</pre>
-                </div>
-              `;
-            })
-            .join("")
-          : `<span class="muted">${escapeHtml(t("common.no_data"))}</span>`}
-      </div>
-    </section>
-    ${actionsHtml}
-    ${initialTarget ? `<section id="emulation-detonation-guide">${renderEmulationDetonationGuide(initialTarget, payload)}</section>` : ""}
-  `;
-  document.getElementById("detail-title").textContent = title;
-  setDetailModalMode("emulation", detailBadgeText("emulation", initialTarget || selectedTarget), payload?.status || "unsupported");
-  document.getElementById("detail-view").innerHTML = view;
-  document.getElementById("detail-raw").textContent = "";
-  document.getElementById("detail-actions").innerHTML = renderDetailActions(
-    `<button class="btn btn-success" data-action="emulation-export-download" data-ability="${escapeHtml(payload?.ability_id || "")}" data-target="${escapeHtml(initialTarget || "")}" ${canExport ? "" : "disabled"}>${escapeHtml(t("detail.emulation.download_payload"))}</button>`,
-  );
-  setDetailTab("view");
-  document.getElementById("detail-dialog").showModal();
-}
 
 function renderTable(tableId, headers, rows) {
   const table = document.getElementById(tableId);
@@ -2815,22 +2548,17 @@ function applyNavSelection(route) {
 }
 
 function setRoute(route) {
+  // Retired routes may remain in browser storage after an upgrade.
+  if (typeof route === "string" && route.startsWith("adversaries")) route = "home";
   if (!ROUTE_META[route]) route = "home";
   if (route === "rules-import" || route === "rules-catalog") route = "rules";
-  if (route === "adversaries-catalog") route = "adversaries";
   state.route = route;
-  if (route !== "adversaries-create") {
-    document.getElementById("panel-adversary-editor")?.classList.add("hidden");
-    document.getElementById("panel-adversary-editor")?.classList.remove("active");
-  }
   const panelRoute = route === "rules-create"
     ? "rulelab"
     : route.startsWith("rules-")
     ? "rules"
-    : route.startsWith("adversaries-")
-      ? "adversaries"
-      : route.startsWith("stix-objects")
-        ? "stix-objects"
+    : route.startsWith("stix-objects")
+      ? "stix-objects"
       : route;
   applyNavSelection(route);
   document.querySelectorAll(".panel").forEach((panel) => {
@@ -2851,17 +2579,6 @@ function setRoute(route) {
     updateRuleLabEditingContext();
     setTimeout(() => document.getElementById("rulelab-input")?.focus(), 0);
   }
-  if (panelRoute === "adversaries") {
-    state.adversaries.workspaceMode = route === "adversaries-payloads" ? "payloads" : "catalog";
-    if (route === "adversaries-payloads") {
-      resetPayloadCatalogFilters();
-    }
-    renderAdversaryWorkspace();
-    loadAdversaries();
-    if (route === "adversaries-create") {
-      setTimeout(() => createNewAdversaryInEditor(), 0);
-    }
-  }
   if (panelRoute === "stix-objects") {
     state.stixObjectsView.workspaceMode = route === "stix-objects-catalog" ? "catalog" : "welcome";
     renderStixObjectsWorkspace();
@@ -2881,7 +2598,7 @@ function normalizeDetectionTargets(values) {
     ? [...new Set(values.map((item) => String(item || "").toLowerCase()).filter(Boolean))]
     : [];
   if (normalized.length > 0) return normalized;
-  return ["kql", "sigma", "eql", "snort", "suricata", "yara"];
+  return ["kql", "sigma", "eql", "cytomic-orion-sql", "snort", "suricata", "yara"];
 }
 
 async function bootstrap() {
@@ -2889,7 +2606,6 @@ async function bootstrap() {
   state.principal = state.bootstrap.auth.principal || null;
   applyBootstrapPreferences();
   RULE_OUTPUT_TARGETS = normalizeDetectionTargets(state.bootstrap?.translation?.available_targets);
-  loadCustomPayloadCatalog();
 
   populateFooter();
   setupLoginProviders();
@@ -2938,7 +2654,7 @@ function enterApplication() {
 }
 
 async function loadSharedData() {
-  await Promise.all([loadOverview(), loadRules(), loadAbilities(), loadAdversaries(), loadStixObjects(), loadMitreAttack()]);
+  await Promise.all([loadOverview(), loadRules(), loadStixObjects(), loadMitreAttack()]);
   await loadLearning();
   if (state.principal?.role === "admin") {
     await loadAdminRuntimeSettings();
@@ -2950,7 +2666,6 @@ async function loadSharedData() {
     }
   }
   renderDashboard();
-  renderAdversaryAbilitySelector();
 }
 
 async function loadOverview() {
@@ -2975,10 +2690,7 @@ function renderDashboard() {
   const kpis = state.overview.kpis;
   document.getElementById("kpi-grid").innerHTML = [
     [t("kpi.rules"), kpis.rules_total],
-    [t("kpi.adversaries"), kpis.adversaries_total],
-    [t("kpi.abilities"), kpis.abilities_total],
-    [t("kpi.destinations"), kpis.supported_destinations],
-    [t("kpi.engines"), kpis.engines_available],
+    [t("kpi.destinations"), kpis.targets],
   ]
     .map(
       ([label, value]) => `
@@ -2993,7 +2705,6 @@ function renderDashboard() {
   renderBarChart("status-chart", state.overview.statuses, ["#39c47a", "#e3b341", "#ef6461"]);
   renderBarChart("platform-chart", state.overview.top_platforms, ["#4d8dff", "#3fd5e0", "#8a78ff"]);
   renderBarChart("target-chart", state.overview.top_targets, ["#4d8dff", "#3fd5e0", "#8a78ff"]);
-  renderCoverageChart("emulation-coverage-chart", state.overview.emulation_coverage, ["#4d8dff", "#3fd5e0", "#8a78ff", "#39c47a", "#e3b341"]);
   renderBarChart("observable-chart", state.overview.top_observables, ["#8a78ff", "#4d8dff", "#3fd5e0", "#39c47a"]);
   refreshCustomComboboxes(document);
 }
@@ -3007,6 +2718,7 @@ function detectRuleTypes(entry) {
     return (normalized === "kql"
       || normalized === "sigma"
       || normalized === "eql"
+      || normalized === "cytomic-orion-sql"
       || normalized.startsWith("sigma-to-"))
       && statusBucket(status) !== "unsupported";
   });
@@ -3272,11 +2984,6 @@ function scheduleStixObjectSearch() {
       showToast("stix_objects.opencti_error", true, { variant: "error" });
     });
   }, state.stixObjectsView.source === "opencti" ? 350 : 120);
-}
-
-function openPayloadCatalogDocs() {
-  const url = state.bootstrap?.app?.documentation_url || PROJECT_LINKS.documentation;
-  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 async function importStixObjectsFromFile(file) {
@@ -3738,25 +3445,6 @@ function renderAdversariesColumnPicker() {
     .join("");
 }
 
-function renderPayloadsColumnPicker() {
-  const menu = document.getElementById("payloads-columns-menu");
-  if (!menu) return;
-  const columns = PAYLOAD_COLUMN_KEYS;
-  menu.innerHTML = columns
-    .map((column) => `
-      <label class="column-menu-item">
-        <input
-          type="checkbox"
-          data-action="payloads-column-toggle"
-          data-column="${column}"
-          ${state.customPayloads.visibleColumns.has(column) ? "checked" : ""}
-        >
-        <span>${escapeHtml(payloadColumnLabel(column))}</span>
-      </label>
-    `)
-    .join("");
-}
-
 function setColumnVisibility(targetSet, column, checked, allColumns) {
   if (!allColumns.includes(column)) return false;
   if (checked) {
@@ -3808,9 +3496,6 @@ function ruleColumnExportValue(entry, column) {
   if (column === "outputs") {
     return summarizeTargetStatuses(entry.target_statuses, RULE_OUTPUT_TARGETS);
   }
-  if (column === "emulation") {
-    return summarizeTargetStatuses(entry.emulation_statuses, RULE_EMULATION_TARGETS);
-  }
   return "";
 }
 
@@ -3840,6 +3525,7 @@ function detectionExportExtension(target) {
   if (normalized.startsWith("sigma-to-")) return "txt";
   if (normalized === "kql") return "kql";
   if (normalized === "eql") return "eql";
+  if (normalized === "cytomic-orion-sql") return "sql";
   if (normalized === "snort" || normalized === "suricata") return "rules";
   if (normalized === "yara") return "yar";
   return "txt";
@@ -3989,26 +3675,6 @@ async function duplicateSelectedRules() {
   await loadRules(state.rules.page);
 }
 
-async function duplicateSelectedAdversaries() {
-  const selected = state.adversaries.allEntries.filter((entry) => state.adversaries.selected.has(entry.id));
-  if (!selected.length) return;
-  for (const entry of selected) {
-    const detail = await api(`/api/adversaries/${encodeURIComponent(entry.id)}`);
-    await api("/api/adversaries", {
-      method: "POST",
-      body: JSON.stringify({
-        name: `${detail.name || entry.name || "Adversary"} (copy)`,
-        description: detail.description || entry.description || "",
-        confidence: Number(detail.confidence || entry.confidence || 70),
-        ability_ids: detail.ability_refs || [],
-        order: detail.ability_refs || [],
-      }),
-    });
-  }
-  showToast("toast.saved");
-  await loadAdversaries(state.adversaries.page);
-}
-
 function updateRulesBulkState() {
   const count = state.rules.selected.size;
   const filteredEntries = applyRulesClientFilters(state.rules.allEntries);
@@ -4063,15 +3729,6 @@ function renderRulesCards() {
           }),
         )
         .join("");
-      const emulationChips = RULE_EMULATION_TARGETS
-        .map((target) =>
-          renderStatusChip(targetLabel(target, "emulation"), entry.emulation_statuses?.[target] || "unsupported", "rule-emulation-detail", {
-            rule: entry.id,
-            target,
-            ability: entry.ability_id || "",
-          }),
-        )
-        .join("");
       const globalStatus = ruleStatusFromEntry(entry);
       const stixObjectsTitle = indicatesList.length
         ? indicatesList.map((item) => [item.object_name, item.stix_id].filter(Boolean).join(" | ")).join("\n")
@@ -4119,10 +3776,6 @@ function renderRulesCards() {
                 <span class="rule-card-pill-label">${escapeHtml(t("detail.rule.tab.detection_short"))}</span>
                 <div class="chip-list">${outputChips}</div>
               </div>
-              <div class="rule-card-pill-group">
-                <span class="rule-card-pill-label">${escapeHtml(t("rules.col.emulation"))}</span>
-                <div class="chip-list">${emulationChips}</div>
-              </div>
             </div>
           </section>
 
@@ -4159,7 +3812,6 @@ function setRulesViewMode(mode) {
 
 function renderRulesTable() {
   const outputTargets = RULE_OUTPUT_TARGETS;
-  const emulationTargets = RULE_EMULATION_TARGETS;
   const currentSort = state.rules.sort || "confidence_desc";
   const filtered = applyRulesClientFilters(state.rules.allEntries);
   state.rules.total = filtered.length;
@@ -4178,16 +3830,6 @@ function renderRulesTable() {
         renderStatusChip(targetLabel(target, "detection"), entry.target_statuses?.[target] || "unsupported", "rule-target-detail", {
           rule: entry.id,
           target,
-        }),
-      )
-      .join("");
-
-    const emulationChips = emulationTargets
-      .map((target) =>
-        renderStatusChip(targetLabel(target, "emulation"), entry.emulation_statuses?.[target] || "unsupported", "rule-emulation-detail", {
-          rule: entry.id,
-          target,
-          ability: entry.ability_id || "",
         }),
       )
       .join("");
@@ -4217,14 +3859,13 @@ function renderRulesTable() {
         </td>
       `,
       `<td><div class="chip-list">${outputChips}</div></td>`,
-      `<td><div class="chip-list">${emulationChips}</div></td>`,
     ];
     return `<tr data-rule-row-id="${escapeHtml(entry.id)}">${cells.join("")}</tr>`;
   });
 
   const emptyRow = `
     <tr class="table-empty-row">
-      <td colspan="7">${escapeHtml(t("common.no_data"))}</td>
+      <td colspan="6">${escapeHtml(t("common.no_data"))}</td>
     </tr>
   `;
 
@@ -4235,7 +3876,6 @@ function renderRulesTable() {
     `<th>${escapeHtml(rulesColumnLabel("markings"))}</th>`,
     `<th>${escapeHtml(t("rules.col.rule"))}</th>`,
     `<th>${escapeHtml(t("rules.col.outputs"))}</th>`,
-    `<th>${escapeHtml(t("rules.col.emulation"))}</th>`,
   ];
 
   const table = document.getElementById("rules-table");
@@ -4567,15 +4207,6 @@ function updateAdversariesViewModeUI() {
   if (columnsToggle) columnsToggle.disabled = mode !== "table";
 }
 
-function setAdversariesViewMode(mode) {
-  state.adversaries.viewMode = mode === "table" ? "table" : "cards";
-  localStorage.setItem("spuc-web-adversaries-view-mode", state.adversaries.viewMode);
-  updateAdversariesViewModeUI();
-  if (state.adversaries.allEntries.length > 0) {
-    renderAdversariesTable();
-  }
-}
-
 function renderAdversariesTable() {
   const isVisible = (column) => state.adversaries.visibleColumns.has(column);
   const markingsVisible = isVisible("tlp") || isVisible("pap");
@@ -4676,24 +4307,6 @@ function renderAdversariesTable() {
   document.getElementById("adversaries-meta").textContent = `${state.adversaries.entries.length}/${state.adversaries.total} ${t("common.entries")} · ${modeLabel}`;
   renderPager("adversaries-pager", state.adversaries.page, state.adversaries.pageSize, state.adversaries.total, "adversaries");
   updateAdversariesBulkState();
-}
-
-async function toggleAdversariesSortColumn(column) {
-  const current = state.adversaries.sort || "confidence_desc";
-  const pairs = {
-    name: { asc: "name_asc", desc: "name_desc" },
-    confidence: { asc: "confidence_asc", desc: "confidence_desc" },
-    tlp: { asc: "tlp_asc", desc: "tlp_desc" },
-    pap: { asc: "pap_asc", desc: "pap_desc" },
-    steps: { asc: "steps_asc", desc: "steps_desc" },
-    platforms: { asc: "platforms_asc", desc: "platforms_desc" },
-  };
-  const pair = pairs[column];
-  if (!pair) return;
-  const next = current === pair.asc ? pair.desc : pair.asc;
-  state.adversaries.sort = next;
-  state.adversaries.page = 1;
-  renderAdversariesTable();
 }
 
 async function loadAdversaries(page = state.adversaries.page) {
@@ -4973,52 +4586,6 @@ function renderAdversaryAbilityFilterOptions() {
   setSelectOptions(destinationNode, destinations, t("common.all_destinations"), state.adversaryCompose.destination);
 }
 
-async function createDummyAbility(params) {
-  const response = await api("/api/abilities/dummy", {
-    method: "POST",
-    body: JSON.stringify(params),
-  });
-  await loadAbilities();
-  const newId = String(response?.id || "").trim();
-  if (newId && !state.adversaryCompose.selectedOrder.includes(newId)) {
-    state.adversaryCompose.selectedOrder.push(newId);
-  }
-  renderAdversaryAbilitySelector();
-  scheduleAdversaryAutoSave();
-  showToast("toast.saved");
-}
-
-async function createAbilityFromCustomPayload(payload) {
-  const response = await api("/api/abilities/dummy", {
-    method: "POST",
-    body: JSON.stringify({
-      kind: "custom_payload",
-      name: payload.name,
-      description: payload.description || "",
-      platform: payloadPlatformForComposer(),
-      runner: (payload.compatibleRunners || [])[0] || "spuc-agent",
-      payload_language: payload.technology || (payload.compatibleRunners || [])[0] || "bash",
-      payload: payload.content || "",
-      safety_notes: t("adversaries.payload.safety"),
-    }),
-  });
-  await loadAbilities();
-  const abilityId = String(response?.id || "").trim();
-  if (!abilityId) {
-    throw new Error("custom_payload_ability_missing");
-  }
-  return abilityId;
-}
-
-function addAbilityIdToAdversaryFlow(abilityId) {
-  if (!abilityId) return;
-  if (!state.adversaryCompose.selectedOrder.includes(abilityId)) {
-    state.adversaryCompose.selectedOrder.push(abilityId);
-  }
-  state.adversaryCompose.editorSelectedStepId = abilityId;
-  renderAdversaryFlowSteps();
-}
-
 function filteredAdversaryAbilities() {
   const search = state.adversaryCompose.search.toLowerCase();
   const platform = state.adversaryCompose.platform.toLowerCase();
@@ -5054,15 +4621,6 @@ function filteredAdversaryAbilities() {
       .toLowerCase();
     return haystack.includes(search);
   });
-}
-
-function moveAdversarySelectedAbility(id, direction) {
-  const order = state.adversaryCompose.selectedOrder;
-  const index = order.indexOf(id);
-  if (index < 0) return;
-  const targetIndex = index + direction;
-  if (targetIndex < 0 || targetIndex >= order.length) return;
-  [order[index], order[targetIndex]] = [order[targetIndex], order[index]];
 }
 
 function renderAdversaryAbilitySelector() {
@@ -5149,28 +4707,6 @@ function renderAdversaryAbilitySelector() {
   renderAdversaryExecutionCriteria();
   renderAdversaryValidationSummary();
   setAdversaryFormSubmitState();
-}
-
-function setAdversaryTab(tab) {
-  const normalized = tab === "criteria" ? "criteria" : "plan";
-  state.adversaryCompose.activeTab = normalized;
-  const settings = document.getElementById("adversary-pane-plan-settings");
-  const selected = document.getElementById("adversary-pane-plan-selected");
-  const customPayload = document.getElementById("adversary-pane-custom-payload");
-  const criteria = document.getElementById("adversary-pane-criteria");
-  if (settings) settings.classList.toggle("hidden", normalized !== "plan");
-  if (selected) selected.classList.toggle("hidden", normalized !== "plan");
-  if (customPayload) customPayload.classList.toggle("hidden", normalized !== "plan");
-  if (criteria) criteria.classList.toggle("hidden", normalized !== "criteria");
-  document.querySelectorAll("[data-action='adversary-tab']").forEach((button) => {
-    button.classList.toggle("active", button.dataset.tab === normalized);
-  });
-  if (normalized === "criteria") {
-    const target = selectedAdversaryExportTarget();
-    if (target) {
-      void ensureAdversaryExportPreview(target);
-    }
-  }
 }
 
 function renderAdversaryEmulablePlatforms() {
@@ -5465,159 +5001,6 @@ function clearCustomPayloadForm() {
   }
 }
 
-async function addCustomPayloadStep() {
-  const name = document.getElementById("adversary-payload-name")?.value?.trim() || "";
-  const payload = document.getElementById("adversary-payload-content")?.value?.trim() || "";
-  if (!name || !payload) {
-    showToast("adversaries.payload.validation_missing", true);
-    return;
-  }
-  const runner = document.getElementById("adversary-payload-runner")?.value || "spuc-agent";
-  const payloadLanguage = document.getElementById("adversary-payload-language")?.value || runner;
-  await createDummyAbility({
-    kind: "custom_payload",
-    name,
-    description: document.getElementById("adversary-payload-description")?.value || "",
-    platform: payloadPlatformForComposer(),
-    runner,
-    payload_language: payloadLanguage,
-    payload,
-    safety_notes: t("adversaries.payload.safety"),
-  });
-  clearCustomPayloadForm();
-}
-
-function openAdversaryAbilityPicker() {
-  const dialog = document.getElementById("adversary-ability-picker-dialog");
-  if (!(dialog instanceof HTMLDialogElement)) return;
-  setAdversaryPickerTab("catalog");
-  renderAdversaryAbilitySelector();
-  dialog.showModal();
-  setTimeout(() => document.getElementById("adversary-ability-search")?.focus(), 0);
-}
-
-function openAdversaryPayloadPicker() {
-  const dialog = document.getElementById("adversary-payload-picker-dialog");
-  if (!(dialog instanceof HTMLDialogElement)) return;
-  renderAdversaryEditorPayloadsList();
-  dialog.showModal();
-  setTimeout(() => document.getElementById("adversary-flow-payload-search")?.focus(), 0);
-}
-
-function closeAdversaryPayloadPicker() {
-  const dialog = document.getElementById("adversary-payload-picker-dialog");
-  if (dialog instanceof HTMLDialogElement) {
-    dialog.close();
-  }
-}
-
-function openAdversaryPayloadForm() {
-  const dialog = document.getElementById("adversary-payload-form-dialog");
-  if (!(dialog instanceof HTMLDialogElement)) return;
-  clearCustomPayloadForm();
-  renderCustomPayloadPreview();
-  dialog.showModal();
-  syncAdversaryPayloadEditorLanguage();
-  updateAdversaryPayloadFormSubmitState();
-  setTimeout(() => document.getElementById("adversary-flow-payload-name")?.focus(), 0);
-}
-
-function openPayloadCatalogCreateModal(payloadId = "") {
-  const dialog = document.getElementById("payload-catalog-form-dialog");
-  if (!(dialog instanceof HTMLDialogElement)) return;
-  const form = document.getElementById("payload-catalog-create-form");
-  const existing = payloadId ? (state.customPayloads.entries || []).find((entry) => entry.id === payloadId) : null;
-  state.customPayloads.editingId = existing?.id || "";
-  if (form instanceof HTMLFormElement) form.reset();
-  const title = document.getElementById("payload-catalog-form-title");
-  const submit = document.getElementById("payload-catalog-save-create");
-  if (title) {
-    title.textContent = existing ? t("payloads.create.edit_title") : t("payloads.create.title");
-  }
-  if (submit) {
-    submit.textContent = existing ? t("adversaries.payload.update") : t("adversaries.payload.save");
-    submit.classList.remove("btn-success");
-    submit.classList.add("btn-primary");
-  }
-  if (existing) {
-    const nameInput = document.getElementById("payload-catalog-create-name");
-    const techSelect = document.getElementById("payload-catalog-create-tech");
-    const descInput = document.getElementById("payload-catalog-create-desc");
-    const contentInput = document.getElementById("payload-catalog-create-content");
-    if (nameInput instanceof HTMLInputElement) nameInput.value = existing.name || "";
-    if (techSelect instanceof HTMLSelectElement) techSelect.value = existing.technology || "bash";
-    if (descInput instanceof HTMLTextAreaElement) descInput.value = existing.description || "";
-    if (contentInput instanceof HTMLTextAreaElement) contentInput.value = existing.content || "";
-  }
-  dialog.showModal();
-  syncPayloadCatalogEditorLanguage();
-  updatePayloadCatalogCreateSubmitState();
-  setTimeout(() => document.getElementById("payload-catalog-create-name")?.focus(), 0);
-}
-
-function closePayloadCatalogCreateModal() {
-  const dialog = document.getElementById("payload-catalog-form-dialog");
-  if (dialog instanceof HTMLDialogElement) dialog.close();
-  state.customPayloads.editingId = "";
-}
-
-function savePayloadFromCatalogModal() {
-  const name = String(document.getElementById("payload-catalog-create-name")?.value || "").trim();
-  const technology = String(document.getElementById("payload-catalog-create-tech")?.value || "bash").toLowerCase();
-  const compatibleRunners = PAYLOAD_TYPE_TO_RUNNERS[technology] || ["spuc-agent"];
-  const description = String(document.getElementById("payload-catalog-create-desc")?.value || "").trim();
-  const content = String(document.getElementById("payload-catalog-create-content")?.value || "");
-  if (!name || !description || !content.trim()) {
-    showToast("adversaries.payload.validation_missing", true);
-    return false;
-  }
-  const now = new Date().toISOString();
-  const editingId = String(state.customPayloads.editingId || "");
-  const existing = editingId ? (state.customPayloads.entries || []).find((entry) => entry.id === editingId) : null;
-  const payloadId = existing?.id || `payload-${Date.now()}`;
-  const entry = normalizeCustomPayloadEntry({
-    id: payloadId,
-    name,
-    technology,
-    compatibleRunners,
-    description,
-    content,
-    createdAt: existing?.createdAt || now,
-    updatedAt: now,
-  });
-  state.customPayloads.entries = existing
-    ? [entry, ...(state.customPayloads.entries || []).filter((item) => item.id !== entry.id)]
-    : [entry, ...(state.customPayloads.entries || [])];
-  state.adversaryCompose.customPayloads = [...state.customPayloads.entries];
-  state.customPayloads.expandedDetails.add(entry.id);
-  persistCustomPayloadCatalog();
-  closePayloadCatalogCreateModal();
-  resetPayloadCatalogFilters();
-  renderAdversaryWorkspace();
-  renderPayloadCatalogWorkspace();
-  showToast("toast.saved");
-  return true;
-}
-
-function closeAdversaryPayloadForm() {
-  const dialog = document.getElementById("adversary-payload-form-dialog");
-  if (dialog instanceof HTMLDialogElement) {
-    dialog.close();
-  clearCustomPayloadForm();
-  }
-}
-
-function setAdversaryPickerTab(tab) {
-  const normalized = tab === "dummy" ? "dummy" : "catalog";
-  const catalogPane = document.getElementById("adversary-picker-pane-catalog");
-  const dummyPane = document.getElementById("adversary-picker-pane-dummy");
-  if (catalogPane) catalogPane.classList.toggle("hidden", normalized !== "catalog");
-  if (dummyPane) dummyPane.classList.toggle("hidden", normalized !== "dummy");
-  document.querySelectorAll("[data-action='adversary-picker-tab']").forEach((button) => {
-    button.classList.toggle("active", button.dataset.tab === normalized);
-  });
-}
-
 function closeAdversaryAbilityPicker() {
   const dialog = document.getElementById("adversary-ability-picker-dialog");
   if (dialog instanceof HTMLDialogElement) {
@@ -5629,74 +5012,6 @@ function scheduleAdversaryAutoSave() {
   // Editing is explicit: save/cancel are controlled from the workspace header.
 }
 
-async function persistAdversaryAutosave() {
-  syncAdversaryComposerFromInputs();
-  const selected = [...state.adversaryCompose.selectedOrder];
-  const name = document.getElementById("adversary-name")?.value?.trim() || "";
-  const targetPlatform = String(document.getElementById("adversary-target-platform")?.value || "").trim().toLowerCase();
-  const description = document.getElementById("adversary-description")?.value?.trim() || "";
-  if (!name || !description) {
-    showToast("toast.error_saving", true);
-    return null;
-  }
-  const payload = {
-    name,
-    description,
-    confidence: Number(document.getElementById("adversary-confidence")?.value || 70),
-    target_platform: targetPlatform,
-    ability_ids: selected,
-    order: selected,
-  };
-  const signature = JSON.stringify(payload);
-  if (signature === state.adversaryCompose.originalSignature) {
-    if (state.adversaryCompose.editingId) {
-      return api(`/api/adversaries/${encodeURIComponent(state.adversaryCompose.editingId)}`);
-    }
-    return null;
-  }
-  state.adversaryCompose.autoSaving = true;
-  try {
-    let savedId = state.adversaryCompose.editingId || null;
-    if (state.adversaryCompose.mode === "edit" && state.adversaryCompose.editingId) {
-      await api(`/api/adversaries/${encodeURIComponent(state.adversaryCompose.editingId)}/update`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-    } else {
-      const response = await api("/api/adversaries", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      const createdId = response.id || null;
-      savedId = createdId;
-      const created = createdId ? await api(`/api/adversaries/${encodeURIComponent(createdId)}`).catch(() => response) : response;
-      state.adversaryCompose.mode = "edit";
-      state.adversaryCompose.editingId = createdId;
-      state.adversaryCompose.compatibleExports = [];
-      setAdversaryFormMode("edit", created);
-    }
-    state.adversaryCompose.originalSignature = signature;
-    const saved = savedId ? await api(`/api/adversaries/${encodeURIComponent(savedId)}`) : null;
-    if (saved) {
-      state.adversaryView.entry = saved;
-      state.adversaryView.activeId = saved.id || null;
-    }
-    return saved;
-  } finally {
-    state.adversaryCompose.autoSaving = false;
-  }
-}
-
-function adversaryFormSignature() {
-  const payload = {
-    name: document.getElementById("adversary-name")?.value?.trim() || "",
-    description: document.getElementById("adversary-description")?.value?.trim() || "",
-    confidence: Number(document.getElementById("adversary-confidence")?.value || "70"),
-    target_platform: String(document.getElementById("adversary-target-platform")?.value || "").trim().toLowerCase(),
-    selected: [...state.adversaryCompose.selectedOrder],
-  };
-  return JSON.stringify(payload);
-}
 
 function syncAdversaryModalTitle() {
   const title = document.getElementById("adversary-form-title");
@@ -5815,35 +5130,6 @@ function openAdversaryDialog() {
   }
 }
 
-async function openAdversaryEditor(adversaryId) {
-  if (!adversaryId) return;
-  await ensureAbilitiesLoaded();
-  const adversary = await api(`/api/adversaries/${encodeURIComponent(adversaryId)}`);
-  mountAdversaryEditorSurface();
-  resetAdversaryComposer();
-  document.getElementById("adversary-name").value = adversary.name || "";
-  document.getElementById("adversary-description").value = adversary.description || "";
-  const targetPlatform = document.getElementById("adversary-target-platform");
-  if (targetPlatform instanceof HTMLSelectElement) {
-    targetPlatform.value = String(adversary.target_platform || "").trim().toLowerCase();
-  }
-  state.adversaryCompose.selectedOrder = Array.isArray(adversary.ability_refs)
-    ? [...adversary.ability_refs]
-    : [];
-  state.adversaryView.entry = adversary;
-  state.adversaryView.activeId = adversary.id || null;
-  state.adversaryView.activeTab = "plan";
-  setAdversaryFormMode("edit", adversary);
-  state.adversaryCompose.originalSignature = adversaryFormSignature();
-  state.adversaryCompose.activeTab = "plan";
-  setMarkdownEditorMode("adversary-description", "preview");
-  refreshMarkdownEditorPreview("adversary-description");
-  renderAdversaryAbilitySelector();
-  setAdversaryTab("plan");
-  showAdversaryEditorWorkspace();
-  renderAdversaryWorkspaceHeader();
-}
-
 function closeAdversaryDialog() {
   const dialog = document.getElementById("adversary-dialog");
   if (dialog instanceof HTMLDialogElement && dialog.open) {
@@ -5860,59 +5146,6 @@ function closeAdversaryDialog() {
   document.getElementById("adversary-form")?.reset();
   renderAdversaryAbilitySelector();
   returnAdversaryEditorToList();
-}
-
-async function createAdversary(event) {
-  event.preventDefault();
-  const name = String(document.getElementById("adversary-name")?.value || "").trim();
-  const description = String(document.getElementById("adversary-description")?.value || "").trim();
-  if (!name || !description) {
-    showToast("toast.error_saving", true);
-    return;
-  }
-  try {
-    const saved = await api("/api/adversaries", {
-      method: "POST",
-      body: JSON.stringify({
-        name,
-        description,
-        confidence: 70,
-        target_platform: "",
-        ability_ids: [],
-        order: [],
-      }),
-    });
-    state.adversaryCompose.selectedOrder = [];
-    state.adversaryCompose.editorSelectedStepId = null;
-    state.adversaryCompose.editingId = saved.id || null;
-    state.adversaryCompose.mode = "edit";
-    state.adversaryCompose.editorLastSavedSignature = JSON.stringify({
-      name,
-      confidence: saved.confidence ?? 70,
-      target_platform: saved.target_platform || "",
-      description,
-      ability_refs: [],
-    });
-    state.adversaryView.entry = {
-      ...saved,
-      name,
-      confidence: saved.confidence ?? 70,
-      target_platform: saved.target_platform || "",
-      description,
-      ability_refs: [],
-      compatible_exports: saved.compatible_exports || [],
-    };
-    state.adversaryView.activeId = saved.id || null;
-    state.adversaryView.activeTab = "summary";
-    document.getElementById("adversary-dialog")?.close();
-    await loadAdversaries(1);
-    showAdversaryEditorPanel();
-    setAdversaryEditorTab("overview");
-    showToast("toast.saved");
-  } catch (error) {
-    console.error("Error creating adversary:", error);
-    showToast(error.payload?.error || error.message || "toast.error_saving", true);
-  }
 }
 
 async function exportAdversaryFromDialog() {
@@ -6116,7 +5349,7 @@ function renderRuleLabCompatibilityResults() {
       (entry) => `
       <article class="compat-row ${compatibilityVisualState(entry).cls}">
         <header>
-          <strong>${escapeHtml(entry.target)}</strong>
+          <strong>${escapeHtml(targetLabel(entry.target, isDetectionTarget(entry.target) ? "detection" : "emulation"))}</strong>
           <span class="compat-state ${compatibilityVisualState(entry).cls}">
             <span class="state-icon">${compatibilityVisualState(entry).icon}</span>
             ${statusBadge(entry.runtime_status, entry.severity)}
@@ -6763,18 +5996,6 @@ function renderAdversaryWorkspace() {
   refreshCustomComboboxes(document);
 }
 
-function mountAdversaryEditorSurface() {
-  const mount = document.getElementById("adversary-editor-mount");
-  const dialog = document.getElementById("adversary-dialog");
-  const form = document.getElementById("adversary-form");
-  const card = form?.closest(".detail-card") || dialog?.querySelector(".detail-card");
-  if (!mount || !card) return;
-  mount.innerHTML = "";
-  if (!mount.contains(card)) {
-    mount.appendChild(card);
-  }
-  state.adversaryCompose.editorMounted = true;
-}
 
 function updateAdversaryEditorHeading() {
   const heading = document.getElementById("adversary-editor-heading");
@@ -6829,16 +6050,6 @@ function renderAdversaryWorkspaceHeader() {
   secondary.textContent = t("common.cancel");
 }
 
-function showAdversaryEditorWorkspace() {
-  state.adversaries.workspaceMode = "editor";
-  renderAdversaryWorkspace();
-  renderAdversaryWorkspaceHeader();
-  rememberLastRoute("adversaries");
-  if (state.adversaryCompose.mode !== "view") {
-    setTimeout(() => document.getElementById("adversary-name")?.focus(), 0);
-  }
-}
-
 function returnAdversaryEditorToList() {
   closeAdversaryAbilityPicker();
   state.adversaryView.entry = null;
@@ -6851,17 +6062,6 @@ function returnAdversaryEditorToList() {
   state.adversaries.workspaceMode = "catalog";
   renderAdversaryWorkspace();
   void loadAdversaries(state.adversaries.page);
-}
-
-function openAdversaryAgentHelp() {
-  const steps = [
-    t("adversaries.help_agent.step1"),
-    t("adversaries.help_agent.step2"),
-    t("adversaries.help_agent.step3"),
-    t("adversaries.help_agent.step4"),
-  ];
-  const body = [t("adversaries.help_agent.body"), "", ...steps.map((step, index) => `${index + 1}. ${step}`)].join("\n");
-  openDetail(t("adversaries.help_agent.title"), body);
 }
 
 function renderStixObjectsWorkspace() {
@@ -7104,11 +6304,6 @@ async function applyBulkAdversariesEdit() {
   updateLevelSelectStyle("adversaries-bulk-pap");
   showToast("toast.saved");
   await Promise.all([loadAdversaries(state.adversaries.page), loadOverview()]);
-}
-
-function cancelBulkAdversariesEdit() {
-  state.adversaries.bulkEditOpen = false;
-  updateAdversariesBulkState();
 }
 
 function localizeLearningGuide(entry) {
@@ -8224,34 +7419,6 @@ async function showRuleEmulationDetail(ruleId, target, abilityId) {
   await openRuleDetail(entry, { tab: "emulation", target, abilityId });
 }
 
-async function copyRuleEmulation(ruleId, abilityId) {
-  const entry = state.rules.entries.find((item) => item.id === ruleId)
-    || state.rules.allEntries.find((item) => item.id === ruleId);
-  if (!entry || !abilityId) {
-    showToast("detail.copy_emulation_not_available", true);
-    return;
-  }
-  const targetSelect = document.getElementById("detail-emulation-target");
-  const target = targetSelect instanceof HTMLSelectElement ? targetSelect.value : "";
-  if (!target) {
-    showToast("detail.copy_emulation_not_available", true);
-    return;
-  }
-  const response = await fetch(`/api/abilities/${encodeURIComponent(abilityId)}/export?to=${encodeURIComponent(target)}`, {
-    credentials: "same-origin",
-  });
-  if (!response.ok) {
-    throw new Error("export_failed");
-  }
-  const emulationRule = await response.text();
-  if (!emulationRule.trim()) {
-    showToast("detail.copy_emulation_not_available", true);
-    return;
-  }
-  await navigator.clipboard.writeText(emulationRule);
-  showToast("toast.copied");
-}
-
 function ruleExportHintSteps(target) {
   const normalized = String(target || "").toLowerCase().replaceAll("-", "_");
   const steps = [];
@@ -8799,7 +7966,6 @@ function installEventHandlers() {
   if (ruleLabStixAdd) {
     ruleLabStixAdd.addEventListener("click", () => addRuleLabSelectedStixRelation());
   }
-  document.getElementById("adversary-form").addEventListener("submit", createAdversary);
 
   const learningInput = document.getElementById("learning-input");
   learningInput.addEventListener("input", renderLearningEditorPreview);
@@ -9348,48 +8514,6 @@ function updatePayloadCatalogBulkState(filteredEntries = null) {
   }
 }
 
-async function deleteSelectedPayloads() {
-  if (state.customPayloads.selected.size === 0) return;
-  const confirmed = await askForConfirmation(
-    t("payloads.confirm_delete_selected"),
-    t("common.confirm_action"),
-    { acceptLabel: t("payloads.delete_action") },
-  );
-  if (!confirmed) return;
-
-  const selectedIds = new Set([...state.customPayloads.selected]);
-  state.customPayloads.entries = (state.customPayloads.entries || []).filter((entry) => !selectedIds.has(entry.id));
-  state.customPayloads.selected.clear();
-  selectedIds.forEach((id) => state.customPayloads.expandedDetails.delete(id));
-  state.adversaryCompose.customPayloads = [...state.customPayloads.entries];
-  state.adversaryCompose.selectedOrder = state.adversaryCompose.selectedOrder.filter((id) => !selectedIds.has(id));
-  persistCustomPayloadCatalog();
-  renderAdversaryWorkspace();
-  renderPayloadCatalogWorkspace();
-  renderAdversaryFlowSteps();
-}
-
-async function duplicateSelectedPayloads() {
-  if (state.customPayloads.selected.size === 0) return;
-  const now = new Date().toISOString();
-  const selectedEntries = (state.customPayloads.entries || []).filter((entry) => state.customPayloads.selected.has(entry.id));
-  if (!selectedEntries.length) return;
-  const clones = selectedEntries.map((entry) => normalizeCustomPayloadEntry({
-    ...entry,
-    id: `payload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    name: `${entry.name || t("adversaries.payload.untitled")} (copy)`,
-    createdAt: now,
-    updatedAt: now,
-  }));
-  state.customPayloads.entries = [...clones, ...(state.customPayloads.entries || [])];
-  state.adversaryCompose.customPayloads = [...state.customPayloads.entries];
-  persistCustomPayloadCatalog();
-  state.customPayloads.selected = new Set(clones.map((entry) => entry.id));
-  clones.forEach((entry) => state.customPayloads.expandedDetails.add(entry.id));
-  renderPayloadCatalogWorkspace();
-  showToast("toast.saved");
-}
-
 function exportPayloadEntries(entries, fileNamePrefix = "spuc-payloads") {
   if (!entries.length) return;
   const payload = entries.map((entry) => ({
@@ -9405,17 +8529,6 @@ function exportPayloadEntries(entries, fileNamePrefix = "spuc-payloads") {
   const ts = new Date().toISOString().slice(0, 19).replaceAll(":", "-");
   downloadTextFile(JSON.stringify(payload, null, 2), `${fileNamePrefix}-${ts}.json`, "application/json;charset=utf-8");
   showToast("toast.export_ready");
-}
-
-async function exportSelectedPayloads(payloadId = "") {
-  const entries = payloadId
-    ? (state.customPayloads.entries || []).filter((entry) => entry.id === payloadId)
-    : (state.customPayloads.entries || []).filter((entry) => state.customPayloads.selected.has(entry.id));
-  if (!entries.length) {
-    showToast("common.no_data", true);
-    return;
-  }
-  exportPayloadEntries(entries, payloadId ? "spuc-payload" : "spuc-payloads-selected");
 }
 
 function renderPayloadCatalogWorkspace() {
@@ -9484,16 +8597,6 @@ function enhancePayloadDetailEditors() {
     }
     updateCodeEditorLang(node, lang);
   });
-}
-
-function togglePayloadCatalogDetails(payloadId) {
-  if (!payloadId) return;
-  if (state.customPayloads.expandedDetails.has(payloadId)) {
-    state.customPayloads.expandedDetails.delete(payloadId);
-  } else {
-    state.customPayloads.expandedDetails.add(payloadId);
-  }
-  renderPayloadCatalogWorkspace();
 }
 
 function renderPayloadsTable() {
@@ -9570,61 +8673,8 @@ function renderPayloadsTable() {
   updatePayloadCatalogBulkState(entries);
 }
 
-function setPayloadsViewMode(mode) {
-  state.customPayloads.viewMode = "table";
-  localStorage.setItem("spuc-web-payloads-view-mode", state.customPayloads.viewMode);
-  renderPayloadCatalogWorkspace();
-}
-
-function updatePayloadsViewModeUI() {
-  state.customPayloads.viewMode = "table";
-}
-
-function togglePayloadsSortColumn(column) {
-  const current = state.customPayloads.sort || "name_asc";
-  const pairs = {
-    name: { asc: "name_asc", desc: "name_desc" },
-    technology: { asc: "tech_asc", desc: "tech_desc" },
-    runner: { asc: "runner_asc", desc: "runner_desc" },
-    description: { asc: "desc_asc", desc: "desc_desc" },
-  };
-  const pair = pairs[column];
-  if (!pair) return;
-  state.customPayloads.sort = current === pair.asc ? pair.desc : pair.asc;
-  renderPayloadCatalogWorkspace();
-}
-
 function openPayloadCatalogDetail(payloadId) {
   console.warn("openPayloadCatalogDetail is deprecated; payloads now render as plain table rows", payloadId);
-}
-
-function savePayloadFromCatalogForm() {
-  const name = String(document.getElementById("payload-catalog-name")?.value || "").trim();
-  const technology = String(document.getElementById("payload-catalog-language")?.value || "bash").toLowerCase();
-  const runner = String(document.getElementById("payload-catalog-runner")?.value || "spuc-agent").toLowerCase();
-  const description = String(document.getElementById("payload-catalog-description")?.value || "").trim();
-  const content = String(document.getElementById("payload-catalog-content")?.value || "");
-  if (!name || !content.trim()) {
-    showToast("adversaries.payload.validation_missing", true);
-    return false;
-  }
-  const editingId = state.customPayloads.editingId;
-  const entry = normalizeCustomPayloadEntry({
-    id: editingId || `payload-${Date.now()}`,
-    name,
-    technology,
-    compatibleRunners,
-    description,
-    content,
-    createdAt: new Date().toISOString(),
-  });
-  state.customPayloads.entries.unshift(entry);
-  state.adversaryCompose.customPayloads = [...state.customPayloads.entries];
-  state.customPayloads.expandedDetails.add(entry.id);
-  persistCustomPayloadCatalog();
-  renderPayloadCatalogWorkspace();
-  showToast("toast.saved");
-  return true;
 }
 
 // ==================== New Tabbed Adversary Editor Functions ====================
@@ -9761,73 +8811,6 @@ async function saveAdversaryFromNewEditor(options = {}) {
   }
 }
 
-async function saveCustomPayloadFromForm() {
-  const nameInput = document.getElementById("adversary-flow-payload-name");
-  const techSelect = document.getElementById("adversary-flow-payload-tech");
-  const runnerSelect = document.getElementById("adversary-flow-payload-runner");
-  const descInput = document.getElementById("adversary-flow-payload-desc");
-  const contentInput = document.getElementById("adversary-flow-payload-content");
-
-  if (!nameInput?.value.trim() || !contentInput?.value.trim()) {
-    showToast("adversaries.validation.payload_required", true);
-    return;
-  }
-  if (!descInput?.value.trim()) {
-    showToast("adversaries.validation.payload_required", true);
-    return;
-  }
-
-  const payload = {
-    id: `payload-${Date.now()}`,
-    name: nameInput.value.trim(),
-    technology: techSelect?.value || "bash",
-    compatibleRunners: [runnerSelect?.value || "spuc-agent"],
-    description: descInput?.value || "",
-    content: contentInput.value,
-    createdAt: new Date().toISOString(),
-  };
-
-  state.customPayloads.entries.unshift(normalizeCustomPayloadEntry(payload));
-  state.adversaryCompose.customPayloads = [...state.customPayloads.entries];
-  persistCustomPayloadCatalog();
-
-  const abilityId = await createAbilityFromCustomPayload(payload);
-  addAbilityIdToAdversaryFlow(abilityId);
-  await saveAdversaryFromNewEditor({ showSavedToast: true });
-
-  nameInput.value = "";
-  techSelect.value = "bash";
-  runnerSelect.value = "spuc-agent";
-  descInput.value = "";
-  contentInput.value = "";
-
-  const dialog = document.getElementById("adversary-payload-form-dialog");
-  if (dialog instanceof HTMLDialogElement) {
-  }
-  showToast("toast.saved");
-}
-
-async function exportAdversaryFromEditor(target) {
-  if (!state.adversaryCompose.editingId) return;
-
-  try {
-    const response = await api(
-      `/api/adversaries/${encodeURIComponent(state.adversaryCompose.editingId)}/export${toQuery({ to: target })}`
-    );
-    if (response && response.output) {
-      const timestamp = new Date().toISOString().slice(0, 19).replaceAll(":", "-");
-      const filename = `${target}-${state.adversaryCompose.editingId}-${timestamp}`;
-      downloadTextFile(response.output, filename, "text/plain");
-      showToast("toast.export_ready");
-    } else {
-      showToast("adversaries.export.error", true);
-    }
-  } catch (err) {
-    console.error("Export error:", err);
-    showToast("adversaries.export.error", true);
-  }
-}
-
 function showAdversaryEditorPanel() {
   const panel = document.getElementById("panel-adversary-editor");
   if (panel) {
@@ -9842,15 +8825,6 @@ function showAdversaryEditorPanel() {
   renderAdversaryWorkspace();
   renderAdversaryWorkspaceHeader();
   renderAdversaryEditorHeader();
-}
-
-function hideAdversaryEditorPanel() {
-  const panel = document.getElementById("panel-adversary-editor");
-  if (panel) {
-    panel.classList.add("hidden");
-    panel.classList.remove("active");
-  }
-  returnAdversaryEditorToList();
 }
 
 function setAdversaryEditorTab(tabName) {
@@ -10101,30 +9075,6 @@ function renderAdversaryEditorPayloadsList() {
   `;
 }
 
-async function openAdversaryInNewEditor(adversaryId) {
-  if (!adversaryId) return;
-  await ensureAbilitiesLoaded();
-  const adversary = await api(`/api/adversaries/${encodeURIComponent(adversaryId)}`);
-  state.adversaryView.entry = adversary;
-  state.adversaryView.activeId = adversaryId;
-  state.adversaryCompose.selectedOrder = Array.isArray(adversary.ability_refs) ? [...adversary.ability_refs] : [];
-  state.adversaryCompose.editorSelectedStepId = state.adversaryCompose.selectedOrder[0] || null;
-  state.adversaryCompose.editingId = adversaryId;
-  state.adversaryCompose.mode = "edit";
-  state.adversaryCompose.editorMode = "panel";
-  state.adversaryCompose.editorActiveTab = "overview";
-  state.adversaryCompose.editorLastSavedSignature = JSON.stringify({
-    name: adversary.name || "",
-    confidence: Number(adversary.confidence || 70),
-    target_platform: adversary.target_platform || "",
-    description: adversary.description || "",
-    ability_refs: [...state.adversaryCompose.selectedOrder],
-  });
-  state.adversaryCompose.customPayloads = [...state.customPayloads.entries];
-  showAdversaryEditorPanel();
-  setAdversaryEditorTab("overview");
-}
-
 function createNewAdversaryInEditor() {
   openAdversaryDialog();
 }
@@ -10134,9 +9084,6 @@ function createNewAdversaryInEditor() {
     if (!(target instanceof Element)) return;
     if (!target.closest(".column-picker")) {
       closeColumnMenus();
-    }
-    if (!target.closest(".adversary-editor-export-menu-wrap")) {
-      document.getElementById("adversary-editor-export-menu")?.classList.add("hidden");
     }
   });
 
@@ -10171,64 +9118,9 @@ function createNewAdversaryInEditor() {
     }
   });
 
-  document.body.addEventListener("click", (event) => {
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    const row = target.closest("#payload-catalog-table tbody tr[data-payload-row-id]");
-    if (!row) return;
-    if (target.closest("button, a, input, select, textarea, label")) return;
-    const selectedText = window.getSelection ? String(window.getSelection()) : "";
-    if (selectedText.trim().length > 0) return;
-    const payloadId = row.getAttribute("data-payload-row-id") || "";
-    if (!payloadId) return;
-    togglePayloadCatalogDetails(payloadId);
-  });
 
-  document.body.addEventListener("click", async (event) => {
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    const row = target.closest("#adversaries-table tbody tr[data-adversary-row-id]");
-    if (!row) return;
-    if (target.closest("button, a, input, select, textarea, label")) return;
-    const selectedText = window.getSelection ? String(window.getSelection()) : "";
-    if (selectedText.trim().length > 0) return;
-    const adversaryId = row.getAttribute("data-adversary-row-id") || "";
-    if (!adversaryId) return;
-    try {
-      await openAdversaryDetail(adversaryId);
-    } catch (error) {
-      showToast(error.payload?.error || error.message || "toast.unexpected", true);
-    }
-  });
 
-  document.body.addEventListener("click", async (event) => {
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    const card = target.closest(".adversary-card[data-adversary-card-id]");
-    if (!card) return;
-    if (target.closest("button, a, input, select, textarea, label")) return;
-    const selectedText = window.getSelection ? String(window.getSelection()) : "";
-    if (selectedText.trim().length > 0) return;
-    const adversaryId = card.getAttribute("data-adversary-card-id") || "";
-    if (!adversaryId) return;
-    try {
-      await openAdversaryDetail(adversaryId);
-    } catch (error) {
-      showToast(error.payload?.error || error.message || "toast.unexpected", true);
-    }
-  });
 
-  document.body.addEventListener("click", (event) => {
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    const row = target.closest(".flow-step-item[data-step-id]");
-    if (!row) return;
-    if (target.closest("button, a")) return;
-    const stepId = row.getAttribute("data-step-id") || "";
-    if (!stepId) return;
-    state.adversaryCompose.editorSelectedStepId = stepId;
-    renderAdversaryFlowSteps();
-  });
 
   document.body.addEventListener("click", async (event) => {
     const target = event.target.closest("button, a");
@@ -10262,92 +9154,6 @@ function createNewAdversaryInEditor() {
       } else if (action === "welcome-dismiss") {
         localStorage.setItem("spuc-web-welcome-dismissed", "1");
         renderDashboard();
-      } else if (action === "adversaries-empty-create") {
-        createNewAdversaryInEditor();
-      } else if (action === "adversary-back-to-list") {
-        hideAdversaryEditorPanel();
-      } else if (action === "adversary-enter-edit") {
-        const adversaryId = state.adversaryView.activeId || state.adversaryCompose.editingId;
-        if (!adversaryId) {
-          createNewAdversaryInEditor();
-        } else {
-          await openAdversaryInNewEditor(adversaryId);
-        }
-      } else if (action === "adversary-save") {
-        const saved = await persistAdversaryAutosave();
-        if (!saved?.id) return;
-        showToast("toast.saved");
-        await loadAdversaries(state.adversaries.page);
-        await openAdversaryDetail(saved.id);
-      } else if (action === "adversary-cancel-edit") {
-        const editingId = state.adversaryCompose.editingId;
-        if (editingId) {
-          await openAdversaryDetail(editingId);
-        } else {
-          returnAdversaryEditorToList();
-        }
-      } else if (action === "adversary-new-inline") {
-        createNewAdversaryInEditor();
-      } else if (action === "adversary-editor-plan") {
-        setAdversaryEditorTab("flow");
-      } else if (action === "adversary-editor-export-toggle") {
-        const menu = document.getElementById("adversary-editor-export-menu");
-        if (menu) menu.classList.toggle("hidden");
-      } else if (action === "payload-catalog-filters-toggle") {
-        state.customPayloads.filtersOpen = !state.customPayloads.filtersOpen;
-        syncPayloadCatalogFiltersRevealer();
-      } else if (action === "payload-catalog-delete") {
-        const payloadId = String(target.dataset.payloadId || "");
-        if (!payloadId) return;
-        const confirmed = await askForConfirmation(
-          t("payloads.confirm_delete_one"),
-          t("common.confirm_action"),
-          { acceptLabel: t("payloads.delete_one_action") },
-        );
-        if (!confirmed) return;
-        state.customPayloads.entries = (state.customPayloads.entries || []).filter((entry) => entry.id !== payloadId);
-        state.customPayloads.selected.delete(payloadId);
-        state.customPayloads.expandedDetails.delete(payloadId);
-        state.adversaryCompose.customPayloads = [...state.customPayloads.entries];
-        state.adversaryCompose.selectedOrder = state.adversaryCompose.selectedOrder.filter((id) => id !== payloadId);
-        persistCustomPayloadCatalog();
-        renderAdversaryWorkspace();
-        renderPayloadCatalogWorkspace();
-        renderAdversaryFlowSteps();
-      } else if (action === "payload-catalog-delete-selected") {
-        await deleteSelectedPayloads();
-      } else if (action === "payload-catalog-duplicate-selected") {
-        await duplicateSelectedPayloads();
-      } else if (action === "payload-catalog-export-selected") {
-        await exportSelectedPayloads();
-      } else if (action === "payload-catalog-export") {
-        const payloadId = String(target.dataset.payloadId || "");
-        if (!payloadId) return;
-        await exportSelectedPayloads(payloadId);
-      } else if (action === "payload-catalog-preview") {
-        const payloadId = String(target.dataset.payloadId || "");
-        if (!payloadId) return;
-        openPayloadCatalogDetail(payloadId);
-      } else if (action === "payload-catalog-edit") {
-        const payloadId = String(target.dataset.payloadId || "");
-        if (!payloadId) return;
-        openPayloadCatalogCreateModal(payloadId);
-      } else if (action === "payload-catalog-open-create") {
-        openPayloadCatalogCreateModal();
-      } else if (action === "payload-catalog-open-docs") {
-        openPayloadCatalogDocs();
-      } else if (action === "payload-catalog-close-create") {
-        closePayloadCatalogCreateModal();
-      } else if (action === "payload-catalog-save-create") {
-        savePayloadFromCatalogModal();
-      } else if (action === "payload-catalog-open-editor") {
-        createNewAdversaryInEditor();
-        setAdversaryEditorTab("flow");
-      } else if (action === "adversaries-help-open") {
-        openAdversaryAgentHelp();
-      } else if (action === "adversaries-filters-toggle") {
-        state.adversaries.filtersOpen = !state.adversaries.filtersOpen;
-        renderAdversariesFiltersRevealer();
       } else if (action === "rules-columns-toggle") {
         toggleMenu("rules-columns-menu", "rules-columns-toggle");
       } else if (action === "rules-filters-toggle") {
@@ -10362,22 +9168,14 @@ function createNewAdversaryInEditor() {
         if (input instanceof HTMLInputElement) {
           input.click();
         }
-      } else if (action === "adversaries-columns-toggle") {
-        toggleMenu("adversaries-columns-menu", "adversaries-columns-toggle");
       } else if (action === "payloads-columns-toggle") {
         toggleMenu("payloads-columns-menu", "payloads-columns-toggle");
       } else if (action === "rules-bulk-toggle") {
         if (state.rules.selected.size === 0) return;
         state.rules.bulkEditOpen = !state.rules.bulkEditOpen;
         updateRulesBulkState();
-      } else if (action === "adversaries-bulk-toggle") {
-        if (state.adversaries.selected.size === 0) return;
-        state.adversaries.bulkEditOpen = !state.adversaries.bulkEditOpen;
-        updateAdversariesBulkState();
       } else if (action === "rules-bulk-cancel") {
         cancelBulkRulesEdit();
-      } else if (action === "adversaries-bulk-cancel") {
-        cancelBulkAdversariesEdit();
       } else if (action === "rules-export-selected") {
         await exportSelectedRules("csv");
       } else if (action === "rules-export-selected-csv") {
@@ -10395,10 +9193,6 @@ function createNewAdversaryInEditor() {
         toggleRulesSortColumn(target.dataset.column);
       } else if (action === "rules-view-mode") {
         setRulesViewMode(target.dataset.mode || "table");
-      } else if (action === "adversaries-sort-column") {
-        await toggleAdversariesSortColumn(target.dataset.column);
-      } else if (action === "adversaries-view-mode") {
-        setAdversariesViewMode(target.dataset.mode || "table");
       } else if (action === "rules-type-toggle") {
         const type = target.dataset.type;
         if (!type) return;
@@ -10417,34 +9211,8 @@ function createNewAdversaryInEditor() {
           else state.rules.selected.delete(entry.id);
         });
         renderRulesTable();
-      } else if (action === "adversaries-select-all-toggle") {
-        const filtered = applyAdversariesClientFilters(state.adversaries.allEntries || []);
-        const shouldSelect = !filtered.length || filtered.some((entry) => !state.adversaries.selected.has(entry.id));
-        filtered.forEach((entry) => {
-          if (shouldSelect) state.adversaries.selected.add(entry.id);
-          else state.adversaries.selected.delete(entry.id);
-        });
-        renderAdversariesTable();
       } else if (action === "rules-page") {
         await loadRules(Number(target.dataset.page || "1"));
-      } else if (action === "adversaries-page") {
-        state.adversaries.page = Number(target.dataset.page || "1");
-        renderAdversariesTable();
-      } else if (action === "adversary-show") {
-        await openAdversaryDetail(target.dataset.id || "");
-      } else if (action === "adversary-edit") {
-        await openAdversaryInNewEditor(target.dataset.id || "");
-      } else if (action === "adversary-detail-tab") {
-        setAdversaryDetailTab(target.dataset.tab || "summary");
-      } else if (action === "adversary-json-copy") {
-        if (!state.adversaryView.entry) return;
-        await navigator.clipboard.writeText(JSON.stringify(state.adversaryView.entry, null, 2));
-        showToast("toast.copied");
-      } else if (action === "adversary-json-download") {
-        if (!state.adversaryView.entry) return;
-        const fileToken = sanitizeFileToken(target.dataset.id || state.adversaryView.entry.id || "adversary");
-        downloadTextFile(JSON.stringify(state.adversaryView.entry, null, 2), `${fileToken}.json`, "application/json;charset=utf-8");
-        showToast("toast.export_ready");
       } else if (action === "rule-show") {
         const entry = state.rules.entries.find((rule) => rule.id === target.dataset.id);
         if (entry) await openRuleDetail(entry);
@@ -10467,204 +9235,9 @@ function createNewAdversaryInEditor() {
         await showRuleEmulationDetail(target.dataset.rule, target.dataset.target, target.dataset.ability);
       } else if (action === "rule-detail-tab") {
         setRuleDetailTab(target.dataset.tab || "detection");
-      } else if (action === "emulation-export-download") {
-        const selectedTarget = String(target.dataset.target || "").trim();
-        if (!selectedTarget) {
-          showToast("detail.copy_emulation_not_available", true);
-          return;
-        }
-        await downloadAbility(target.dataset.ability, selectedTarget);
-        showToast("toast.export_ready");
       } else if (action === "rule-export") {
         await downloadAbility(target.dataset.id, target.dataset.target || "spuc-agent");
         showToast("toast.export_ready");
-      } else if (action === "ability-show") {
-        const entry = state.abilities.entries.find((ability) => ability.id === target.dataset.id);
-        if (entry) {
-          await navigator.clipboard.writeText(JSON.stringify(entry, null, 2));
-          showToast("toast.copied");
-        }
-      } else if (action === "ability-export") {
-        await downloadAbility(target.dataset.id, target.dataset.target || "spuc-agent");
-        showToast("toast.export_ready");
-      } else if (action === "adversary-export") {
-        const response = await api(`/api/adversaries/${encodeURIComponent(target.dataset.id)}/export${toQuery({ to: target.dataset.target })}`);
-        const operational = pickOperationalDownload(response.downloads, target.dataset.target || "");
-        if (operational?.url) {
-          triggerDownloadByUrl(operational.url, normalizedDownloadName(operational));
-          showToast("toast.export_ready");
-        } else {
-          const first = (response.downloads || [])[0] || null;
-          if (first?.url) {
-            triggerDownloadByUrl(first.url, normalizedDownloadName(first));
-            showToast("toast.export_ready");
-          } else {
-            showToast("common.no_data", true);
-          }
-        }
-      } else if (action === "adversary-select-ability") {
-        const abilityId = target.dataset.id;
-        if (!abilityId) return;
-        if (!state.adversaryCompose.selectedOrder.includes(abilityId)) {
-          state.adversaryCompose.selectedOrder.push(abilityId);
-          state.adversaryCompose.editorSelectedStepId = abilityId;
-          renderAdversaryFlowSteps();
-          void saveAdversaryFromNewEditor({ showSavedToast: true });
-        }
-        closeAdversaryAbilityPicker();
-      } else if (action === "adversary-remove-ability") {
-        const abilityId = target.dataset.id;
-        if (!abilityId) return;
-        const confirmed = await askForConfirmation(
-          t("adversaries.confirm_remove_step"),
-          t("common.confirm_action"),
-          { acceptLabel: t("adversaries.create.remove") },
-        );
-        if (!confirmed) return;
-        state.adversaryCompose.selectedOrder = state.adversaryCompose.selectedOrder.filter((id) => id !== abilityId);
-        renderAdversaryFlowSteps();
-        void saveAdversaryFromNewEditor({ showSavedToast: true });
-      } else if (action === "adversary-move-up") {
-        const abilityId = target.dataset.id;
-        if (!abilityId) return;
-        moveAdversarySelectedAbility(abilityId, -1);
-        renderAdversaryFlowSteps();
-        void saveAdversaryFromNewEditor({ showSavedToast: true });
-      } else if (action === "adversary-move-down") {
-        const abilityId = target.dataset.id;
-        if (!abilityId) return;
-        moveAdversarySelectedAbility(abilityId, 1);
-        renderAdversaryFlowSteps();
-        void saveAdversaryFromNewEditor({ showSavedToast: true });
-      } else if (action === "adversary-close-ability-picker") {
-        closeAdversaryAbilityPicker();
-      } else if (action === "adversary-tab") {
-        setAdversaryTab(target.dataset.tab || "plan");
-      } else if (action === "adversary-picker-tab") {
-        setAdversaryPickerTab(target.dataset.tab || "catalog");
-      } else if (action === "adversary-editor-tab") {
-        setAdversaryEditorTab(target.dataset.tab || "overview");
-      } else if (action === "adversary-editor-save") {
-        await saveAdversaryFromNewEditor({ showSavedToast: true, force: true });
-      } else if (action === "adversary-editor-cancel") {
-        hideAdversaryEditorPanel();
-      } else if (action === "flow-step-select") {
-        const stepId = target.closest("[data-step-id]")?.getAttribute("data-step-id") || "";
-        if (!stepId) return;
-        state.adversaryCompose.editorSelectedStepId = stepId;
-        renderAdversaryFlowSteps();
-      } else if (action === "flow-step-up") {
-        const stepIndex = Number(target.dataset.stepIndex || -1);
-        if (stepIndex > 0) {
-          [state.adversaryCompose.selectedOrder[stepIndex - 1], state.adversaryCompose.selectedOrder[stepIndex]] =
-            [state.adversaryCompose.selectedOrder[stepIndex], state.adversaryCompose.selectedOrder[stepIndex - 1]];
-          renderAdversaryFlowSteps();
-          void saveAdversaryFromNewEditor({ showSavedToast: true });
-        }
-      } else if (action === "flow-step-down") {
-        const stepIndex = Number(target.dataset.stepIndex || -1);
-        if (stepIndex >= 0 && stepIndex < state.adversaryCompose.selectedOrder.length - 1) {
-          [state.adversaryCompose.selectedOrder[stepIndex], state.adversaryCompose.selectedOrder[stepIndex + 1]] =
-            [state.adversaryCompose.selectedOrder[stepIndex + 1], state.adversaryCompose.selectedOrder[stepIndex]];
-          renderAdversaryFlowSteps();
-          void saveAdversaryFromNewEditor({ showSavedToast: true });
-        }
-      } else if (action === "flow-step-remove") {
-        const stepIndex = Number(target.dataset.stepIndex || -1);
-        if (stepIndex >= 0 && stepIndex < state.adversaryCompose.selectedOrder.length) {
-          const confirmed = await askForConfirmation(
-            t("adversaries.confirm_remove_step"),
-            t("common.confirm_action"),
-            { acceptLabel: t("adversaries.create.remove") },
-          );
-          if (!confirmed) return;
-          state.adversaryCompose.selectedOrder.splice(stepIndex, 1);
-          renderAdversaryFlowSteps();
-          void saveAdversaryFromNewEditor({ showSavedToast: true });
-        }
-      } else if (action === "flow-step-detail") {
-        const stepId = target.dataset.stepId;
-        if (stepId) {
-          state.adversaryCompose.editorSelectedStepId = stepId;
-          renderAdversaryFlowSteps();
-        }
-      } else if (action === "flow-add-ability") {
-        const abilityId = String(target.dataset.abilityId || "");
-        if (!abilityId) return;
-        if (!state.adversaryCompose.selectedOrder.includes(abilityId)) {
-          state.adversaryCompose.selectedOrder.push(abilityId);
-          state.adversaryCompose.editorSelectedStepId = abilityId;
-          renderAdversaryFlowSteps();
-          void saveAdversaryFromNewEditor({ showSavedToast: true });
-        }
-        closeAdversaryAbilityPicker();
-      } else if (action === "adversary-open-ability-picker") {
-        openAdversaryAbilityPicker();
-      } else if (action === "adversary-open-payload-picker") {
-        openAdversaryPayloadPicker();
-      } else if (action === "adversary-close-payload-picker") {
-        closeAdversaryPayloadPicker();
-      } else if (action === "adversary-open-payload-form") {
-        openAdversaryPayloadForm();
-      } else if (action === "adversary-cancel-payload-form") {
-        closeAdversaryPayloadForm();
-      } else if (action === "adversary-save-custom-payload") {
-        await saveCustomPayloadFromForm();
-      } else if (action === "adversary-editor-export") {
-        const exportTarget = target.dataset.target;
-        if (state.adversaryCompose.editingId && exportTarget) {
-          await exportAdversaryFromEditor(exportTarget);
-          document.getElementById("adversary-editor-export-menu")?.classList.add("hidden");
-        }
-      } else if (action === "adversary-json-copy") {
-        const codeEl = document.getElementById("adversary-json-content");
-        if (codeEl) {
-          const text = codeEl.textContent || "";
-          navigator.clipboard.writeText(text);
-          showToast("toast.copied");
-        }
-      } else if (action === "adversary-json-download") {
-        const codeEl = document.getElementById("adversary-json-content");
-        if (codeEl) {
-          const text = codeEl.textContent || "{}";
-          const filename = state.adversaryCompose.editingId
-            ? `adversary-${state.adversaryCompose.editingId}.json`
-            : `adversary-new-${Date.now()}.json`;
-          downloadTextFile(text, filename, "application/json");
-        }
-      } else if (action === "adversary-refresh-execution-help") {
-        await ensureAdversaryExportPreview(target.dataset.target || selectedAdversaryExportTarget(), true);
-      } else if (action === "adversary-preview-payload") {
-        renderCustomPayloadPreview();
-      } else if (action === "adversary-add-custom-payload") {
-        await addCustomPayloadStep();
-      } else if (action === "adversary-add-dummy-sleep") {
-        const secondsRaw = document.getElementById("adversary-dummy-sleep")?.value || "5";
-        const seconds = Number(secondsRaw);
-        if (!Number.isFinite(seconds) || seconds <= 0) {
-          showToast("toast.unexpected", true);
-          return;
-        }
-        await createDummyAbility({
-          kind: "sleep",
-          seconds: Math.round(seconds),
-          platform: document.getElementById("adversary-ability-platform")?.value || "",
-        });
-      } else if (action === "adversary-add-dummy-label") {
-        const label = String(document.getElementById("adversary-dummy-label")?.value || "").trim();
-        if (!label) {
-          showToast("toast.unexpected", true);
-          return;
-        }
-        await createDummyAbility({
-          kind: "label",
-          label,
-          platform: document.getElementById("adversary-ability-platform")?.value || "",
-        });
-      } else if (action === "adversaries-duplicate-selected") {
-        await duplicateSelectedAdversaries();
-      } else if (action === "rule-copy-emulation") {
-        await copyRuleEmulation(target.dataset.id, target.dataset.ability);
       } else if (action === "detail-export-detection") {
         exportDetectionOutputFromDetail();
       } else if (action === "detail-cancel") {
@@ -11038,32 +9611,6 @@ function createNewAdversaryInEditor() {
       return;
     }
 
-    if (target.dataset.action === "adversaries-column-toggle") {
-      const column = target.dataset.column || "";
-      const checked = target instanceof HTMLInputElement ? target.checked : false;
-      if (column === "markings") {
-        if (checked) {
-          state.adversaries.visibleColumns.add("tlp");
-          state.adversaries.visibleColumns.add("pap");
-        } else {
-          state.adversaries.visibleColumns.delete("tlp");
-          state.adversaries.visibleColumns.delete("pap");
-          if (state.adversaries.visibleColumns.size === 0) {
-            state.adversaries.visibleColumns.add("name");
-          }
-        }
-        renderAdversariesTable();
-        return;
-      }
-      const changed = setColumnVisibility(state.adversaries.visibleColumns, column, checked, ADVERSARY_COLUMN_KEYS);
-      if (!changed && target instanceof HTMLInputElement) {
-        target.checked = true;
-        showToast("rules.columns.keep_one", true);
-        return;
-      }
-      renderAdversariesTable();
-      return;
-    }
 
     if (target.dataset.action === "payloads-column-toggle") {
       const column = target.dataset.column || "";
@@ -11115,74 +9662,11 @@ function createNewAdversaryInEditor() {
       return;
     }
 
-    if (target.dataset.action === "adversary-select") {
-      const id = target.dataset.id;
-      if (!id) return;
-      const checked = target instanceof HTMLInputElement ? target.checked : false;
-      const index = Number(target.dataset.index || "-1");
-      if (event.shiftKey && index >= 0 && state.adversaries.lastSelectionIndex >= 0) {
-        const [from, to] = [state.adversaries.lastSelectionIndex, index].sort((a, b) => a - b);
-        const checkboxes = [...document.querySelectorAll('input[data-action="adversary-select"]')];
-        checkboxes.forEach((node) => {
-          if (!(node instanceof HTMLInputElement)) return;
-          const nodeIndex = Number(node.dataset.index || "-1");
-          if (nodeIndex < from || nodeIndex > to) return;
-          const nodeId = node.dataset.id || "";
-          node.checked = checked;
-          if (checked) state.adversaries.selected.add(nodeId);
-          else state.adversaries.selected.delete(nodeId);
-        });
-      } else if (checked) state.adversaries.selected.add(id);
-      else state.adversaries.selected.delete(id);
-      state.adversaries.lastSelectionIndex = index >= 0 ? index : state.adversaries.lastSelectionIndex;
-      updateAdversariesBulkState();
-      return;
-    }
 
-    if (target.dataset.action === "adversaries-select-all-toggle") {
-      const filtered = applyAdversariesClientFilters(state.adversaries.allEntries || []);
-      const shouldSelect = target instanceof HTMLInputElement
-        ? target.checked
-        : filtered.some((entry) => !state.adversaries.selected.has(entry.id));
-      filtered.forEach((entry) => {
-        if (shouldSelect) state.adversaries.selected.add(entry.id);
-        else state.adversaries.selected.delete(entry.id);
-      });
-      renderAdversariesTable();
-      return;
-    }
 
-    if (target.dataset.action === "payload-catalog-select") {
-      const payloadId = String(target.dataset.id || "");
-      if (!payloadId) return;
-      if (target instanceof HTMLInputElement && target.checked) state.customPayloads.selected.add(payloadId);
-      else state.customPayloads.selected.delete(payloadId);
-      updatePayloadCatalogBulkState();
-      return;
-    }
 
-    if (target.dataset.action === "payload-catalog-select-all-toggle") {
-      const filtered = applyPayloadCatalogClientFilters(state.customPayloads.entries || []);
-      const shouldSelect = target instanceof HTMLInputElement
-        ? target.checked
-        : filtered.some((entry) => !state.customPayloads.selected.has(entry.id));
-      filtered.forEach((entry) => {
-        if (shouldSelect) state.customPayloads.selected.add(entry.id);
-        else state.customPayloads.selected.delete(entry.id);
-      });
-      renderPayloadCatalogWorkspace();
-      return;
-    }
 
-    if (target.dataset.action === "payload-sort-column") {
-      togglePayloadsSortColumn(target.dataset.column);
-      return;
-    }
 
-    if (target.dataset.action === "payload-view-mode") {
-      setPayloadsViewMode(target.dataset.mode || "table");
-      return;
-    }
 
     if (target.dataset.action === "stix-select-row") {
       const stixId = target.dataset.stixId || "";

@@ -222,34 +222,12 @@ fn log_error(message: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
     use std::io::{ErrorKind, Read, Write};
     use std::net::TcpStream;
-    use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
 
     fn with_test_config_dir<T>(tag: &str, run: impl FnOnce() -> T) -> T {
-        static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        let _guard = TEST_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .expect("test lock poisoned");
-        let dir = std::env::temp_dir().join(format!(
-            "spuc_web_server_test_{}_{}",
-            tag,
-            std::process::id()
-        ));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).expect("create test config dir");
-        unsafe {
-            std::env::set_var("SPUC_CONFIG_DIR", &dir);
-        }
-        let result = run();
-        unsafe {
-            std::env::remove_var("SPUC_CONFIG_DIR");
-        }
-        let _ = fs::remove_dir_all(&dir);
-        result
+        crate::web::test_support::with_test_config_dir(tag, run)
     }
 
     fn send_raw(port: u16, request: &str) -> String {

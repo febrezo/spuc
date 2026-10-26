@@ -1,8 +1,7 @@
 #![allow(dead_code)]
 
+use crate::ui::output::OutputBlock;
 use anyhow::Result;
-use spuc::emulation::ability as emu_ability;
-use spuc::emulation::output::OutputBlock;
 
 use crate::cli::{BuildOutput, Cli, Commands, SigmaCommands};
 use crate::commands;
@@ -45,7 +44,6 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             rule_confidence,
             mode,
             export,
-            refresh,
         } => commands::translate::run(commands::translate::options(
             to,
             rule,
@@ -57,32 +55,8 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             sigma_targets,
             *mode,
             export,
-            *refresh,
         ))?,
         Commands::Verify { rule, file } => commands::verify::run(rule, file)?,
-        Commands::Emulate {
-            to,
-            rule,
-            file,
-            output,
-            description,
-            ttp,
-            rule_confidence,
-            mode,
-            export,
-            refresh,
-        } => commands::emulate::run(commands::emulate::options(
-            to,
-            rule,
-            file.as_deref(),
-            output.as_deref(),
-            description.as_deref(),
-            ttp.as_deref(),
-            *rule_confidence,
-            *mode,
-            export,
-            *refresh,
-        ))?,
         Commands::Jsonrpc { port, token } => commands::jsonrpc::run(*port, token.clone())?,
         Commands::Web {
             host,
@@ -123,11 +97,4 @@ pub(crate) fn resolve_output_blocks(
     default: &[OutputBlock],
 ) -> Vec<OutputBlock> {
     crate::commands::common::resolve_output_blocks(show, default)
-}
-
-pub(crate) fn parse_candidate_selection_ids(
-    candidates: &[emu_ability::Ability],
-    selection: &str,
-) -> Result<Vec<String>> {
-    crate::commands::plan::parse_candidate_selection_ids(candidates, selection)
 }

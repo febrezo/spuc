@@ -8,10 +8,10 @@ When chat history and repository content diverge, follow repository content.
 SPUC is a defensive STIX Pattern workflow tool:
 
 - parse/normalize STIX patterns
-- translate patterns to detection targets
-- emulate defensive abilities from STIX patterns
-- store/reuse abilities in a local catalog
-- plan intrusion sets from cataloged abilities
+- translate patterns to detection targets (Sigma, KQL, EQL, Snort, Suricata, YARA, ...)
+- store/reuse translated rules in a local catalog (`catalog/rules.json`)
+- track translation activity in a local activity log (`catalog/translation_activities.jsonl`)
+- browse and manage rules through a localized web interface
 
 SPUC must remain defensive and safe.  
 Do not implement offensive payload logic or pretend runtime execution exists when it does not.
@@ -25,7 +25,7 @@ Do not implement offensive payload logic or pretend runtime execution exists whe
 5. Every meaningful code change must include:
    - tests (new or updated)
    - docs updates
-6. Prefer file-based persistence for catalog/intrusion-set data in current iterations.
+6. Prefer file-based persistence for catalog/translation-activity data in current iterations.
 
 ## Immutable Knowledge Artifacts
 
@@ -43,29 +43,24 @@ English and Spanish guides are authoritative analyst-facing assets and must pres
 
 1. `README.md`
 2. `docs/current-decisions.md`
-3. `docs/abilities.md`
-4. `docs/catalog.md`
-5. `docs/intrusion-sets.md`
-6. `docs/ability-roadmap.md`
-7. `docs/intrusion-set-roadmap.md`
-8. `kb/README.md`
+3. `docs/catalog.md`
+4. `docs/web.md`
+5. `docs/deployment.md`
+6. `docs/ci-cd.md`
+7. `kb/README.md`
 
 ## Working Workflow (Current)
 
-1. Emulate ability:
-   - `spuc emulate ...`
-2. Translate detections:
+1. Translate detections:
    - `spuc translate ...`
-3. Save/search catalog:
-   - `spuc catalog abilities`
-   - `spuc catalog search ...`
-   - `spuc catalog translations`
-   - `spuc catalog rules`
-4. Plan intrusion set:
-   - `spuc plan ...`
-5. Interactive analyst flows:
-   - `spuc explore`
-   - then `translate`, `emulate` or `plan`
+2. Verify patterns:
+   - `spuc verify ...`
+3. Inspect Sigma availability:
+   - `spuc sigma status`
+4. Browse/manage the rules catalog (web):
+   - `spuc web`
+5. Serve JSON-RPC:
+   - `spuc jsonrpc ...`
 
 ## Output and UX
 
@@ -86,3 +81,12 @@ For analyst-facing web modals, keep a consistent footer action layout:
 - Always inspect current repository state before implementing.
 - Prefer updating existing modules over introducing duplicates.
 - If behavior changes, reflect it in tests and docs in the same iteration.
+
+## Emulation Removed (2026-10)
+
+The `spuc emulate` command, the adversary/payload web surface and the
+underlying emulation engine were removed in October 2026. SPUC now
+focuses on translating STIX patterns to detection targets and on the
+rules catalog workflow. Guided adversary analysis may return later as a
+strictly defensive, LLM/agent-assisted feature; until then, do not
+re-introduce emulation execution semantics.

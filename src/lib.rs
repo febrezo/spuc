@@ -5,9 +5,7 @@ mod cli;
 mod commands;
 mod core;
 mod domain;
-pub mod emulation;
 pub mod paths;
-mod tui;
 mod ui;
 mod web;
 

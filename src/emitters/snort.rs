@@ -1,4 +1,6 @@
 use anyhow::{bail, Result};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 use crate::emitters::{EmitResult, FidelityStatus};
 use crate::ir::{IrExpr, IrOp, IrPredicate, IrValue};
@@ -8,13 +10,15 @@ pub fn emit(ir: &IrExpr, description: Option<&str>) -> Result<EmitResult> {
     let has_standalone = contains_standalone_network_observable(ir);
     if let Some(ips) = collect_ipv4_any(ir)? {
         let joined = format!("[{}]", ips.join(","));
+        let sid_dst = sid_for("snort_any_dst", &joined);
+        let sid_src = sid_for("snort_any_src", &joined);
         let out = [
             format!(
-                "alert ip any any -> {joined} any (msg:\"{}\"; sid:2000001; rev:1;)",
+                "alert ip any any -> {joined} any (msg:\"{}\"; sid:{sid_dst}; rev:1;)",
                 snort_msg("SPUC generated Snort rule - dst match", description)
             ),
             format!(
-                "alert ip {joined} any -> any any (msg:\"{}\"; sid:2000002; rev:1;)",
+                "alert ip {joined} any -> any any (msg:\"{}\"; sid:{sid_src}; rev:1;)",
                 snort_msg("SPUC generated Snort rule - src match", description)
             ),
         ]
@@ -221,65 +225,70 @@ fn emit_rule(predicates: &[IrPredicate], description: Option<&str>) -> Result<St
     } else {
         format!("{} ", payload_opts.join(" "))
     };
+    let sid_seed = format!(
+        "{}|{:?}|{:?}|{:?}|{:?}|{}",
+        proto, src_ip, src_port, dst_ip, dst_port, payload
+    );
+    let sid = sid_for("snort_rule", &sid_seed);
 
     match (src_ip.as_deref(), src_port, dst_ip.as_deref(), dst_port) {
         (Some(src), Some(sport), Some(dst), Some(dport)) => Ok(format!(
-            "alert {} {src} {sport} -> {dst} {dport} (msg:\"{}\"; {payload}sid:2000001; rev:1;)",
+            "alert {} {src} {sport} -> {dst} {dport} (msg:\"{}\"; {payload}sid:{sid}; rev:1;)",
             proto,
             snort_msg("SPUC generated Snort rule", description),
         )),
         (Some(src), None, Some(dst), Some(dport)) => Ok(format!(
-            "alert {} {src} any -> {dst} {dport} (msg:\"{}\"; {payload}sid:2000001; rev:1;)",
+            "alert {} {src} any -> {dst} {dport} (msg:\"{}\"; {payload}sid:{sid}; rev:1;)",
             proto,
             snort_msg("SPUC generated Snort rule", description),
         )),
         (Some(src), Some(sport), Some(dst), None) => Ok(format!(
-            "alert {} {src} {sport} -> {dst} any (msg:\"{}\"; {payload}sid:2000001; rev:1;)",
+            "alert {} {src} {sport} -> {dst} any (msg:\"{}\"; {payload}sid:{sid}; rev:1;)",
             proto,
             snort_msg("SPUC generated Snort rule", description),
         )),
         (Some(src), None, Some(dst), None) => Ok(format!(
-            "alert {} {src} any -> {dst} any (msg:\"{}\"; {payload}sid:2000001; rev:1;)",
+            "alert {} {src} any -> {dst} any (msg:\"{}\"; {payload}sid:{sid}; rev:1;)",
             proto,
             snort_msg("SPUC generated Snort rule", description),
         )),
         (Some(src), Some(sport), None, Some(dport)) => Ok(format!(
-            "alert {} {src} {sport} -> any {dport} (msg:\"{}\"; {payload}sid:2000002; rev:1;)",
+            "alert {} {src} {sport} -> any {dport} (msg:\"{}\"; {payload}sid:{sid}; rev:1;)",
             proto,
             snort_msg("SPUC generated Snort rule", description),
         )),
         (None, None, Some(dst), Some(dport)) => Ok(format!(
-            "alert {} any any -> {dst} {dport} (msg:\"{}\"; {payload}sid:2000002; rev:1;)",
+            "alert {} any any -> {dst} {dport} (msg:\"{}\"; {payload}sid:{sid}; rev:1;)",
             proto,
             snort_msg("SPUC generated Snort rule", description),
         )),
         (None, None, Some(dst), None) => Ok(format!(
-            "alert {} any any -> {dst} any (msg:\"{}\"; {payload}sid:2000002; rev:1;)",
+            "alert {} any any -> {dst} any (msg:\"{}\"; {payload}sid:{sid}; rev:1;)",
             proto,
             snort_msg("SPUC generated Snort rule", description),
         )),
         (Some(src), Some(sport), None, None) => Ok(format!(
-            "alert {} {src} {sport} -> any any (msg:\"{}\"; {payload}sid:2000003; rev:1;)",
+            "alert {} {src} {sport} -> any any (msg:\"{}\"; {payload}sid:{sid}; rev:1;)",
             proto,
             snort_msg("SPUC generated Snort rule", description),
         )),
         (Some(src), None, None, None) => Ok(format!(
-            "alert {} {src} any -> any any (msg:\"{}\"; {payload}sid:2000003; rev:1;)",
+            "alert {} {src} any -> any any (msg:\"{}\"; {payload}sid:{sid}; rev:1;)",
             proto,
             snort_msg("SPUC generated Snort rule", description),
         )),
         (None, Some(sport), None, _) => Ok(format!(
-            "alert {} any {sport} -> any any (msg:\"{}\"; {payload}sid:2000004; rev:1;)",
+            "alert {} any {sport} -> any any (msg:\"{}\"; {payload}sid:{sid}; rev:1;)",
             proto,
             snort_msg("SPUC generated Snort rule", description),
         )),
         (None, None, None, Some(dport)) => Ok(format!(
-            "alert {} any any -> any {dport} (msg:\"{}\"; {payload}sid:2000002; rev:1;)",
+            "alert {} any any -> any {dport} (msg:\"{}\"; {payload}sid:{sid}; rev:1;)",
             proto,
             snort_msg("SPUC generated Snort rule", description),
         )),
         (None, None, None, None) if !payload_opts.is_empty() => Ok(format!(
-            "alert tcp any any -> any any (msg:\"{}\"; {payload}sid:2000005; rev:1;)",
+            "alert tcp any any -> any any (msg:\"{}\"; {payload}sid:{sid}; rev:1;)",
             snort_msg("SPUC generated Snort rule", description),
         )),
         (None, None, None, None) => bail!("snort received an empty predicate list"),
@@ -307,11 +316,32 @@ fn normalize_proto(raw: &str) -> Result<String> {
     }
 }
 
+fn sid_for(kind: &str, seed: &str) -> u32 {
+    let mut hasher = DefaultHasher::new();
+    kind.hash(&mut hasher);
+    seed.hash(&mut hasher);
+    2_000_000 + (hasher.finish() % 1_000_000) as u32
+}
+
 fn snort_msg(base: &str, description: Option<&str>) -> String {
-    match description {
+    let msg = match description {
         Some(desc) => format!("[SPUC Generated Snort Rule] {desc}"),
         None => format!("[SPUC Generated Snort Rule] {base}"),
-    }
+    };
+    sanitize_snort_msg(&msg)
+}
+
+fn sanitize_snort_msg(input: &str) -> String {
+    input
+        .chars()
+        .map(|ch| match ch {
+            '"' => '\'',
+            ';' => ',',
+            '\r' | '\n' | '\t' => ' ',
+            ch if ch.is_control() => ' ',
+            ch => ch,
+        })
+        .collect()
 }
 
 fn collect_ipv4_any(ir: &IrExpr) -> Result<Option<Vec<String>>> {
@@ -446,5 +476,10 @@ fn bytes_to_snort_content(hex: &str) -> Result<String> {
 }
 
 fn escape_snort_pcre(input: &str) -> String {
-    input.replace('/', "\\/")
+    input
+        .replace('\\', "\\\\")
+        .replace('/', "\\/")
+        .replace('"', "\\\"")
+        .replace('\r', "\\r")
+        .replace('\n', "\\n")
 }

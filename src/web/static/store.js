@@ -36,7 +36,7 @@ const state = {
     tlpFilter: "ALL",
     papFilter: "ALL",
     sort: "confidence_desc",
-    visibleColumns: new Set(["name", "confidence", "tlp", "pap", "rule", "outputs", "emulation"]),
+    visibleColumns: new Set(["name", "confidence", "tlp", "pap", "rule", "outputs"]),
     bulkEditOpen: false,
     lastExportSelectedCsv: "",
     advancedFilters: [],

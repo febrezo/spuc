@@ -2,15 +2,14 @@
 
 ## Purpose
 
-Catalog operations are exposed through two top-level command families:
+SPUC keeps a local, file-based rules catalog built from translated STIX
+patterns. Catalog operations are exposed through the web interface
+(`spuc web`) and through the CLI `catalog` command family.
 
-- `rules`
-- `adversaries`
-
-They are also available in `spuc console` under the Catalog section of help.
-
-`rules` represent cataloged STIX rules plus their defensive emulation metadata.
-`adversaries` represent saved planned manifests derived from catalog abilities.
+- `rules` represent cataloged STIX rules plus their translation metadata
+  (TLP, PAP, TTP, observables, indicates, confidence).
+- Translation activity is recorded in a separate append-only log so the
+  grid can show per-target statuses.
 
 ## Location
 
@@ -28,157 +27,53 @@ SPUC_CONFIG_DIR=/custom/path spuc ...
 
 Underlying persisted data remains file-based:
 
-- abilities: `<config_root>/abilities/*.json`
+- rules store: `<config_root>/catalog/rules.json`
 - activity log: `<config_root>/catalog/translation_activities.jsonl`
-- adversary manifests: `<config_root>/intrusion_sets/*.{yaml,yml,json}`
+- seeding marker: `<config_root>/catalog/rules.json.seeded`
 
 ## Command Shape
 
-Both command families expose the same analyst-facing verbs:
+The `catalog` command family exposes:
 
-- `list`
-- `search`
-- `show`
-- `export`
-- `edit`
-- `delete`
+- `catalog abilities` (deprecated alias kept for compatibility, lists rules)
+- `catalog search <text>`
+- `catalog translations`
+- `catalog rules`
 
 ## Rules
 
 Search and list:
 
 ```bash
-spuc rules list
-spuc rules search
-spuc rules search cmd.exe
-spuc rules search "process:command_line" --limit 20
+spuc catalog rules
+spuc catalog search cmd.exe
 ```
 
 Show one rule by table index or `rule_id`:
 
 ```bash
-spuc rules show 1
-spuc rules show rule-1234abcd
+spuc catalog rules show 1
 ```
 
-Export one rule to emulation targets:
+## Rule Row Fields
 
-```bash
-spuc rules export 1 --to spuc-agent --output ./artifacts
-spuc rules export rule-1234abcd --to bash --to powershell --output ./artifacts
-spuc rules export rule-1234abcd --to atomic-red-team --to mitre-caldera --output ./artifacts
-```
-
-Editable fields:
-
-- `name`
-- `description`
-- `confidence`
-
-Edit:
-
-```bash
-spuc rules edit 1 --name "Echo validation rule" --confidence 80
-spuc rules edit rule-1234abcd --description "Updated analyst text"
-```
-
-Delete:
-
-```bash
-spuc rules delete 1
-spuc rules delete rule-1234abcd
-```
-
-Deletion requires manual confirmation typed in the terminal.
-
-`rules search` columns:
-
-- `#`
-- `RULE_ID`
+- `RULE_ID` (STIX indicator id, `indicator--...`)
 - `NAME`
 - `CONFIDENCE`
-- `EMULABLE`
-- `RULE`
+- `RULE` (the source STIX pattern)
 
-`RULE` is always printed in full.
-
-## Adversaries
-
-Search and list:
-
-```bash
-spuc adversaries list
-spuc adversaries search
-spuc adversaries search validation
-spuc adversaries search linux --limit 10
-```
-
-Show one adversary by table index or `adversary_id`:
-
-```bash
-spuc adversaries show 1
-spuc adversaries show adversary-1740000000000
-```
-
-Export one adversary for an executor:
-
-```bash
-spuc adversaries export 1 --to spuc-agent --output ./out
-spuc adversaries export adversary-1740000000000 --to bash --output ./out --show summary,artifact,manifest
-spuc adversaries export adversary-1740000000000 --to atomic-red-team --output ./out --show summary,artifact,manifest
-```
-
-Editable fields:
-
-- `name`
-- `description`
-- `confidence`
-
-Edit:
-
-```bash
-spuc adversaries edit 1 --name "Linux validation adversary"
-spuc adversaries edit adversary-1740000000000 --description "Updated plan"
-```
-
-Delete:
-
-```bash
-spuc adversaries delete 1
-spuc adversaries delete adversary-1740000000000
-```
-
-Deletion requires manual confirmation typed in the terminal.
-
-`adversaries search` columns:
-
-- `#`
-- `ADVERSARY_ID`
-- `NAME`
-- `CONFIDENCE`
-- `STEPS`
-- `PLATFORMS`
-- `DESCRIPTION`
+Translation statuses are derived only from visible translate activity rows.
+Hidden legacy rows (if any) are never counted.
 
 ## Show Semantics
 
 `show` accepts:
 
 - the enumerated row index from the latest listing order
-- the object id (`rule-...` / `adversary-...`)
+- the object id (`indicator--...`)
 
-For rules, `show` prints the rule body, confidence, emulability and observed catalog activity.
-
-For adversaries, `show` prints the analyst-facing adversary id, the persisted STIX `intrusion_set_id` (`intrusion-set--<uuid>` for newly created plans, with legacy ids still accepted), platforms, confidence, description and referenced `ability_ref` ids.
-
-## Export Semantics
-
-`rules export` writes one exported artifact per selected emulation target.
-
-`adversaries export` re-materializes the saved adversary through the same planning/export path used by `plan`, writing:
-
-- manifest output
-- one exported artifact per referenced ability
+For rules, `show` prints the rule body, confidence, TLP/PAP, TTP,
+observables, indicates and observed catalog activity.
 
 ## Interactive (`console`)
 
@@ -186,7 +81,6 @@ Inside `spuc console`:
 
 ```text
 rules
-adversaries
 ```
 
 `rules` opens a dedicated subprompt:
@@ -201,44 +95,31 @@ Available commands inside:
 list [limit=<n>]
 search [text] [limit=<n>]
 show [index|rule-id]
-export <index|rule-id> to <spuc-agent[,bash,powershell,atomic-red-team,mitre-caldera]> [out=<dir>]
-export <spuc-agent[,bash,powershell,atomic-red-team,mitre-caldera]> [out=<dir>]
-edit <index|rule-id> [name=<text>] [description=<text>] [confidence=<0..100>]
-delete <index|rule-id>
 back
 ```
 
 After `show`, the current selection is reflected in the prompt:
 
 ```text
-spuc (rules @ rule-1234abcd)>
+spuc (rules @ indicator--...)>
 ```
 
-In that selected context, `export` can omit the id and uses the current rule.
+In `console`, numeric indexes for `show` resolve against the latest
+`list`/`search` results for that object family. `back` first leaves the
+selected-object context and then returns to the main `spuc>` prompt.
 
-`adversaries` opens the analogous subprompt:
+## Catalog persistence integrity (post-emulation)
 
-```text
-spuc (adversaries)>
-```
+`catalog/rules.json` is a local file-based rules store. Writes acquire an
+exclusive `catalog/rules.json.lock` file lock and commit through a temporary
+file in the same directory, followed by file synchronization and atomic rename.
+On Unix, the parent directory is also synchronized. The lock file must not be
+deleted during active use. Rust 1.89+ is required for standard-library file
+locking. Concurrent SPUC processes should use a local filesystem with working
+advisory file locks; network filesystems require separate qualification.
 
-Available commands inside:
-
-```text
-list [limit=<n>]
-search [text] [limit=<n>]
-show [index|adversary-id]
-export <index|adversary-id> to <spuc-agent|bash|powershell|atomic-red-team|mitre-caldera> [out=<dir>] [show=summary,artifact,manifest]
-export <spuc-agent|bash|powershell|atomic-red-team|mitre-caldera> [out=<dir>] [show=summary,artifact,manifest]
-edit <index|adversary-id> [name=<text>] [description=<text>] [confidence=<0..100>]
-delete <index|adversary-id>
-back
-```
-
-After `show`, the prompt becomes:
-
-```text
-spuc (adversaries @ adversary-1234abcd)>
-```
-
-In `console`, numeric indexes for `show/export/edit/delete` resolve against the latest `list`/`search` results for that object family. `back` first leaves the selected-object context and then returns to the main `spuc>` prompt.
+An unreadable or malformed existing rules store now causes rule operations
+to fail rather than treating it as an empty store. Back up the directory and
+repair the file before retrying; never delete `rules.json` to bypass errors.
+The legacy abilities migration marker remains independent and must be tested
+with representative legacy data before releasing an upgrade.

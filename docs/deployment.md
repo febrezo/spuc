@@ -29,7 +29,7 @@ The published image:
 
 - runs as non-root user `spuc`
 - exposes `GET /healthz` through image-level health checks
-- ships `spuc`, `spuc-agent`, and local Sigma backends used by SPUC
+- ships `spuc` and local Sigma backends used by SPUC
 
 ## Quick Start
 
@@ -65,7 +65,7 @@ This deployment:
 
 - publishes the container web service on the host
 - persists SPUC file-backed state under `/data`
-- keeps catalog, user, runtime and intrusion-set files across restarts through the `spuc_data` volume
+- keeps catalog, user and runtime files across restarts through the `spuc_data` volume
 - includes local `sigma` plus several backend plugins inside the image
 
 By default, `docker-compose.yml` uses this image reference:
@@ -165,9 +165,8 @@ That means the container persists the same file-backed SPUC state described in c
 - `web_users.json`
 - `web_user_api_tokens.json`
 - `web_oauth_policy.json`
-- `abilities/*.json`
+- `catalog/rules.json`
 - `catalog/translation_activities.jsonl`
-- `intrusion_sets/*.yaml`
 - `stix-objects.json`
 - `sigma/runtime.json`
 
